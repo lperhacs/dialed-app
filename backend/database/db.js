@@ -101,13 +101,16 @@ function getDb() {
       db.exec("ALTER TABLE users ADD COLUMN rsvp_private INTEGER NOT NULL DEFAULT 0");
     }
 
-    // Events columns
-    const evCols = db.prepare("PRAGMA table_info(events)").all().map(c => c.name);
-    if (!evCols.includes('club_id')) {
-      db.exec("ALTER TABLE events ADD COLUMN club_id TEXT DEFAULT NULL REFERENCES challenges(id)");
-    }
-    if (!evCols.includes('event_time')) {
-      db.exec("ALTER TABLE events ADD COLUMN event_time TEXT DEFAULT NULL");
+    // Events columns (only if table already exists — it's created below on fresh DBs)
+    const evTableExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='events'").get();
+    if (evTableExists) {
+      const evCols = db.prepare("PRAGMA table_info(events)").all().map(c => c.name);
+      if (!evCols.includes('club_id')) {
+        db.exec("ALTER TABLE events ADD COLUMN club_id TEXT DEFAULT NULL REFERENCES challenges(id)");
+      }
+      if (!evCols.includes('event_time')) {
+        db.exec("ALTER TABLE events ADD COLUMN event_time TEXT DEFAULT NULL");
+      }
     }
 
     // Cheers (one-tap encouragement reaction on posts)
