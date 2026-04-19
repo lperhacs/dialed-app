@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "Dialed",
+    "slug": "dialed",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#09090b",
+    "splash": {
+      "backgroundColor": "#09090b"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.dialed.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#09090b"
+      },
+      "package": "com.dialed.app"
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Dialed to access your photos to share your progress."
+        }
+      ],
+      "expo-font",
+      "@react-native-community/datetimepicker"
+    ],
+    "newArchEnabled": true
+  }
+}

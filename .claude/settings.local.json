@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npx vite:*)",
+      "Bash(npx expo:*)",
+      "Bash(curl:*)",
+      "Bash(node -e ':*)",
+      "Bash(npm run:*)",
+      "Bash(node:*)",
+      "Bash(grep -E \"\\\\.\\(js|sql|prisma\\)$\")",
+      "Bash(xargs ls:*)",
+      "Bash(grep:*)",
+      "Bash(npx skills:*)",
+      "Read(//private/tmp/skills-repo/**)",
+      "Bash(mkdir -p /Users/loganperhacs/.claude/skills)",
+      "Bash(cp /tmp/skills-repo/skills/frontend-design/SKILL.md /Users/loganperhacs/.claude/skills/frontend-design.md)",
+      "Bash(python3 -m json.tool)",
+      "Bash(mkdir -p /Users/loganperhacs/.claude/skills/frontend-design)",
+      "Bash(mv /Users/loganperhacs/.claude/skills/frontend-design.md /Users/loganperhacs/.claude/skills/frontend-design/SKILL.md)",
+      "Bash(mkdir -p \"/Users/loganperhacs/Desktop/Projects/App Idea/.claude/skills/frontend-design\")",
+      "Bash(cp ~/.claude/skills/frontend-design/SKILL.md \"/Users/loganperhacs/Desktop/Projects/App Idea/.claude/skills/frontend-design/SKILL.md\")",
+      "Bash(mkdir -p \"/Users/loganperhacs/Desktop/Projects/App Idea/.claude/commands\")",
+      "Bash(ls \"/Users/loganperhacs/Desktop/Projects/App Idea/Dialed\"*)",
+      "Bash(sudo chown:*)"
+    ]
+  }
+}
