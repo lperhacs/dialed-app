@@ -16,13 +16,13 @@
         "simulator": false
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://YOUR_RAILWAY_URL.up.railway.app"
+        "EXPO_PUBLIC_API_URL": "https://dialed-app-production.up.railway.app"
       }
     },
     "production": {
       "distribution": "store",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://YOUR_RAILWAY_URL.up.railway.app"
+        "EXPO_PUBLIC_API_URL": "https://dialed-app-production.up.railway.app"
       }
     }
   },
