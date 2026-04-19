@@ -5,6 +5,9 @@ const fs = require('fs');
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'dialed.db');
 const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
 
+// Ensure the directory exists (needed when DB_PATH points to a mounted volume)
+fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+
 let db;
 
 function getDb() {
