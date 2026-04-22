@@ -752,6 +752,124 @@
     }
     .fcard-stat:hover { color: var(--text-muted); }
 
+    /* Buddy section */
+    .buddy-section {
+      padding: 120px 48px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    .buddy-inner {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 80px;
+      align-items: center;
+    }
+    .buddy-text { }
+    .buddy-title {
+      font-family: 'Fraunces', serif;
+      font-size: clamp(36px, 4vw, 60px);
+      font-weight: 700;
+      line-height: 1.05;
+      letter-spacing: -1.5px;
+      color: var(--text);
+      margin-bottom: 20px;
+    }
+    .buddy-title em { font-style: italic; color: var(--accent); }
+    .buddy-desc {
+      font-size: 16px;
+      line-height: 1.7;
+      color: var(--text-muted);
+      margin-bottom: 32px;
+    }
+    .buddy-features { display: flex; flex-direction: column; gap: 16px; }
+    .buddy-feature {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+    }
+    .buddy-feature-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      margin-top: 7px;
+      flex-shrink: 0;
+    }
+    .buddy-feature-text {
+      font-size: 15px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .buddy-feature-text strong { color: var(--text); font-weight: 600; }
+    .buddy-visual {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .buddy-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px 18px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.35);
+      transition: transform 0.3s, box-shadow 0.3s;
+    }
+    .buddy-card:hover { transform: translateX(4px); box-shadow: 0 8px 32px rgba(0,0,0,0.45); }
+    .buddy-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      font-weight: 500;
+      flex-shrink: 0;
+    }
+    .buddy-card-info { flex: 1; }
+    .buddy-card-name { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
+    .buddy-card-habit { font-size: 11px; color: var(--text-dim); font-family: 'DM Mono', monospace; }
+    .buddy-card-streak {
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      color: var(--accent);
+      font-weight: 500;
+    }
+    .buddy-card-streak span { color: var(--text-dim); }
+    .buddy-invite {
+      background: rgba(52,211,153,0.04);
+      border: 1px dashed rgba(52,211,153,0.3);
+      border-radius: 14px;
+      padding: 16px 18px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .buddy-invite-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: 1.5px dashed rgba(52,211,153,0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+    @media (max-width: 768px) {
+      .buddy-inner { grid-template-columns: 1fr; gap: 48px; }
+      .buddy-section { padding: 80px 24px; }
+    }
+
     /* CTA */
     .cta-section {
       padding: 120px 48px;
@@ -1154,6 +1272,61 @@
         </div>
       </div>
 
+    </div>
+  </section>
+
+  <!-- BUDDY -->
+  <section class="buddy-section">
+    <div class="buddy-inner">
+      <div class="buddy-text">
+        <div class="section-eyebrow reveal">Accountability</div>
+        <h2 class="buddy-title reveal">Pick someone to<br>keep you <em>dialed.</em></h2>
+        <p class="buddy-desc reveal">A streak is easier to protect when someone else can see it. Add a buddy and you'll both think twice before breaking the chain.</p>
+        <div class="buddy-features reveal">
+          <div class="buddy-feature">
+            <div class="buddy-feature-dot"></div>
+            <div class="buddy-feature-text"><strong>See each other's streaks</strong> — your buddy's progress shows up right alongside yours.</div>
+          </div>
+          <div class="buddy-feature">
+            <div class="buddy-feature-dot"></div>
+            <div class="buddy-feature-text"><strong>Cheer each other on</strong> — react to their logs directly from the feed.</div>
+          </div>
+          <div class="buddy-feature">
+            <div class="buddy-feature-dot"></div>
+            <div class="buddy-feature-text"><strong>Miss a day, they know</strong> — the right kind of pressure that actually works.</div>
+          </div>
+        </div>
+      </div>
+      <div class="buddy-visual reveal">
+        <div class="buddy-card" style="transition-delay:0.05s">
+          <div class="buddy-avatar" style="background:rgba(52,211,153,0.12);color:#34d399">JM</div>
+          <div class="buddy-card-info">
+            <div class="buddy-card-name">Jordan M.</div>
+            <div class="buddy-card-habit">Morning run · daily</div>
+          </div>
+          <div class="buddy-card-streak">41<span>d</span></div>
+        </div>
+        <div class="buddy-card" style="transition-delay:0.12s">
+          <div class="buddy-avatar" style="background:rgba(99,102,241,0.12);color:#818cf8">SK</div>
+          <div class="buddy-card-info">
+            <div class="buddy-card-name">Sam K.</div>
+            <div class="buddy-card-habit">No phone before 9am · daily</div>
+          </div>
+          <div class="buddy-card-streak">18<span>d</span></div>
+        </div>
+        <div class="buddy-card" style="transition-delay:0.19s">
+          <div class="buddy-avatar" style="background:rgba(251,191,36,0.12);color:#fbbf24">AL</div>
+          <div class="buddy-card-info">
+            <div class="buddy-card-name">Alex L.</div>
+            <div class="buddy-card-habit">Read 20 pages · daily</div>
+          </div>
+          <div class="buddy-card-streak">7<span>d</span></div>
+        </div>
+        <div class="buddy-invite" style="transition-delay:0.26s">
+          <div class="buddy-invite-icon">+</div>
+          Invite a buddy
+        </div>
+      </div>
     </div>
   </section>
 
