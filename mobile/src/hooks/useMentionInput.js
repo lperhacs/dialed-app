@@ -17,20 +17,20 @@ export default function useMentionInput(value, setValue) {
     const q = getActiveQuery(text);
 
     if (q === null) {
-      // No active @ — hide
+      // No active @ - hide
       setSuggestions([]);
       return;
     }
 
     if (q === '') {
-      // Bare @ typed — immediately show suggested/recent people
+      // Bare @ typed - immediately show suggested/recent people
       api.get('/users/suggested')
         .then(r => setSuggestions(r.data.slice(0, 6)))
         .catch(() => setSuggestions([]));
       return;
     }
 
-    // @word — debounced search
+    // @word - debounced search
     timer.current = setTimeout(async () => {
       try {
         const { data } = await api.get(`/users/search?q=${encodeURIComponent(q)}`);

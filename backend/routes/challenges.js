@@ -322,6 +322,18 @@ router.delete('/:id/members/:userId/reject', authMiddleware, (req, res) => {
   res.json({ ok: true });
 });
 
+// DELETE /api/challenges/:id — creator only
+router.delete('/:id', authMiddleware, (req, res) => {
+  const db = getDb();
+  const challenge = db.prepare('SELECT * FROM challenges WHERE id = ?').get(req.params.id);
+  if (!challenge) return res.status(404).json({ error: 'Club not found' });
+  if (challenge.creator_id !== req.user.id) return res.status(403).json({ error: 'Only the creator can delete this club' });
+  db.prepare('DELETE FROM challenge_members WHERE challenge_id = ?').run(req.params.id);
+  db.prepare('DELETE FROM challenge_habit_links WHERE challenge_id = ?').run(req.params.id);
+  db.prepare('DELETE FROM challenges WHERE id = ?').run(req.params.id);
+  res.json({ deleted: true });
+});
+
 // DELETE /api/challenges/:id/leave
 router.delete('/:id/leave', authMiddleware, (req, res) => {
   const db = getDb();

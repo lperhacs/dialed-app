@@ -122,7 +122,7 @@ function ShareModal({ visible, onClose, postId, post }) {
             </View>
           )}
 
-          {/* Message input + post preview — shown after recipient selected */}
+          {/* Message input + post preview - shown after recipient selected */}
           {selectedUser && (
             <ScrollView keyboardShouldPersistTaps="handled" style={{ flex: 1 }}>
               <View style={shareStyles.messageWrap}>
@@ -166,7 +166,7 @@ function ShareModal({ visible, onClose, postId, post }) {
             </ScrollView>
           )}
 
-          {/* Search results / recent convos — shown while searching */}
+          {/* Search results / recent convos - shown while searching */}
           {!selectedUser && (
             <FlatList
               data={results.length > 0 || query.trim() ? results : recentConvos.map(c => c.other)}
@@ -304,7 +304,7 @@ export default function PostCard({ post, onDelete }) {
         </View>
       )}
 
-      {/* Content + Image — tappable to open post detail */}
+      {/* Content + Image - tappable to open post detail */}
       <TouchableOpacity onPress={goToComments} activeOpacity={0.85}>
         {!!post.content && (
           <Text style={styles.content}>

@@ -123,7 +123,7 @@ export default function CreatePostScreen() {
               autoFocus
               maxLength={500}
             />
-            {/* Habit button — directly below input, under avatar */}
+            {/* Habit button - directly below input, under avatar */}
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }}>
               <TouchableOpacity
                 onPress={() => { setShowHabits(v => !v); setShowVideoInput(false); }}

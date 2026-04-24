@@ -157,7 +157,7 @@ export default function SearchScreen() {
     loadHistory().then(setHistory);
   }, []));
 
-  // Search effect — fires on debounce and saves to history
+  // Search effect - fires on debounce and saves to history
   useEffect(() => {
     const q = query.trim();
     if (q.length < 2) {

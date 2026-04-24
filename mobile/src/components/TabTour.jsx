@@ -18,22 +18,22 @@ const STEPS = [
   {
     icon: 'radio-button-on',
     title: 'Track your habits',
-    desc: 'Set your goal — daily, 4 days a week, whatever fits your life. One tap to log. Build your streak, hit milestones, and share your progress to the feed.',
+    desc: 'Set your goal - daily, 4 days a week, whatever fits your life. One tap to log. Build your streak, hit milestones, and share your progress to the feed.',
   },
   {
     icon: 'calendar',
     title: 'Dial in with others',
-    desc: 'Create events and invite your circle to show up together — a morning run, a workout, a study session. Tap the + button to get one going.',
+    desc: 'Create events and invite your circle to show up together - a morning run, a workout, a study session. Tap the + button to get one going.',
   },
   {
     icon: 'people',
     title: 'Clubs',
-    desc: 'Group challenges where everyone logs together. Join an existing club or create your own — the leaderboard shows who\'s keeping up.',
+    desc: 'Group challenges where everyone logs together. Join an existing club or create your own - the leaderboard shows who\'s keeping up.',
   },
   {
     icon: 'person',
     title: 'Profile & buddy',
-    desc: 'Your stats, streaks, and badges live here. Tap "Buddy up" on any profile to add an accountability partner — they\'ll see every time you log (or don\'t).',
+    desc: 'Your stats, streaks, and badges live here. Tap "Buddy up" on any profile to add an accountability partner - they\'ll see every time you log (or don\'t).',
   },
 ];
 

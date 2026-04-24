@@ -209,7 +209,7 @@ export default function ProfileScreen({ route, routeUsername, isOwn }) {
           </TouchableOpacity>
         </View>
 
-        {/* Action buttons — below stats */}
+        {/* Action buttons - below stats */}
         {isSelf ? (
           <View style={styles.actionRow}>
             <TouchableOpacity style={[styles.actionBtn, { flex: 1 }]} onPress={() => setEditModalVisible(true)} activeOpacity={0.8}>
@@ -261,7 +261,7 @@ export default function ProfileScreen({ route, routeUsername, isOwn }) {
         )}
       </View>
 
-      {/* Buddy card — own profile only */}
+      {/* Buddy card - own profile only */}
       {isSelf && buddyData && (
         <View style={styles.buddyCard}>
           <Ionicons name="people-outline" size={16} color={colors.accent} />
@@ -275,7 +275,7 @@ export default function ProfileScreen({ route, routeUsername, isOwn }) {
               </Text>
             </View>
           ) : (
-            <Text style={styles.buddyMeta}>No buddy yet — tap "Buddy up" on someone's profile</Text>
+            <Text style={styles.buddyMeta}>No buddy yet - tap "Buddy up" on someone's profile</Text>
           )}
           {buddyData.pending_requests?.length > 0 && (
             <TouchableOpacity
@@ -323,7 +323,7 @@ export default function ProfileScreen({ route, routeUsername, isOwn }) {
         ))}
       </View>
 
-      {/* Badges tab content — inline so it scrolls with FlatList */}
+      {/* Badges tab content - inline so it scrolls with FlatList */}
       {tab === 'badges' && (() => {
         const pool = isSelf ? allBadges : allBadges.filter(b => b.earned || earnedBadges.some(e => e.badge_type === b.type));
         const groups = [

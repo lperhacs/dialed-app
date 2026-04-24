@@ -82,7 +82,7 @@ function ForwardedEventCard({ event, currentUser, onDelete }) {
 
   return (
     <View style={styles.forwardedCard}>
-      {/* Forwarded header — like a forwarded message */}
+      {/* Forwarded header - like a forwarded message */}
       <View style={styles.forwardedHeader}>
         <Text style={styles.forwardedIcon}>↪</Text>
         <Text style={styles.forwardedLabel}>
@@ -304,7 +304,7 @@ function ChatTab({ challengeId, insets }) {
       setMessages(msgRes.data);
       setIsMuted(muteRes.data.is_muted);
     } catch {
-      // not a member — messages will be empty
+      // not a member - messages will be empty
     } finally {
       setLoading(false);
     }
@@ -633,7 +633,7 @@ export default function ChallengeDetailScreen({ route }) {
               <Text style={styles.emptyText}>
                 {isPrivate && !isActiveMember && !isCreator
                   ? 'Join the club to see the leaderboard.'
-                  : 'No members yet — join and be #1!'}
+                  : 'No members yet - join and be #1!'}
               </Text>
             </View>
           }

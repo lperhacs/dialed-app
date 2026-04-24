@@ -1,8 +1,8 @@
 /**
- * Screen 3 — Find Your People
+ * Screen 3 - Find Your People
  *
  * Phone OTP: fully wired to the backend placeholder.
- * Contact matching: requires `npx expo install expo-contacts` — gracefully falls
+ * Contact matching: requires `npx expo install expo-contacts` - gracefully falls
  * back to server-side suggestions when the module isn't available.
  * Facebook: UI placeholder ready for expo-auth-session + FB app credentials.
  */
@@ -98,7 +98,7 @@ export default function OnboardingFindPeople({ navigation, route }) {
     try {
       // Pass any matched contact phones; server returns matched + recommended users
       const { data } = await api.get('/users/search?q=');
-      // Filter out empty results — use the recommended endpoint as fallback
+      // Filter out empty results - use the recommended endpoint as fallback
       if (data.length === 0) {
         const { data: rec } = await api.get('/users/recommended');
         setSuggestions(rec);
@@ -146,7 +146,7 @@ export default function OnboardingFindPeople({ navigation, route }) {
             await loadSuggestions(phones);
           }
         } catch {
-          // Contacts unavailable — keep default suggestions
+          // Contacts unavailable - keep default suggestions
         }
       }
     } catch (err) {
@@ -237,7 +237,7 @@ export default function OnboardingFindPeople({ navigation, route }) {
                 )
               ) : (
                 <View style={styles.verifiedRow}>
-                  <Text style={styles.verifiedText}>✓ Verified — showing friends on Dialed</Text>
+                  <Text style={styles.verifiedText}>✓ Verified - showing friends on Dialed</Text>
                 </View>
               )}
 
@@ -267,7 +267,7 @@ export default function OnboardingFindPeople({ navigation, route }) {
         renderItem={({ item }) => <SuggestedUser key={item.id} user={item} />}
         ListEmptyComponent={
           !suggestionsLoading ? (
-            <Text style={styles.emptyText}>No suggestions yet — invite your friends!</Text>
+            <Text style={styles.emptyText}>No suggestions yet - invite your friends!</Text>
           ) : null
         }
         ListFooterComponent={

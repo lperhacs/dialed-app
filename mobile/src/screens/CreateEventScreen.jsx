@@ -130,7 +130,7 @@ export default function CreateEventScreen() {
         </View>
 
         <View style={styles.fields}>
-          {/* Date row — tapping opens calendar modal */}
+          {/* Date row - tapping opens calendar modal */}
           <TouchableOpacity style={styles.fieldRow} onPress={() => setShowCalendar(true)} activeOpacity={0.7}>
             <Ionicons name="calendar-outline" size={18} color={colors.textMuted} style={{ width: 24, textAlign: 'center' }} />
             <Text style={[styles.fieldInput, !selectedDate && { color: colors.textDim }]}>

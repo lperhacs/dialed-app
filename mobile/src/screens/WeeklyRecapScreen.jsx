@@ -63,7 +63,7 @@ export default function WeeklyRecapScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
         {/* Week range */}
-        <Text style={styles.weekRange}>{fmt(recap.week_start)} — {fmt(recap.week_end)}</Text>
+        <Text style={styles.weekRange}>{fmt(recap.week_start)} - {fmt(recap.week_end)}</Text>
 
         {/* Completion ring / headline */}
         <View style={styles.completionCard}>

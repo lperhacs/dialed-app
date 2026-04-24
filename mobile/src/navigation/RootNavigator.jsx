@@ -72,7 +72,7 @@ export default function RootNavigator() {
         <>
           <Stack.Screen name="MainTabs" component={TabNavigator} options={{ headerShown: false }} />
 
-          {/* Global screens — accessible from any tab */}
+          {/* Global screens - accessible from any tab */}
           <Stack.Screen
             name="UserProfile"
             component={ProfileScreen}

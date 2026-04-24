@@ -18,7 +18,7 @@ export async function requestNotificationPermission() {
 
 /**
  * Request permission, get the Expo push token, and register it with the backend.
- * Safe to call on every login — the backend just updates the token in place.
+ * Safe to call on every login - the backend just updates the token in place.
  */
 export async function registerPushToken() {
   try {
@@ -90,7 +90,7 @@ export async function cancelHabitReminder(habitId) {
   try {
     await Notifications.cancelScheduledNotificationAsync(habitId);
   } catch {
-    // Notification may not exist — that's fine
+    // Notification may not exist - that's fine
   }
 }
 

@@ -8,7 +8,7 @@ const CACHE_TTLS = {
   '/feed':          45_000,
   '/feed/for-you':  45_000,
   '/habits':        60_000,
-  '/users/':        60_000,  // prefix match — profile pages
+  '/users/':        60_000,  // prefix match - profile pages
   '/events/discover': 60_000,
 };
 

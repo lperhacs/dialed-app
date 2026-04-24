@@ -3,14 +3,14 @@
  * Accessible from: gear icon on own Profile header + Settings tab in tab bar.
  *
  * Sections:
- *  1. Edit Profile       — name, username, bio, avatar (expo-image-picker)
- *  2. Location           — city-level text input (Google Places can be wired later)
- *  3. Notifications      — per-type toggles + nudge time
- *  4. Privacy            — default habit visibility
- *  5. Connected Accounts — Facebook placeholder + Phone OTP
- *  6. Calendar Default   — 7d / 30d / 90d / 180d / 1yr
- *  7. Appearance         — dark / light mode
- *  8. Account            — change email, change password, deactivate, delete
+ *  1. Edit Profile       - name, username, bio, avatar (expo-image-picker)
+ *  2. Location           - city-level text input (Google Places can be wired later)
+ *  3. Notifications      - per-type toggles + nudge time
+ *  4. Privacy            - default habit visibility
+ *  5. Connected Accounts - Facebook placeholder + Phone OTP
+ *  6. Calendar Default   - 7d / 30d / 90d / 180d / 1yr
+ *  7. Appearance         - dark / light mode
+ *  8. Account            - change email, change password, deactivate, delete
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import {
@@ -613,7 +613,7 @@ export default function SettingsScreen() {
               ))}
             </View>
             {themeMode === 'system' && (
-              <Text style={styles.themeHint}>Following device — currently {isDark ? 'Dark' : 'Light'}</Text>
+              <Text style={styles.themeHint}>Following device - currently {isDark ? 'Dark' : 'Light'}</Text>
             )}
           </View>
         </View>

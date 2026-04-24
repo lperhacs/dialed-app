@@ -50,7 +50,7 @@ export const lightColors = {
   bronze:         '#8a5230',
 };
 
-// Fallback export — components should use useTheme() instead
+// Fallback export - components should use useTheme() instead
 export const colors = darkColors;
 
 export const radius = {

@@ -187,7 +187,7 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
               onPress={() => {
                 setMilestone(null);
                 navigation.navigate('CreatePost', {
-                  draft: `Day ${milestone?.day} of ${habit.name} — ${milestone?.label}!`,
+                  draft: `Day ${milestone?.day} of ${habit.name} - ${milestone?.label}!`,
                   habit_id: habit.id,
                   habit_day: milestone?.day,
                 });

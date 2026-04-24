@@ -16,7 +16,7 @@ const DEMO_FEED = [
   {
     id: '2', name: 'Sofia Chen', handle: 'sofia_c', initials: 'SC',
     habitName: 'Read Daily', day: 5, avatarColor: '#8b5cf6', habitColor: '#8b5cf6',
-    content: 'Finished another chapter before bed. Day 5 of reading before sleep — this habit is quietly changing my life.',
+    content: 'Finished another chapter before bed. Day 5 of reading before sleep - this habit is quietly changing my life.',
     likes: 31, comments: ['Night reading is everything', 'What book are you on?'],
   },
   {
@@ -46,7 +46,7 @@ const DEMO_FEED = [
   {
     id: '7', name: 'Cam Nguyen', handle: 'cam_n', initials: 'CN',
     habitName: 'Learn Spanish', day: 14, avatarColor: '#8b5cf6', habitColor: '#8b5cf6',
-    content: 'Two weeks of Spanish. Started with 10 minutes a day — now I cannot stop.',
+    content: 'Two weeks of Spanish. Started with 10 minutes a day - now I cannot stop.',
     likes: 35, comments: ['Hola amigo!', 'Same, started last month'],
   },
   {
@@ -134,7 +134,7 @@ export default function OnboardingHook({ navigation, onSkipToLogin }) {
           {DEMO_FEED.map(item => <DemoCard key={item.id} item={item} styles={styles} />)}
         </ScrollView>
 
-        {/* Fade overlay — simulates gradient without expo-linear-gradient */}
+        {/* Fade overlay - simulates gradient without expo-linear-gradient */}
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
           {[0.08, 0.2, 0.38, 0.58, 0.8, 1].map((opacity, i) => (
             <View

@@ -92,7 +92,7 @@ export default function OnboardingDeclaration({ navigation }) {
           });
           if (!firstHabitId) firstHabitId = habit.id;
         } catch {
-          // Non-fatal — habits can be added later
+          // Non-fatal - habits can be added later
         }
       }
 
