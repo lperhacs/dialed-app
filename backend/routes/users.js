@@ -388,6 +388,19 @@ router.get('/:username/habits', optionalAuth, (req, res) => {
 
 // ── /users/me — settings endpoints ───────────────────────────────────────────
 
+// PATCH /api/users/me/avatar — store avatar as base64 data URL (persists across deploys)
+router.patch('/me/avatar', authMiddleware, (req, res) => {
+  const { avatar_data } = req.body;
+  if (!avatar_data) return res.status(400).json({ error: 'avatar_data required' });
+  if (!avatar_data.startsWith('data:image/')) return res.status(400).json({ error: 'Invalid image data' });
+  if (avatar_data.length > 700000) return res.status(400).json({ error: 'Image too large. Choose a smaller photo.' });
+
+  const db = getDb();
+  db.prepare('UPDATE users SET avatar_url = ? WHERE id = ?').run(avatar_data, req.user.id);
+  const user = db.prepare('SELECT id, username, email, display_name, bio, avatar_url, created_at FROM users WHERE id = ?').get(req.user.id);
+  res.json(user);
+});
+
 // PATCH /api/users/me  (name, username, bio — no file upload; avatar still via PUT /profile)
 router.patch('/me', authMiddleware, (req, res) => {
   const db = getDb();

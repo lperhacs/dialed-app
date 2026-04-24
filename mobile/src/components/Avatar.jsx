@@ -15,7 +15,7 @@ const FONT_SIZES = { xs: 10, sm: 13, md: 16, lg: 22, xl: 30 };
 
 function fullUrl(path) {
   if (!path) return null;
-  if (path.startsWith('http')) return path;
+  if (path.startsWith('http') || path.startsWith('data:')) return path;
   return `${API_BASE_URL}${path}`;
 }
 

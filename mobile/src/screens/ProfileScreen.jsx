@@ -523,7 +523,8 @@ function EditProfileModal({ visible, profile, onClose, onSaved }) {
   const [displayName, setDisplayName] = useState(profile.display_name || '');
   const [username, setUsername] = useState(profile.username || '');
   const [bio, setBio] = useState(profile.bio || '');
-  const [avatarUri, setAvatarUri] = useState(null); // local picked image
+  const [avatarUri, setAvatarUri] = useState(null); // local picked image for preview
+  const [avatarBase64, setAvatarBase64] = useState(null); // base64 for upload
   const [saving, setSaving] = useState(false);
 
   // Reset fields when modal opens
@@ -533,14 +534,24 @@ function EditProfileModal({ visible, profile, onClose, onSaved }) {
       setUsername(profile.username || '');
       setBio(profile.bio || '');
       setAvatarUri(null);
+      setAvatarBase64(null);
     }
   }, [visible]);
 
   const pickAvatar = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') { Alert.alert('Permission needed', 'Allow photo access to change your avatar.'); return; }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.8 });
-    if (!result.canceled) setAvatarUri(result.assets[0].uri);
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.35,
+      base64: true,
+    });
+    if (!result.canceled) {
+      setAvatarUri(result.assets[0].uri);
+      setAvatarBase64(result.assets[0].base64 || null);
+    }
   };
 
   const save = async () => {
@@ -548,16 +559,25 @@ function EditProfileModal({ visible, profile, onClose, onSaved }) {
     if (!username.trim()) { Alert.alert('Username required'); return; }
     setSaving(true);
     try {
+      let latestAvatarUrl = profile.avatar_url;
+
+      // Upload avatar as base64 if a new one was picked
+      if (avatarBase64) {
+        const dataUrl = `data:image/jpeg;base64,${avatarBase64}`;
+        const { data: avatarData } = await api.patch('/users/me/avatar', { avatar_data: dataUrl });
+        latestAvatarUrl = avatarData.avatar_url;
+      }
+
+      // Save name, username, bio
       const formData = new FormData();
       formData.append('display_name', displayName.trim());
       formData.append('username', username.trim().toLowerCase());
       formData.append('bio', bio);
-      if (avatarUri) {
-        formData.append('avatar', { uri: avatarUri, type: 'image/jpeg', name: 'avatar.jpg' });
-      }
       const { data } = await api.put('/users/profile', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
-      updateUser?.(data);
-      onSaved(data);
+
+      const merged = { ...data, avatar_url: latestAvatarUrl };
+      updateUser?.(merged);
+      onSaved(merged);
     } catch (err) {
       Alert.alert('Error', err.response?.data?.error || 'Could not save profile');
     } finally {
@@ -566,7 +586,11 @@ function EditProfileModal({ visible, profile, onClose, onSaved }) {
   };
 
   const { API_BASE_URL } = require('../theme');
-  const avatarDisplay = avatarUri || (profile.avatar_url ? `${API_BASE_URL}${profile.avatar_url}` : null);
+  const rawUrl = profile.avatar_url;
+  const resolvedAvatar = rawUrl
+    ? (rawUrl.startsWith('http') || rawUrl.startsWith('data:') ? rawUrl : `${API_BASE_URL}${rawUrl}`)
+    : null;
+  const avatarDisplay = avatarUri || resolvedAvatar;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
