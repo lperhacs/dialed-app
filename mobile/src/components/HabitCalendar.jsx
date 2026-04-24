@@ -22,9 +22,7 @@ export default function HabitCalendar({ calendar = [], color, compact = false, d
           key={i}
           style={[
             styles.day,
-            day.logged
-              ? { backgroundColor: accentColor }
-              : { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.border },
+            { backgroundColor: day.logged ? accentColor : colors.bgHover },
           ]}
         />
       ))}
@@ -41,6 +39,6 @@ const styles = StyleSheet.create({
   day: {
     width: DAY_SIZE,
     height: DAY_SIZE,
-    borderRadius: 2,
+    borderRadius: DAY_SIZE / 2,
   },
 });
