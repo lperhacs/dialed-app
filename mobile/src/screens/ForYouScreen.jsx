@@ -10,13 +10,7 @@ import Avatar from '../components/Avatar';
 import { radius, spacing } from '../theme';
 import { useTheme } from '../context/ThemeContext';
 
-function timeAgo(dateStr) {
-  const s = Math.floor((Date.now() - new Date(dateStr)) / 1000);
-  if (s < 60) return `${s}s`;
-  if (s < 3600) return `${Math.floor(s / 60)}m`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h`;
-  return `${Math.floor(s / 86400)}d`;
-}
+import { timeAgo } from '../utils/timeAgo';
 
 function PostPage({ post }) {
   const { colors } = useTheme();

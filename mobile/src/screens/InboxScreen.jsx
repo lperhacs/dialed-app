@@ -11,14 +11,7 @@ import Avatar from '../components/Avatar';
 import { radius, spacing } from '../theme';
 import { useTheme } from '../context/ThemeContext';
 
-function timeAgo(iso) {
-  if (!iso) return '';
-  const s = Math.floor((Date.now() - new Date(iso)) / 1000);
-  if (s < 60) return `${s}s`;
-  if (s < 3600) return `${Math.floor(s / 60)}m`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h`;
-  return `${Math.floor(s / 86400)}d`;
-}
+import { timeAgo } from '../utils/timeAgo';
 
 function GroupIcon({ participants }) {
   const { colors } = useTheme();

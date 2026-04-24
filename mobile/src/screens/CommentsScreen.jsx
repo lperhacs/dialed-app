@@ -11,6 +11,7 @@ import MentionSuggestions from '../components/MentionSuggestions';
 import useMentionInput from '../hooks/useMentionInput';
 import { API_BASE_URL, radius, spacing } from '../theme';
 import { useTheme } from '../context/ThemeContext';
+import { timeAgo } from '../utils/timeAgo';
 
 function renderMentions(text, colors, navigation) {
   const parts = text.split(/(@[\w]+)/g);
@@ -31,13 +32,7 @@ function renderMentions(text, colors, navigation) {
   });
 }
 
-function timeAgo(d) {
-  const s = Math.floor((Date.now() - new Date(d)) / 1000);
-  if (s < 60) return `${s}s`;
-  if (s < 3600) return `${Math.floor(s / 60)}m`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h`;
-  return `${Math.floor(s / 86400)}d`;
-}
+import { timeAgo } from '../utils/timeAgo';
 
 function CommentLikeBtn({ comment, postId }) {
   const { colors } = useTheme();
