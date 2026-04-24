@@ -18,6 +18,7 @@ import CommentsScreen from '../screens/CommentsScreen';
 import LeaderboardScreen from '../screens/LeaderboardScreen';
 import ConversationScreen from '../screens/ConversationScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import FollowListScreen from '../screens/FollowListScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -102,6 +103,14 @@ export default function RootNavigator() {
             name="Settings"
             component={SettingsScreen}
             options={{ title: 'Settings', headerBackTitle: 'Profile' }}
+          />
+          <Stack.Screen
+            name="FollowList"
+            component={FollowListScreen}
+            options={({ route }) => ({
+              title: route.params?.type === 'followers' ? 'Followers' : 'Following',
+              headerBackTitle: 'Back',
+            })}
           />
 
           {/* Modal screens */}

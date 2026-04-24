@@ -57,7 +57,7 @@ const DEMO_FEED = [
   },
 ];
 
-function DemoCard({ item }) {
+function DemoCard({ item, styles }) {
   return (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
@@ -131,7 +131,7 @@ export default function OnboardingHook({ navigation, onSkipToLogin }) {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingTop: 12, paddingBottom: 60 }}
         >
-          {DEMO_FEED.map(item => <DemoCard key={item.id} item={item} />)}
+          {DEMO_FEED.map(item => <DemoCard key={item.id} item={item} styles={styles} />)}
         </ScrollView>
 
         {/* Fade overlay — simulates gradient without expo-linear-gradient */}

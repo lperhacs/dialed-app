@@ -5,7 +5,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
@@ -19,13 +19,14 @@ export default function CreatePostScreen() {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
   const navigation = useNavigation();
+  const route = useRoute();
   const { user } = useAuth();
-  const [content, setContent] = useState('');
+  const [content, setContent] = useState(route.params?.draft || '');
   const { suggestions: mentionSuggestions, onChangeText: onMentionChangeText, pickMention } = useMentionInput(content, setContent);
   const [image, setImage] = useState(null);
   const [videoUrl, setVideoUrl] = useState('');
-  const [habitId, setHabitId] = useState('');
-  const [habitDay, setHabitDay] = useState('');
+  const [habitId, setHabitId] = useState(route.params?.habit_id ? String(route.params.habit_id) : '');
+  const [habitDay, setHabitDay] = useState(route.params?.habit_day ? String(route.params.habit_day) : '');
   const [habits, setHabits] = useState([]);
   const [showHabits, setShowHabits] = useState(false);
   const [showVideoInput, setShowVideoInput] = useState(false);

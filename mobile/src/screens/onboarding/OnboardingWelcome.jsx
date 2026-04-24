@@ -22,7 +22,7 @@ const REACTION_POSITIONS = [
   { x: width - 48, emoji: '♥', delay: 320 },
 ];
 
-function ReactionBubble({ x, emoji, delay, anim }) {
+function ReactionBubble({ x, emoji, delay, anim, reactionStyle }) {
   const translateY = anim.interpolate({ inputRange: [0, 1], outputRange: [0, -220] });
   const opacity = anim.interpolate({
     inputRange: [0, 0.15, 0.7, 1],
@@ -33,7 +33,7 @@ function ReactionBubble({ x, emoji, delay, anim }) {
   return (
     <Animated.Text
       style={[
-        styles.reaction,
+        reactionStyle,
         { left: x, transform: [{ translateY }, { scale }], opacity },
       ]}
     >
@@ -126,7 +126,7 @@ export default function OnboardingWelcome({ route, onDone }) {
         {/* Floating reactions */}
         <View style={styles.reactionsLayer} pointerEvents="none">
           {REACTION_POSITIONS.map((pos, i) => (
-            <ReactionBubble key={i} x={pos.x} emoji={pos.emoji} delay={pos.delay} anim={anims[i]} />
+            <ReactionBubble key={i} x={pos.x} emoji={pos.emoji} delay={pos.delay} anim={anims[i]} reactionStyle={styles.reaction} />
           ))}
         </View>
       </View>

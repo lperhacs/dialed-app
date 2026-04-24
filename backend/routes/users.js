@@ -4,6 +4,7 @@ const { getDb } = require('../database/db');
 const { authMiddleware, optionalAuth } = require('../middleware/auth');
 const upload = require('../middleware/upload');
 const { calculateStreak, isStreakAtRisk, getEarnedBadges, BADGE_DEFS } = require('../utils/streaks');
+const { sendPush } = require('../utils/push');
 
 const router = express.Router();
 
@@ -278,6 +279,14 @@ router.post('/:id/follow', authMiddleware, (req, res) => {
       "INSERT INTO notifications (id, user_id, type, from_user_id) VALUES (?, ?, 'follow', ?)"
     ).run(uuidv4(), targetId, req.user.id);
 
+    // Push
+    const actor = db.prepare('SELECT display_name FROM users WHERE id = ?').get(req.user.id);
+    sendPush(targetId, {
+      title: 'New follower',
+      body: `${actor?.display_name || 'Someone'} started following you.`,
+      data: { type: 'follow', userId: req.user.id },
+    }, 'follows');
+
     // Badge: social butterfly (50 followers)
     const fc = db.prepare('SELECT COUNT(*) as c FROM follows WHERE following_id = ?').get(targetId).c;
     if (fc >= 50) {
@@ -423,10 +432,19 @@ router.patch('/me/location', authMiddleware, (req, res) => {
   res.json({ ok: true, location: location.trim() });
 });
 
-// PATCH /api/users/me/notifications  (stores JSON blob in a prefs column — best-effort)
+// PUT /api/users/me/push-token
+router.put('/me/push-token', authMiddleware, (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).json({ error: 'token required' });
+  const db = getDb();
+  db.prepare('UPDATE users SET push_token = ? WHERE id = ?').run(token, req.user.id);
+  res.json({ ok: true });
+});
+
+// PATCH /api/users/me/notifications  — saves push notification preferences
 router.patch('/me/notifications', authMiddleware, (req, res) => {
-  // Notification preferences are primarily stored client-side (AsyncStorage).
-  // This endpoint is a hook for future server-driven push notification logic.
+  const db = getDb();
+  db.prepare('UPDATE users SET notify_prefs = ? WHERE id = ?').run(JSON.stringify(req.body), req.user.id);
   res.json({ ok: true });
 });
 

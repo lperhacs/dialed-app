@@ -308,12 +308,15 @@ export default function SettingsScreen() {
   const [location, setLocation] = useState(user?.location || '');
   const [locationSaving, setLocationSaving] = useState(false);
 
-  const [notifyFollowers, setNotifyFollowers] = useState(true);
-  const [notifyLikes, setNotifyLikes] = useState(true);
-  const [notifyChallenges, setNotifyChallenges] = useState(true);
-  const [notifyNudge, setNotifyNudge] = useState(false);
+  const [notifyPrefs, setNotifyPrefs] = useState({
+    follows: true,
+    cheers: true,
+    comments: true,
+    messages: true,
+    buddy: true,
+    streaks: true,
+  });
   const [nudgeTime, setNudgeTime] = useState('08:00');
-  const [notifySaving, setNotifySaving] = useState(false);
 
   const [defaultVisibility, setDefaultVisibility] = useState('public');
   const [rsvpPrivate, setRsvpPrivate] = useState(false);
@@ -337,10 +340,7 @@ export default function SettingsScreen() {
       if (cal) setCalDefault(Number(cal));
       if (notifyStr) {
         const p = JSON.parse(notifyStr);
-        if (p.followers !== undefined) setNotifyFollowers(p.followers);
-        if (p.likes !== undefined) setNotifyLikes(p.likes);
-        if (p.challenges !== undefined) setNotifyChallenges(p.challenges);
-        if (p.nudge !== undefined) setNotifyNudge(p.nudge);
+        setNotifyPrefs(prev => ({ ...prev, ...p }));
         if (p.nudgeTime) setNudgeTime(p.nudgeTime);
       }
       if (vis) setDefaultVisibility(vis);
@@ -350,15 +350,14 @@ export default function SettingsScreen() {
   }, [user]);
 
   const saveNotifyPrefs = async (patch) => {
-    const prefs = { followers: notifyFollowers, likes: notifyLikes, challenges: notifyChallenges, nudge: notifyNudge, nudgeTime, ...patch };
-    await AsyncStorage.setItem('dialed_notify_prefs', JSON.stringify(prefs));
-    // Sync to backend (best-effort)
-    api.patch('/users/me/notifications', prefs).catch(() => {});
+    const updated = { ...notifyPrefs, nudgeTime, ...patch };
+    setNotifyPrefs(prev => ({ ...prev, ...patch }));
+    await AsyncStorage.setItem('dialed_notify_prefs', JSON.stringify(updated));
+    api.patch('/users/me/notifications', updated).catch(() => {});
   };
 
-  const toggleNotify = (field, setter, value) => {
-    setter(value);
-    saveNotifyPrefs({ [field]: value });
+  const toggleNotify = (key, value) => {
+    saveNotifyPrefs({ [key]: value });
   };
 
   const saveLocation = async () => {
@@ -482,53 +481,30 @@ export default function SettingsScreen() {
         {/* ─── Notifications ────────────────────────────────────────────── */}
         <SectionHeader title="Notifications" />
         <View style={styles.section}>
-          <SettingsRow
-            label="New followers"
-            rightElement={
-              <Switch
-                value={notifyFollowers}
-                onValueChange={v => toggleNotify('followers', setNotifyFollowers, v)}
-                thumbColor={notifyFollowers ? colors.accent : colors.border}
-                trackColor={{ true: colors.accentDim, false: colors.bgHover }}
-              />
-            }
-          />
-          <SettingsRow
-            label="Likes & comments"
-            rightElement={
-              <Switch
-                value={notifyLikes}
-                onValueChange={v => toggleNotify('likes', setNotifyLikes, v)}
-                thumbColor={notifyLikes ? colors.accent : colors.border}
-                trackColor={{ true: colors.accentDim, false: colors.bgHover }}
-              />
-            }
-          />
-          <SettingsRow
-            label="Club activity"
-            rightElement={
-              <Switch
-                value={notifyChallenges}
-                onValueChange={v => toggleNotify('challenges', setNotifyChallenges, v)}
-                thumbColor={notifyChallenges ? colors.accent : colors.border}
-                trackColor={{ true: colors.accentDim, false: colors.bgHover }}
-              />
-            }
-          />
-          <SettingsRow
-            label="Daily habit nudge"
-            rightElement={
-              <Switch
-                value={notifyNudge}
-                onValueChange={v => toggleNotify('nudge', setNotifyNudge, v)}
-                thumbColor={notifyNudge ? colors.accent : colors.border}
-                trackColor={{ true: colors.accentDim, false: colors.bgHover }}
-              />
-            }
-          />
-          {notifyNudge && (
+          {[
+            { key: 'follows',   label: 'New followers' },
+            { key: 'cheers',    label: 'Cheers on your posts' },
+            { key: 'comments',  label: 'Comments on your posts' },
+            { key: 'messages',  label: 'Direct messages' },
+            { key: 'buddy',     label: 'Buddy requests' },
+            { key: 'streaks',   label: 'Streak reminders' },
+          ].map(({ key, label }) => (
+            <SettingsRow
+              key={key}
+              label={label}
+              rightElement={
+                <Switch
+                  value={notifyPrefs[key] !== false}
+                  onValueChange={v => toggleNotify(key, v)}
+                  thumbColor={notifyPrefs[key] !== false ? colors.accent : colors.border}
+                  trackColor={{ true: colors.accentDim, false: colors.bgHover }}
+                />
+              }
+            />
+          ))}
+          {notifyPrefs.streaks !== false && (
             <View style={[styles.row, styles.rowLast]}>
-              <Text style={styles.rowLabel}>Nudge time</Text>
+              <Text style={styles.rowLabel}>Reminder time</Text>
               <TextInput
                 style={styles.timeInput}
                 value={nudgeTime}

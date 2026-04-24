@@ -4,6 +4,7 @@
     "slug": "dialed",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#09090b",
     "splash": {
@@ -11,13 +12,21 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.dialed.app"
+      "bundleIdentifier": "com.loganperhacs.dialed",
+      "buildNumber": "8",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
+        "foregroundImage": "./assets/logo-white.png",
         "backgroundColor": "#09090b"
       },
-      "package": "com.dialed.app"
+      "package": "com.loganperhacs.dialed",
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "plugins": [
       [
@@ -29,6 +38,12 @@
       "expo-font",
       "@react-native-community/datetimepicker"
     ],
-    "newArchEnabled": true
+    "newArchEnabled": false,
+    "extra": {
+      "eas": {
+        "projectId": "35f9081e-8682-4371-a0f7-4ee0c25a4649"
+      }
+    },
+    "owner": "dialed-app"
   }
 }

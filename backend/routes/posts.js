@@ -3,6 +3,7 @@ const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../database/db');
 const { authMiddleware, optionalAuth } = require('../middleware/auth');
 const upload = require('../middleware/upload');
+const { sendPush } = require('../utils/push');
 
 const router = express.Router();
 
@@ -369,6 +370,13 @@ router.post('/:id/comments', authMiddleware, (req, res) => {
     db.prepare(
       "INSERT INTO notifications (id, user_id, type, from_user_id, post_id) VALUES (?, ?, 'comment', ?, ?)"
     ).run(uuidv4(), post.user_id, req.user.id, req.params.id);
+
+    const actor = db.prepare('SELECT display_name FROM users WHERE id = ?').get(req.user.id);
+    sendPush(post.user_id, {
+      title: 'New comment',
+      body: `${actor?.display_name || 'Someone'} commented on your post.`,
+      data: { type: 'comment', postId: req.params.id },
+    }, 'comments');
   }
 
   const comment = db.prepare(
@@ -392,6 +400,13 @@ router.post('/:id/cheer', authMiddleware, (req, res) => {
       db.prepare(
         "INSERT INTO notifications (id, user_id, type, from_user_id, post_id) VALUES (?, ?, 'cheer', ?, ?)"
       ).run(uuidv4(), post.user_id, req.user.id, req.params.id);
+
+      const actor = db.prepare('SELECT display_name FROM users WHERE id = ?').get(req.user.id);
+      sendPush(post.user_id, {
+        title: 'Someone cheered you on',
+        body: `${actor?.display_name || 'Someone'} cheered your post.`,
+        data: { type: 'cheer', postId: req.params.id },
+      }, 'cheers');
     }
   }
   const cheer_count = db.prepare('SELECT COUNT(*) as c FROM cheers WHERE post_id = ?').get(req.params.id).c;

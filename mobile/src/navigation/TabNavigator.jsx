@@ -21,6 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { radius } from '../theme';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import TabTour from '../components/TabTour';
 
 const Tab = createBottomTabNavigator();
 const HomeStack = createNativeStackNavigator();
@@ -171,37 +172,40 @@ export default function TabNavigator() {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
   return (
-    <Tab.Navigator
-      screenOptions={{
-        headerShown: false,
-        tabBarStyle: styles.tabBar,
-        tabBarActiveTintColor: colors.accent,
-        tabBarInactiveTintColor: colors.textMuted,
-        tabBarLabelStyle: styles.tabLabel,
-        tabBarItemStyle: styles.tabItem,
-      }}
-    >
-      <Tab.Screen name="Home" component={HomeStackNavigator} options={{ tabBarIcon: ({ focused }) => <TabIcon name="home" focused={focused} /> }} />
-      <Tab.Screen name="Habits" component={HabitsScreen} options={{ tabBarIcon: ({ focused }) => <TabIcon name="radio-button-on" focused={focused} /> }} />
-      <Tab.Screen
-        name="CreateDummy"
-        component={HomeScreen}
-        options={{
-          tabBarLabel: () => null,
-          tabBarIcon: () => null,
-          tabBarButton: () => <CreateTabButton />,
+    <>
+      <Tab.Navigator
+        screenOptions={{
+          headerShown: false,
+          tabBarStyle: styles.tabBar,
+          tabBarActiveTintColor: colors.accent,
+          tabBarInactiveTintColor: colors.textMuted,
+          tabBarLabelStyle: styles.tabLabel,
+          tabBarItemStyle: styles.tabItem,
         }}
-      />
-      <Tab.Screen name="Clubs" component={ChallengesScreen} options={{ tabBarIcon: ({ focused }) => <TabIcon name="people" focused={focused} /> }} />
-      <Tab.Screen
-        name="ProfileTab"
-        component={MyProfileScreen}
-        options={{
-          tabBarLabel: 'Profile',
-          tabBarIcon: ({ focused }) => <TabIcon name="person" focused={focused} />,
-        }}
-      />
-    </Tab.Navigator>
+      >
+        <Tab.Screen name="Home" component={HomeStackNavigator} options={{ tabBarIcon: ({ focused }) => <TabIcon name="home" focused={focused} /> }} />
+        <Tab.Screen name="Habits" component={HabitsScreen} options={{ tabBarIcon: ({ focused }) => <TabIcon name="radio-button-on" focused={focused} /> }} />
+        <Tab.Screen
+          name="CreateDummy"
+          component={HomeScreen}
+          options={{
+            tabBarLabel: () => null,
+            tabBarIcon: () => null,
+            tabBarButton: () => <CreateTabButton />,
+          }}
+        />
+        <Tab.Screen name="Clubs" component={ChallengesScreen} options={{ tabBarIcon: ({ focused }) => <TabIcon name="people" focused={focused} /> }} />
+        <Tab.Screen
+          name="ProfileTab"
+          component={MyProfileScreen}
+          options={{
+            tabBarLabel: 'Profile',
+            tabBarIcon: ({ focused }) => <TabIcon name="person" focused={focused} />,
+          }}
+        />
+      </Tab.Navigator>
+      <TabTour />
+    </>
   );
 }
 

@@ -45,8 +45,6 @@ export function ThemeProvider({ children }) {
     };
   }, [isDark, themeMode]);
 
-  if (!ready) return null;
-
   return (
     <ThemeContext.Provider value={value}>
       {children}

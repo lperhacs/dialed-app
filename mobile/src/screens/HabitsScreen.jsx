@@ -39,21 +39,25 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
   const styles = makeStyles(colors);
   const navigation = useNavigation();
   const [logging, setLogging] = useState(false);
-  const [loggedThisPeriod, setLoggedThisPeriod] = useState(!!habit.logged_this_period);
+  const target = habit.target_count || 1;
+  const [periodCount, setPeriodCount] = useState(habit.period_count ?? (habit.logged_this_period ? target : 0));
   const [calDays, setCalDays] = useState(defaultDays);
   const [milestone, setMilestone] = useState(null);
   const [showPostPrompt, setShowPostPrompt] = useState(false);
   const [loggedDay, setLoggedDay] = useState(null);
+
+  const goalMet = periodCount >= target;
 
   // Sync if the parent's default changes (e.g. user changes setting and refreshes)
   useEffect(() => { setCalDays(defaultDays); }, [defaultDays]);
 
   const handleLog = async () => {
     setLogging(true);
-    setLoggedThisPeriod(true);
+    setPeriodCount(c => c + 1); // optimistic
     try {
       const { data } = await api.post(`/habits/${habit.id}/log`, { note: '' });
       onLog(habit.id, data);
+      setPeriodCount(data.period_count ?? periodCount + 1);
       if (data.milestone) {
         setMilestone(data.milestone);
       } else {
@@ -61,7 +65,7 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
         setShowPostPrompt(true);
       }
     } catch (err) {
-      setLoggedThisPeriod(false);
+      setPeriodCount(c => Math.max(0, c - 1)); // revert
       Alert.alert('Already logged', err.response?.data?.error || 'Try again later.');
     } finally {
       setLogging(false);
@@ -116,20 +120,27 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
         ))}
       </View>
 
-      <HabitCalendar calendar={habit.calendar || []} color={habit.color} days={calDays} />
+      <HabitCalendar calendar={habit.calendar || []} color={habit.color} days={calDays} frequency={habit.frequency} />
 
-      <TouchableOpacity
-        style={[styles.logBtn, { backgroundColor: loggedThisPeriod ? colors.bgHover : habit.color }, (logging || loggedThisPeriod) && styles.logBtnDisabled]}
-        onPress={handleLog}
-        disabled={logging || loggedThisPeriod}
-        activeOpacity={0.85}
-      >
-        <Text style={[styles.logBtnText, loggedThisPeriod && { color: colors.textMuted }]}>
-          {logging ? 'Logging…' : loggedThisPeriod
-            ? `✓ Logged ${habit.frequency === 'daily' ? 'Today' : habit.frequency === 'weekly' ? 'This Week' : 'This Month'}`
-            : `Log ${habit.frequency === 'daily' ? 'Today' : habit.frequency === 'weekly' ? 'This Week' : 'This Month'}`}
-        </Text>
-      </TouchableOpacity>
+      {(() => {
+        const freqLabel = habit.frequency === 'daily' ? 'Today' : habit.frequency === 'weekly' ? 'This Week' : 'This Month';
+        const progressLabel = target > 1 ? ` · ${periodCount}/${target}` : '';
+        const btnLabel = logging ? 'Logging…'
+          : goalMet ? `✓ ${freqLabel}${progressLabel}`
+          : `Log ${freqLabel}${progressLabel}`;
+        return (
+          <TouchableOpacity
+            style={[styles.logBtn, { backgroundColor: goalMet ? colors.bgHover : habit.color }, (logging || goalMet) && styles.logBtnDisabled]}
+            onPress={handleLog}
+            disabled={logging || goalMet}
+            activeOpacity={0.85}
+          >
+            <Text style={[styles.logBtnText, goalMet && { color: colors.textMuted }]}>
+              {btnLabel}
+            </Text>
+          </TouchableOpacity>
+        );
+      })()}
 
       {/* Post-to-feed prompt */}
       <Modal visible={showPostPrompt} transparent animationType="fade" onRequestClose={() => setShowPostPrompt(false)}>
@@ -276,6 +287,7 @@ function HabitFormModal({ habit, visible, onClose, onSave }) {
     name: habit?.name || '',
     description: habit?.description || '',
     frequency: habit?.frequency || 'daily',
+    target_count: habit?.target_count || 1,
     visibility_missed: habit?.visibility_missed || 'public',
     color: habit?.color || '#34d399',
     reminder_time: habit?.reminder_time || null,
@@ -288,6 +300,7 @@ function HabitFormModal({ habit, visible, onClose, onSave }) {
         name: habit?.name || '',
         description: habit?.description || '',
         frequency: habit?.frequency || 'daily',
+        target_count: habit?.target_count || 1,
         visibility_missed: habit?.visibility_missed || 'public',
         color: habit?.color || '#34d399',
         reminder_time: habit?.reminder_time || null,
@@ -362,7 +375,11 @@ function HabitFormModal({ habit, visible, onClose, onSave }) {
                 <TouchableOpacity
                   key={f}
                   style={[styles.segment, form.frequency === f && styles.segmentActive]}
-                  onPress={() => set('frequency')(f)}
+                  onPress={() => setForm(prev => ({
+                    ...prev,
+                    frequency: f,
+                    target_count: f === 'daily' ? 1 : prev.target_count || 1,
+                  }))}
                 >
                   <Text style={[styles.segmentText, form.frequency === f && styles.segmentTextActive]}>
                     {f.charAt(0).toUpperCase() + f.slice(1)}
@@ -371,6 +388,33 @@ function HabitFormModal({ habit, visible, onClose, onSave }) {
               ))}
             </View>
           </View>
+
+          {form.frequency !== 'daily' && (
+            <View style={styles.formField}>
+              <Text style={styles.fieldLabel}>
+                {form.frequency === 'weekly' ? 'DAYS PER WEEK' : 'TIMES PER MONTH'}
+              </Text>
+              <View style={styles.stepperRow}>
+                <TouchableOpacity
+                  style={[styles.stepperBtn, (form.target_count || 1) <= 1 && { opacity: 0.3 }]}
+                  onPress={() => setForm(f => ({ ...f, target_count: Math.max(1, (f.target_count || 1) - 1) }))}
+                  disabled={(form.target_count || 1) <= 1}
+                  hitSlop={10}
+                >
+                  <Text style={styles.stepperBtnText}>−</Text>
+                </TouchableOpacity>
+                <Text style={styles.stepperValue}>{form.target_count || 1}</Text>
+                <TouchableOpacity
+                  style={[styles.stepperBtn, (form.target_count || 1) >= (form.frequency === 'weekly' ? 7 : 28) && { opacity: 0.3 }]}
+                  onPress={() => setForm(f => ({ ...f, target_count: Math.min(f.frequency === 'weekly' ? 7 : 28, (f.target_count || 1) + 1) }))}
+                  disabled={(form.target_count || 1) >= (form.frequency === 'weekly' ? 7 : 28)}
+                  hitSlop={10}
+                >
+                  <Text style={styles.stepperBtnText}>+</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
 
           <View style={styles.formField}>
             <Text style={styles.fieldLabel}>MISSED DAYS VISIBILITY</Text>
@@ -604,6 +648,10 @@ function makeStyles(colors) {
       paddingHorizontal: 14, paddingVertical: 11, textAlignVertical: 'top',
     },
     segmentRow: { flexDirection: 'row', gap: 6 },
+    stepperRow: { flexDirection: 'row', alignItems: 'center', gap: 20 },
+    stepperBtn: { width: 36, height: 36, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bgInput },
+    stepperBtnText: { fontSize: 20, color: colors.text, fontWeight: '400', lineHeight: 24 },
+    stepperValue: { fontSize: 22, fontWeight: '700', color: colors.text, minWidth: 30, textAlign: 'center' },
     segment: {
       flex: 1, paddingVertical: 9, borderRadius: radius.sm,
       backgroundColor: colors.bgHover, borderWidth: 1, borderColor: colors.borderSubtle,

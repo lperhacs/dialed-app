@@ -36,10 +36,13 @@ function getDb() {
       db.exec("ALTER TABLE challenge_members ADD COLUMN status TEXT NOT NULL DEFAULT 'active'");
     }
 
-    // Habit reminder
+    // Habit reminder + target count
     const habitCols = db.prepare("PRAGMA table_info(habits)").all().map(c => c.name);
     if (!habitCols.includes('reminder_time')) {
       db.exec("ALTER TABLE habits ADD COLUMN reminder_time TEXT DEFAULT NULL");
+    }
+    if (!habitCols.includes('target_count')) {
+      db.exec("ALTER TABLE habits ADD COLUMN target_count INTEGER NOT NULL DEFAULT 1");
     }
 
     // Settings-related columns
@@ -99,6 +102,14 @@ function getDb() {
     const colsNow = db.prepare("PRAGMA table_info(users)").all().map(c => c.name);
     if (!colsNow.includes('rsvp_private')) {
       db.exec("ALTER TABLE users ADD COLUMN rsvp_private INTEGER NOT NULL DEFAULT 0");
+    }
+
+    // Push notifications
+    if (!colsNow.includes('push_token')) {
+      db.exec("ALTER TABLE users ADD COLUMN push_token TEXT DEFAULT NULL");
+    }
+    if (!colsNow.includes('notify_prefs')) {
+      db.exec("ALTER TABLE users ADD COLUMN notify_prefs TEXT DEFAULT NULL");
     }
 
     // Events columns (only if table already exists — it's created below on fresh DBs)

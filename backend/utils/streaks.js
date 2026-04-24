@@ -46,26 +46,28 @@ function prevPeriodDate(date, frequency) {
   return d;
 }
 
-function calculateStreak(logs, frequency) {
+function calculateStreak(logs, frequency, target_count = 1) {
   if (!logs || logs.length === 0) return 0;
 
-  const loggedPeriods = new Set(
-    logs.map(l => getPeriodKey(l.logged_at, frequency))
-  );
+  const periodCounts = {};
+  for (const l of logs) {
+    const key = getPeriodKey(l.logged_at, frequency);
+    periodCounts[key] = (periodCounts[key] || 0) + 1;
+  }
+  const isComplete = key => (periodCounts[key] || 0) >= target_count;
 
   const now = new Date();
   let checkDate = now;
   let streak = 0;
 
-  // If current period not logged, start checking from previous period
   const currentPeriod = getPeriodKey(checkDate, frequency);
-  if (!loggedPeriods.has(currentPeriod)) {
+  if (!isComplete(currentPeriod)) {
     checkDate = prevPeriodDate(checkDate, frequency);
   }
 
   while (true) {
     const key = getPeriodKey(checkDate, frequency);
-    if (loggedPeriods.has(key)) {
+    if (isComplete(key)) {
       streak++;
       checkDate = prevPeriodDate(checkDate, frequency);
     } else {
@@ -76,40 +78,55 @@ function calculateStreak(logs, frequency) {
   return streak;
 }
 
-function isStreakAtRisk(logs, frequency) {
+function isStreakAtRisk(logs, frequency, target_count = 1) {
   if (!logs || logs.length === 0) return false;
 
   const now = new Date();
   const currentPeriod = getPeriodKey(now, frequency);
-  const loggedPeriods = new Set(logs.map(l => getPeriodKey(l.logged_at, frequency)));
 
-  // At risk = has an existing streak BUT hasn't logged this period yet
-  if (loggedPeriods.has(currentPeriod)) return false;
+  const periodCounts = {};
+  for (const l of logs) {
+    const key = getPeriodKey(l.logged_at, frequency);
+    periodCounts[key] = (periodCounts[key] || 0) + 1;
+  }
+
+  if ((periodCounts[currentPeriod] || 0) >= target_count) return false;
 
   const prevDate = prevPeriodDate(now, frequency);
   const prevPeriod = getPeriodKey(prevDate, frequency);
-  return loggedPeriods.has(prevPeriod);
+  return (periodCounts[prevPeriod] || 0) >= target_count;
 }
 
-function buildStreakCalendar(logs, frequency, days = 365) {
-  const loggedPeriods = new Set(
-    logs.map(l => getPeriodKey(l.logged_at, frequency))
-  );
-
-  const calendar = [];
-  const now = new Date();
-
-  for (let i = days - 1; i >= 0; i--) {
-    const d = new Date(now);
-    d.setUTCDate(d.getUTCDate() - i);
-    const key = getPeriodKey(d, frequency);
-    calendar.push({
-      date: key,
-      logged: loggedPeriods.has(key),
-    });
+function buildStreakCalendar(logs, frequency, target_count = 1, days = 365) {
+  const periodCounts = {};
+  for (const l of logs) {
+    const key = getPeriodKey(l.logged_at, frequency);
+    periodCounts[key] = (periodCounts[key] || 0) + 1;
   }
 
-  return calendar;
+  const now = new Date();
+
+  if (frequency === 'daily') {
+    const calendar = [];
+    for (let i = days - 1; i >= 0; i--) {
+      const d = new Date(now);
+      d.setUTCDate(d.getUTCDate() - i);
+      const key = getPeriodKey(d, frequency);
+      calendar.push({ key, count: Math.min(periodCounts[key] || 0, 1), target: 1 });
+    }
+    return calendar;
+  }
+
+  // Weekly / monthly — return one bucket per period
+  const numPeriods = frequency === 'weekly' ? Math.ceil(days / 7) : Math.ceil(days / 30);
+  const buckets = [];
+  let checkDate = new Date(now);
+  for (let i = 0; i < numPeriods; i++) {
+    const key = getPeriodKey(checkDate, frequency);
+    buckets.unshift({ key, count: Math.min(periodCounts[key] || 0, target_count), target: target_count });
+    checkDate = prevPeriodDate(checkDate, frequency);
+  }
+  return buckets;
 }
 
 const BADGE_DEFS = [

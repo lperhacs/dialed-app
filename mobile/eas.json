@@ -1,6 +1,7 @@
 {
   "cli": {
-    "version": ">= 12.0.0"
+    "version": ">= 12.0.0",
+    "appVersionSource": "local"
   },
   "build": {
     "development": {
@@ -13,7 +14,8 @@
     "preview": {
       "distribution": "internal",
       "ios": {
-        "simulator": false
+        "simulator": false,
+        "autoIncrement": true
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://dialed-app-production.up.railway.app"
@@ -21,6 +23,9 @@
     },
     "production": {
       "distribution": "store",
+      "ios": {
+        "autoIncrement": true
+      },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://dialed-app-production.up.railway.app"
       }
@@ -29,9 +34,9 @@
   "submit": {
     "production": {
       "ios": {
-        "appleId": "YOUR_APPLE_ID_EMAIL",
-        "ascAppId": "YOUR_APP_STORE_CONNECT_APP_ID",
-        "appleTeamId": "YOUR_APPLE_TEAM_ID"
+        "appleId": "loganperhacs@yahoo.com",
+        "ascAppId": "6762577687",
+        "appleTeamId": "4JGJ3N36S4"
       }
     }
   }

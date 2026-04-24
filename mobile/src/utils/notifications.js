@@ -1,4 +1,6 @@
 import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
+import api from '../api/client';
 
 // Show notification banners when the app is in the foreground too
 Notifications.setNotificationHandler({
@@ -12,6 +14,28 @@ Notifications.setNotificationHandler({
 export async function requestNotificationPermission() {
   const { status } = await Notifications.requestPermissionsAsync();
   return status === 'granted';
+}
+
+/**
+ * Request permission, get the Expo push token, and register it with the backend.
+ * Safe to call on every login — the backend just updates the token in place.
+ */
+export async function registerPushToken() {
+  try {
+    if (Platform.OS === 'web') return; // web doesn't support push
+    const { status: existing } = await Notifications.getPermissionsAsync();
+    let finalStatus = existing;
+    if (existing !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    if (finalStatus !== 'granted') return;
+
+    const { data: token } = await Notifications.getExpoPushTokenAsync();
+    await api.put('/users/me/push-token', { token });
+  } catch {
+    // Never crash the app over push registration
+  }
 }
 
 /**

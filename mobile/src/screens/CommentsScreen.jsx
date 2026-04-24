@@ -32,8 +32,6 @@ function renderMentions(text, colors, navigation) {
   });
 }
 
-import { timeAgo } from '../utils/timeAgo';
-
 function CommentLikeBtn({ comment, postId }) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);

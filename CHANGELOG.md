@@ -14,6 +14,10 @@
 - **Multi-habit onboarding** — Users can now select multiple habits during signup. All selected habits are created at registration and shown in the step 2 summary. (`OnboardingDeclaration.jsx`)
 - **Club delete button** — Club creators now have a delete button (trash icon) in the club action row with a confirmation dialog. (`ChallengeDetailScreen.jsx`)
 - **Auto-delete empty clubs** — When the last member leaves a club, it is automatically deleted. Works both from the club detail screen and the clubs list. (`ChallengeDetailScreen.jsx`, `ChallengesScreen.jsx`)
+- **First-time tab walkthrough** — New users see a 5-slide guided tour on first launch explaining the feed, habit tracking, events, clubs, and buddy system. Dismissed via "Skip" or "Got it" and never shown again. (`TabTour.jsx`, `TabNavigator.jsx`)
+- **Followers / Following lists** — Tapping the Followers or Following count on any profile navigates to a list of those users. Tapping a user in the list goes to their profile. (`FollowListScreen.jsx`, `ProfileScreen.jsx`, `RootNavigator.jsx`)
+- **X times per week/month habits** — Habits now support a target count (e.g. "4 days a week"). The calendar shows exactly that many dots per week — no more, no less — so users always see their goal, not a full 7-day grid. The log button shows live progress ("Log This Week · 2/4") and stays tappable until the goal is hit. (`HabitCalendar.jsx`, `HabitsScreen.jsx`, `backend/routes/habits.js`, `backend/utils/streaks.js`)
+- **Push notifications** — Full Expo push notification system. Device token registered on login and stored per-user. Push fires for: cheers, comments, follows, DMs, buddy requests, buddy accepted. Per-type toggles in Settings let users control exactly what they receive. (`backend/utils/push.js`, `utils/notifications.js`, `AuthContext.jsx`, `SettingsScreen.jsx`)
 
 ### Bug Fixes (from tester feedback)
 - **Negative timestamps** — Post and comment timestamps showed "-25076s" due to clock drift. Fixed by clamping to 0 and standardizing format to "just now / 2m ago / 3h ago". Extracted into shared `utils/timeAgo.js` used across all 6 screens.

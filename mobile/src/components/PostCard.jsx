@@ -151,7 +151,7 @@ function ShareModal({ visible, onClose, postId, post }) {
                 {post.habit_name && (
                   <View style={[shareStyles.postPreviewTag, { borderColor: post.habit_color || colors.accent }]}>
                     <Text style={[shareStyles.postPreviewTagText, { color: post.habit_color || colors.accent }]}>
-                      Day {post.habit_day} · {post.habit_name}
+                      Day {Math.max(1, post.habit_day || 1)} · {post.habit_name}
                     </Text>
                   </View>
                 )}

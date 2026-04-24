@@ -11,7 +11,7 @@ function awardBadges(db, userId, habitId) {
   const habit = db.prepare('SELECT * FROM habits WHERE id = ?').get(habitId);
   if (!habit) return;
 
-  const streak = calculateStreak(logs, habit.frequency);
+  const streak = calculateStreak(logs, habit.frequency, habit.target_count || 1);
   const totalLogs = logs.length;
   const earned = getEarnedBadges(streak, totalLogs, habit.frequency);
 
@@ -34,14 +34,16 @@ router.get('/', authMiddleware, (req, res) => {
 
   const { getPeriodKey } = require('../utils/streaks');
   const enriched = habits.map(h => {
+    const target = h.target_count || 1;
     const logs = db.prepare('SELECT logged_at FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(h.id);
-    const streak = calculateStreak(logs, h.frequency);
-    const at_risk = isStreakAtRisk(logs, h.frequency);
+    const streak = calculateStreak(logs, h.frequency, target);
+    const at_risk = isStreakAtRisk(logs, h.frequency, target);
     const total_logs = logs.length;
-    const calendar = buildStreakCalendar(logs, h.frequency, 365);
+    const calendar = buildStreakCalendar(logs, h.frequency, target, 365);
     const currentPeriod = getPeriodKey(new Date(), h.frequency);
-    const logged_this_period = logs.some(l => getPeriodKey(l.logged_at, h.frequency) === currentPeriod);
-    return { ...h, streak, at_risk, total_logs, calendar, logged_this_period };
+    const period_count = logs.filter(l => getPeriodKey(l.logged_at, h.frequency) === currentPeriod).length;
+    const logged_this_period = period_count > 0;
+    return { ...h, streak, at_risk, total_logs, calendar, period_count, logged_this_period };
   });
 
   res.json(enriched);
@@ -50,7 +52,7 @@ router.get('/', authMiddleware, (req, res) => {
 // POST /api/habits
 router.post('/', authMiddleware, (req, res) => {
   const db = getDb();
-  const { name, description, frequency, visibility_missed, color, reminder_time } = req.body;
+  const { name, description, frequency, visibility_missed, color, reminder_time, target_count } = req.body;
 
   if (!name || !frequency) return res.status(400).json({ error: 'Name and frequency are required' });
   if (!['daily', 'weekly', 'monthly'].includes(frequency)) {
@@ -61,14 +63,16 @@ router.post('/', authMiddleware, (req, res) => {
   if (visibility_missed && !['public', 'friends', 'private'].includes(visibility_missed)) {
     return res.status(400).json({ error: 'Invalid visibility' });
   }
+  const maxTarget = frequency === 'weekly' ? 7 : frequency === 'monthly' ? 28 : 1;
+  const resolvedTarget = frequency === 'daily' ? 1 : Math.min(Math.max(parseInt(target_count) || 1, 1), maxTarget);
 
   const id = uuidv4();
   db.prepare(
-    'INSERT INTO habits (id, user_id, name, description, frequency, visibility_missed, color, reminder_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(id, req.user.id, name.trim(), description?.trim() || '', frequency, visibility_missed || 'public', color || '#f97316', reminder_time || null);
+    'INSERT INTO habits (id, user_id, name, description, frequency, visibility_missed, color, reminder_time, target_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(id, req.user.id, name.trim(), description?.trim() || '', frequency, visibility_missed || 'public', color || '#f97316', reminder_time || null, resolvedTarget);
 
   const habit = db.prepare('SELECT * FROM habits WHERE id = ?').get(id);
-  res.status(201).json({ ...habit, streak: 0, at_risk: false, total_logs: 0, calendar: [] });
+  res.status(201).json({ ...habit, streak: 0, at_risk: false, total_logs: 0, calendar: [], period_count: 0 });
 });
 
 // GET /api/habits/:id
@@ -91,7 +95,7 @@ router.put('/:id', authMiddleware, (req, res) => {
   const habit = db.prepare('SELECT * FROM habits WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
   if (!habit) return res.status(404).json({ error: 'Habit not found' });
 
-  const { name, description, frequency, visibility_missed, color, is_active, reminder_time } = req.body;
+  const { name, description, frequency, visibility_missed, color, is_active, reminder_time, target_count } = req.body;
   if (frequency && !['daily', 'weekly', 'monthly'].includes(frequency)) {
     return res.status(400).json({ error: 'Invalid frequency' });
   }
@@ -100,6 +104,13 @@ router.put('/:id', authMiddleware, (req, res) => {
   }
   if (name && name.trim().length > 100) return res.status(400).json({ error: 'Habit name must be 100 characters or fewer' });
   if (description && description.length > 500) return res.status(400).json({ error: 'Description must be 500 characters or fewer' });
+
+  const resolvedFreq = frequency || habit.frequency;
+  const maxTarget = resolvedFreq === 'weekly' ? 7 : resolvedFreq === 'monthly' ? 28 : 1;
+  const resolvedTarget = target_count !== undefined
+    ? (resolvedFreq === 'daily' ? 1 : Math.min(Math.max(parseInt(target_count) || 1, 1), maxTarget))
+    : null;
+
   db.prepare(
     `UPDATE habits SET
       name = COALESCE(?, name),
@@ -108,9 +119,10 @@ router.put('/:id', authMiddleware, (req, res) => {
       visibility_missed = COALESCE(?, visibility_missed),
       color = COALESCE(?, color),
       is_active = COALESCE(?, is_active),
-      reminder_time = ?
+      reminder_time = ?,
+      target_count = COALESCE(?, target_count)
     WHERE id = ?`
-  ).run(name, description, frequency, visibility_missed, color, is_active !== undefined ? (is_active ? 1 : 0) : null, reminder_time !== undefined ? (reminder_time || null) : db.prepare('SELECT reminder_time FROM habits WHERE id = ?').get(req.params.id)?.reminder_time, req.params.id);
+  ).run(name, description, frequency, visibility_missed, color, is_active !== undefined ? (is_active ? 1 : 0) : null, reminder_time !== undefined ? (reminder_time || null) : db.prepare('SELECT reminder_time FROM habits WHERE id = ?').get(req.params.id)?.reminder_time, resolvedTarget, req.params.id);
 
   const updated = db.prepare('SELECT * FROM habits WHERE id = ?').get(req.params.id);
   res.json(updated);
@@ -158,9 +170,10 @@ router.post('/:id/log', authMiddleware, (req, res) => {
     `SELECT logged_at FROM habit_logs WHERE habit_id = ? AND logged_at >= date('now', '${lookback}')`
   ).all(habit.id);
 
-  const alreadyLogged = recentLogs.some(l => getPeriodKey(l.logged_at, habit.frequency) === today);
-  if (alreadyLogged) {
-    return res.status(400).json({ error: 'Already logged this period' });
+  const target = habit.target_count || 1;
+  const periodCount = recentLogs.filter(l => getPeriodKey(l.logged_at, habit.frequency) === today).length;
+  if (periodCount >= target) {
+    return res.status(400).json({ error: target > 1 ? `Goal reached! You've already logged ${target}x this period.` : 'Already logged this period' });
   }
 
   const id = uuidv4();
@@ -174,13 +187,15 @@ router.post('/:id/log', authMiddleware, (req, res) => {
   awardBadges(db, req.user.id, habit.id);
 
   const logs = db.prepare('SELECT logged_at FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(habit.id);
-  const streak = calculateStreak(logs, habit.frequency);
-  const at_risk = isStreakAtRisk(logs, habit.frequency);
+  const streak = calculateStreak(logs, habit.frequency, target);
+  const at_risk = isStreakAtRisk(logs, habit.frequency, target);
+  const newPeriodCount = periodCount + 1;
+  const goalJustMet = newPeriodCount >= target;
 
   const MILESTONES = { 7: 'First Week', 30: 'One Month', 100: '100 Days', 365: 'One Year' };
-  const milestone = MILESTONES[streak] ? { day: streak, label: MILESTONES[streak] } : null;
+  const milestone = goalJustMet && MILESTONES[streak] ? { day: streak, label: MILESTONES[streak] } : null;
 
-  res.status(201).json({ logged: true, streak, at_risk, total_logs: logs.length, milestone });
+  res.status(201).json({ logged: true, streak, at_risk, total_logs: logs.length, period_count: newPeriodCount, target_count: target, goal_met: goalJustMet, milestone });
 });
 
 // GET /api/habits/:id/logs

@@ -5,27 +5,36 @@ import { useTheme } from '../context/ThemeContext';
 const DAY_SIZE = 10;
 const DAY_GAP  = 3;
 
-export default function HabitCalendar({ calendar = [], color, compact = false, days }) {
+export default function HabitCalendar({ calendar = [], color, compact = false, days, frequency = 'daily' }) {
   const { colors } = useTheme();
   const accentColor = color ?? colors.accent;
-  const sliceDays = days ?? (compact ? 91 : calendar.length);
+
+  // Convert the `days` range into number of periods to show
+  const rawDays = days ?? (compact ? 91 : calendar.length);
+  const slicePeriods = useMemo(() => {
+    if (frequency === 'weekly')  return Math.ceil(rawDays / 7);
+    if (frequency === 'monthly') return Math.ceil(rawDays / 30);
+    return rawDays;
+  }, [frequency, rawDays]);
 
   const sliced = useMemo(
-    () => calendar.slice(-sliceDays),
-    [calendar, sliceDays]
+    () => calendar.slice(-slicePeriods),
+    [calendar, slicePeriods]
   );
 
   return (
     <View style={styles.grid}>
-      {sliced.map((day, i) => (
-        <View
-          key={i}
-          style={[
-            styles.day,
-            { backgroundColor: day.logged ? accentColor : colors.bgHover },
-          ]}
-        />
-      ))}
+      {sliced.flatMap((bucket, i) => {
+        // Support both new format { key, count, target } and legacy { date, logged }
+        const target = bucket.target ?? 1;
+        const count  = bucket.count  ?? (bucket.logged ? 1 : 0);
+        return Array.from({ length: target }, (_, j) => (
+          <View
+            key={`${i}-${j}`}
+            style={[styles.day, { backgroundColor: j < count ? accentColor : colors.bgHover }]}
+          />
+        ));
+      })}
     </View>
   );
 }

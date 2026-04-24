@@ -27,7 +27,7 @@ export function invalidateCache(urlSubstring) {
   }
 }
 
-const api = axios.create({ baseURL: `${API_BASE_URL}/api` });
+const api = axios.create({ baseURL: `${API_BASE_URL}/api`, timeout: 10000 });
 
 // Attach stored JWT on every request
 api.interceptors.request.use(async (config) => {

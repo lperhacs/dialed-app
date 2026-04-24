@@ -187,16 +187,26 @@ export default function ProfileScreen({ route, routeUsername, isOwn }) {
 
         {/* Stats row */}
         <View style={styles.statsRow}>
-          {[
-            { label: 'Posts', value: profile.post_count },
-            { label: 'Followers', value: profile.follower_count },
-            { label: 'Following', value: profile.following_count },
-          ].map(s => (
-            <View key={s.label} style={styles.stat}>
-              <Text style={styles.statNum}>{s.value}</Text>
-              <Text style={styles.statLabel}>{s.label}</Text>
-            </View>
-          ))}
+          <View style={styles.stat}>
+            <Text style={styles.statNum}>{profile.post_count}</Text>
+            <Text style={styles.statLabel}>Posts</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.stat}
+            onPress={() => navigation.navigate('FollowList', { username, type: 'followers' })}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.statNum}>{profile.follower_count}</Text>
+            <Text style={styles.statLabel}>Followers</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.stat}
+            onPress={() => navigation.navigate('FollowList', { username, type: 'following' })}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.statNum}>{profile.following_count}</Text>
+            <Text style={styles.statLabel}>Following</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Action buttons — below stats */}
@@ -413,6 +423,7 @@ export default function ProfileScreen({ route, routeUsername, isOwn }) {
       )}
       <FlatList
         data={listData}
+        extraData={[following, followLoading, buddyStatus, buddyLoading, tab]}
         renderItem={renderItem}
         keyExtractor={item => item.id}
         ListHeaderComponent={ListHeader}

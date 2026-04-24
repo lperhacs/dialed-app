@@ -2,6 +2,7 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../database/db');
 const { authMiddleware } = require('../middleware/auth');
+const { sendPush } = require('../utils/push');
 
 const router = express.Router();
 
@@ -257,6 +258,22 @@ router.post('/conversations/:id/messages', authMiddleware, (req, res) => {
   ).get(id);
 
   const result = { ...message };
+
+  // Push to all other participants
+  const sender = db.prepare('SELECT display_name FROM users WHERE id = ?').get(req.user.id);
+  const recipients = db.prepare(
+    'SELECT user_id FROM conversation_participants WHERE conversation_id = ? AND user_id != ?'
+  ).all(req.params.id, req.user.id);
+  const preview = content?.trim()
+    ? (content.trim().length > 60 ? content.trim().slice(0, 60) + '…' : content.trim())
+    : post_id ? 'Shared a post' : event_id ? 'Shared an event' : 'Shared a club';
+  for (const r of recipients) {
+    sendPush(r.user_id, {
+      title: sender?.display_name || 'New message',
+      body: preview,
+      data: { type: 'message', conversationId: req.params.id },
+    }, 'messages');
+  }
 
   if (post_id) {
     result.shared_post = db.prepare(

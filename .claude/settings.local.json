@@ -22,7 +22,15 @@
       "Bash(cp ~/.claude/skills/frontend-design/SKILL.md \"/Users/loganperhacs/Desktop/Projects/App Idea/.claude/skills/frontend-design/SKILL.md\")",
       "Bash(mkdir -p \"/Users/loganperhacs/Desktop/Projects/App Idea/.claude/commands\")",
       "Bash(ls \"/Users/loganperhacs/Desktop/Projects/App Idea/Dialed\"*)",
-      "Bash(sudo chown:*)"
+      "Bash(sudo chown:*)",
+      "Bash(gh --version)",
+      "Bash(python3 -c \"from PIL import Image; print\\('Pillow available'\\)\")",
+      "Bash(convert --version)",
+      "Bash(pip3 --version)",
+      "Bash(pip3 install:*)",
+      "Bash(python3 -c \"from PIL import Image; print\\('ready'\\)\")",
+      "Bash(python3:*)",
+      "Bash(ls \"/Users/loganperhacs/Desktop/Projects/App Idea/mobile/App\"*)"
     ]
   }
 }

@@ -2,6 +2,7 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../database/db');
 const { authMiddleware } = require('../middleware/auth');
+const { sendPush } = require('../utils/push');
 
 const router = express.Router();
 
@@ -108,6 +109,13 @@ router.post('/request', authMiddleware, (req, res) => {
     "INSERT INTO notifications (id, user_id, type, from_user_id, message) VALUES (?, ?, 'buddy_request', ?, ?)"
   ).run(uuidv4(), user_id, req.user.id, 'wants to be your accountability buddy');
 
+  const actor = db.prepare('SELECT display_name FROM users WHERE id = ?').get(req.user.id);
+  sendPush(user_id, {
+    title: 'Buddy request',
+    body: `${actor?.display_name || 'Someone'} wants to be your accountability buddy.`,
+    data: { type: 'buddy_request', userId: req.user.id },
+  }, 'buddy');
+
   res.json({ requested: true, id });
 });
 
@@ -123,6 +131,13 @@ router.put('/:id/accept', authMiddleware, (req, res) => {
   db.prepare(
     "INSERT INTO notifications (id, user_id, type, from_user_id, message) VALUES (?, ?, 'buddy_accepted', ?, ?)"
   ).run(uuidv4(), buddy.requester_id, req.user.id, 'accepted your buddy request!');
+
+  const actor = db.prepare('SELECT display_name FROM users WHERE id = ?').get(req.user.id);
+  sendPush(buddy.requester_id, {
+    title: 'Buddy accepted',
+    body: `${actor?.display_name || 'Someone'} accepted your buddy request.`,
+    data: { type: 'buddy_accepted', userId: req.user.id },
+  }, 'buddy');
 
   res.json({ accepted: true });
 });
