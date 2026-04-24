@@ -16,7 +16,7 @@ function formatDate(d) {
   return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function ClubCard({ club, onUpdate }) {
+function ClubCard({ club, onUpdate, onDelete }) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
   const navigation = useNavigation();
@@ -35,9 +35,14 @@ function ClubCard({ club, onUpdate }) {
       setLoading(true);
       try {
         await api.delete(`/clubs/${club.id}/leave`);
+        const newCount = Math.max(0, memberCount - 1);
         setMemberStatus(null);
-        setMemberCount(c => Math.max(0, c - 1));
+        setMemberCount(newCount);
         onUpdate?.(club.id, null);
+        if (newCount === 0) {
+          await api.delete(`/clubs/${club.id}`).catch(() => {});
+          onDelete?.(club.id);
+        }
       } catch (err) {
         Alert.alert('Error', err.response?.data?.error || 'Failed');
       } finally {
@@ -370,7 +375,12 @@ export default function ClubsScreen() {
         <FlatList
           data={displayList}
           keyExtractor={item => item.id}
-          renderItem={({ item }) => <ClubCard club={item} />}
+          renderItem={({ item }) => (
+            <ClubCard
+              club={item}
+              onDelete={id => setClubs(prev => prev.filter(c => c.id !== id))}
+            />
+          )}
           ListHeaderComponent={!isSearching && suggestions.length > 0 ? <SuggestedSection suggestions={suggestions} /> : null}
           contentContainerStyle={{ padding: spacing.lg, gap: 12, paddingBottom: 40 }}
           showsVerticalScrollIndicator={false}

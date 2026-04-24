@@ -459,12 +459,39 @@ export default function ChallengeDetailScreen({ route }) {
     api.get('/habits').then(r => setHabits(r.data.filter(h => h.is_active))).catch(() => {});
   }, [id]);
 
+  const handleDeleteClub = () => {
+    Alert.alert(
+      'Delete Club',
+      'This will permanently delete the club and all its data. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete', style: 'destructive',
+          onPress: async () => {
+            try {
+              await api.delete(`/clubs/${id}`);
+              navigation.goBack();
+            } catch (err) {
+              Alert.alert('Error', err.response?.data?.error || 'Could not delete club');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const toggleJoin = async () => {
     setJoining(true);
     try {
       if (challenge.memberStatus === 'active') {
         await api.delete(`/clubs/${id}/leave`);
-        setChallenge(c => ({ ...c, memberStatus: null, member_count: Math.max(0, c.member_count - 1) }));
+        const newCount = Math.max(0, challenge.member_count - 1);
+        setChallenge(c => ({ ...c, memberStatus: null, member_count: newCount }));
+        if (newCount === 0) {
+          await api.delete(`/clubs/${id}`).catch(() => {});
+          navigation.goBack();
+          return;
+        }
       } else if (challenge.memberStatus === 'pending') {
         Alert.alert('Request Pending', 'Your request is awaiting approval from the creator.');
       } else {
@@ -561,6 +588,11 @@ export default function ChallengeDetailScreen({ route }) {
           <Ionicons name="arrow-redo-outline" size={15} color={colors.text} style={{ marginRight: 4 }} />
           <Text style={styles.linkBtnText}>Share</Text>
         </TouchableOpacity>
+        {isCreator && (
+          <TouchableOpacity style={styles.deleteClubBtn} onPress={handleDeleteClub} activeOpacity={0.85}>
+            <Ionicons name="trash-outline" size={15} color="#ef4444" />
+          </TouchableOpacity>
+        )}
       </View>
 
       {isPending && isPrivate && (
@@ -700,6 +732,7 @@ function makeStyles(colors) {
   joinBtnText: { color: 'white', fontWeight: '700', fontSize: 14 },
   linkBtn: { backgroundColor: colors.bgHover, borderRadius: radius.pill, paddingHorizontal: 14, paddingVertical: 9 },
   linkBtnText: { color: colors.text, fontWeight: '600', fontSize: 13 },
+  deleteClubBtn: { backgroundColor: 'rgba(239,68,68,0.1)', borderRadius: radius.pill, paddingHorizontal: 12, paddingVertical: 9, borderWidth: 1, borderColor: 'rgba(239,68,68,0.25)' },
   pendingNote: { fontSize: 12, color: colors.textMuted, fontStyle: 'italic', marginTop: 4 },
   // Tabs
   tabBar: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.borderSubtle, marginTop: spacing.md },
