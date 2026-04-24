@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Image,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import api from '../api/client';
@@ -9,8 +9,27 @@ import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
 import MentionSuggestions from '../components/MentionSuggestions';
 import useMentionInput from '../hooks/useMentionInput';
-import { radius, spacing } from '../theme';
+import { API_BASE_URL, radius, spacing } from '../theme';
 import { useTheme } from '../context/ThemeContext';
+
+function renderMentions(text, colors, navigation) {
+  const parts = text.split(/(@[\w]+)/g);
+  return parts.map((part, i) => {
+    if (/^@[\w]+$/.test(part)) {
+      const username = part.slice(1);
+      return (
+        <Text
+          key={i}
+          style={{ color: colors.accent, fontWeight: '600' }}
+          onPress={() => navigation.navigate('UserProfile', { username })}
+        >
+          {part}
+        </Text>
+      );
+    }
+    return <Text key={i}>{part}</Text>;
+  });
+}
 
 function timeAgo(d) {
   const s = Math.floor((Date.now() - new Date(d)) / 1000);
@@ -56,6 +75,7 @@ function CommentItem({ comment, postId, currentUserId, onDelete, onReply }) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
   const navigation = useNavigation();
+  // navigation and colors are available here for renderMentions
   return (
     <View style={styles.commentWrap}>
       <TouchableOpacity onPress={() => navigation.navigate('UserProfile', { username: comment.username })}>
@@ -74,7 +94,7 @@ function CommentItem({ comment, postId, currentUserId, onDelete, onReply }) {
               </TouchableOpacity>
             )}
           </View>
-          <Text style={styles.commentText}>{comment.content}</Text>
+          <Text style={styles.commentText}>{renderMentions(comment.content, colors, navigation)}</Text>
         </View>
         <View style={styles.commentActions}>
           <TouchableOpacity onPress={() => onReply(comment)}>
@@ -92,7 +112,7 @@ function CommentItem({ comment, postId, currentUserId, onDelete, onReply }) {
                 <Text style={styles.commenterName}>{r.display_name}</Text>
                 <Text style={styles.commentTime}>{timeAgo(r.created_at)}</Text>
               </View>
-              <Text style={styles.commentText}>{r.content}</Text>
+              <Text style={styles.commentText}>{renderMentions(r.content, colors, navigation)}</Text>
               <View style={[styles.commentActions, { marginTop: 6 }]}>
                 <CommentLikeBtn comment={r} postId={postId} />
               </View>
@@ -107,7 +127,8 @@ function CommentItem({ comment, postId, currentUserId, onDelete, onReply }) {
 export default function CommentsScreen({ route }) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
-  const { postId } = route.params;
+  const { postId, post: postParam } = route.params;
+  const navigation = useNavigation();
   const { user } = useAuth();
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -163,6 +184,43 @@ export default function CommentsScreen({ route }) {
     inputRef.current?.focus();
   };
 
+  const PostHeader = postParam ? (
+    <View style={styles.postHeader}>
+      <View style={styles.postHeaderUser}>
+        <TouchableOpacity onPress={() => navigation.navigate('UserProfile', { username: postParam.username })}>
+          <Avatar user={{ username: postParam.username, display_name: postParam.display_name, avatar_url: postParam.avatar_url }} size="md" />
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          <TouchableOpacity onPress={() => navigation.navigate('UserProfile', { username: postParam.username })}>
+            <Text style={styles.postHeaderName}>{postParam.display_name}</Text>
+          </TouchableOpacity>
+          <Text style={styles.postHeaderHandle}>@{postParam.username}</Text>
+        </View>
+      </View>
+      {postParam.habit_name && (
+        <View style={[styles.postHabitTag, { backgroundColor: `${postParam.habit_color || colors.accent}18`, borderColor: postParam.habit_color || colors.accent }]}>
+          <Text style={[styles.postHabitTagText, { color: postParam.habit_color || colors.accent }]}>
+            Day {postParam.habit_day} · {postParam.habit_name}
+          </Text>
+        </View>
+      )}
+      {!!postParam.content && (
+        <Text style={styles.postContent}>
+          {renderMentions(postParam.content, colors, navigation)}
+        </Text>
+      )}
+      {!!postParam.image_url && (
+        <Image
+          source={{ uri: postParam.image_url.startsWith('http') ? postParam.image_url : `${API_BASE_URL}${postParam.image_url}` }}
+          style={styles.postImage}
+          resizeMode="cover"
+        />
+      )}
+      <View style={styles.postDivider} />
+      <Text style={styles.commentsLabel}>Comments</Text>
+    </View>
+  ) : null;
+
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       {loading ? (
@@ -171,6 +229,7 @@ export default function CommentsScreen({ route }) {
         <FlatList
           data={comments}
           keyExtractor={item => item.id}
+          ListHeaderComponent={PostHeader}
           renderItem={({ item }) => (
             <CommentItem
               comment={item}
@@ -276,5 +335,23 @@ function makeStyles(colors) {
   sendBtnText: { color: 'white', fontWeight: '700', fontSize: 13 },
   empty: { padding: 40, alignItems: 'center' },
   emptyText: { color: colors.textMuted, fontSize: 14 },
+  // Post header styles
+  postHeader: { marginBottom: 8 },
+  postHeaderUser: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  postHeaderName: { fontSize: 14, fontWeight: '700', color: colors.text },
+  postHeaderHandle: { fontSize: 12, color: colors.textMuted, marginTop: 1 },
+  postHabitTag: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radius.xs,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  postHabitTagText: { fontSize: 11, fontWeight: '500' },
+  postContent: { fontSize: 15, lineHeight: 22, color: colors.text, marginBottom: 10 },
+  postImage: { width: '100%', height: 220, borderRadius: radius.sm, marginBottom: 10, backgroundColor: colors.bgHover },
+  postDivider: { height: 1, backgroundColor: colors.borderSubtle, marginVertical: 12 },
+  commentsLabel: { fontSize: 13, fontWeight: '700', color: colors.textMuted, marginBottom: 4 },
   });
 }

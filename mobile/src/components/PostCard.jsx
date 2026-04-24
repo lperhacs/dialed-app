@@ -212,6 +212,25 @@ function ShareModal({ visible, onClose, postId, post }) {
   );
 }
 
+function renderMentions(text, colors, navigation) {
+  const parts = text.split(/(@[\w]+)/g);
+  return parts.map((part, i) => {
+    if (/^@[\w]+$/.test(part)) {
+      const username = part.slice(1);
+      return (
+        <Text
+          key={i}
+          style={{ color: colors.accent, fontWeight: '600' }}
+          onPress={() => navigation.navigate('UserProfile', { username })}
+        >
+          {part}
+        </Text>
+      );
+    }
+    return <Text key={i}>{part}</Text>;
+  });
+}
+
 export default function PostCard({ post, onDelete }) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
@@ -258,7 +277,7 @@ export default function PostCard({ post, onDelete }) {
   };
 
   const goToComments = () => {
-    navigation.navigate('Comments', { postId: post.id });
+    navigation.navigate('Comments', { postId: post.id, post });
   };
 
   const imageUrl = fullUrl(post.image_url);
@@ -296,17 +315,21 @@ export default function PostCard({ post, onDelete }) {
         </View>
       )}
 
-      {/* Content */}
-      {!!post.content && <Text style={styles.content}>{post.content}</Text>}
-
-      {/* Image */}
-      {imageUrl ? (
-        <Image
-          source={{ uri: imageUrl }}
-          style={styles.image}
-          resizeMode="cover"
-        />
-      ) : null}
+      {/* Content + Image — tappable to open post detail */}
+      <TouchableOpacity onPress={goToComments} activeOpacity={0.85}>
+        {!!post.content && (
+          <Text style={styles.content}>
+            {renderMentions(post.content, colors, navigation)}
+          </Text>
+        )}
+        {imageUrl ? (
+          <Image
+            source={{ uri: imageUrl }}
+            style={styles.image}
+            resizeMode="cover"
+          />
+        ) : null}
+      </TouchableOpacity>
 
       {/* Actions */}
       <View style={styles.actions}>
