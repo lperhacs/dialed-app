@@ -35,7 +35,10 @@ export default function OnboardingDeclaration({ navigation }) {
 
   // Account form
   const [form, setForm] = useState({ display_name: '', username: '', email: '', password: '' });
+  const [emailError, setEmailError] = useState('');
   const set = field => value => setForm(f => ({ ...f, [field]: value }));
+
+  const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim());
 
   const toggleChip = (chip) => {
     setSelectedChips(prev => {
@@ -62,6 +65,10 @@ export default function OnboardingDeclaration({ navigation }) {
     const { display_name, username, email, password } = form;
     if (!display_name || !username || !email || !password) {
       Alert.alert('Missing fields', 'Please fill in all fields.');
+      return;
+    }
+    if (!isValidEmail(email)) {
+      setEmailError('Please enter a valid email address.');
       return;
     }
     if (password.length < 6) {
@@ -184,9 +191,17 @@ export default function OnboardingDeclaration({ navigation }) {
                 <View key={field} style={styles.field}>
                   <Text style={styles.fieldLabel}>{label}</Text>
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, field === 'email' && emailError ? styles.inputError : null]}
                     value={form[field]}
-                    onChangeText={set(field)}
+                    onChangeText={v => {
+                      set(field)(v);
+                      if (field === 'email' && emailError) setEmailError('');
+                    }}
+                    onBlur={field === 'email' ? () => {
+                      if (form.email && !isValidEmail(form.email)) {
+                        setEmailError('Please enter a valid email (e.g. you@example.com)');
+                      }
+                    } : undefined}
                     placeholder={placeholder}
                     placeholderTextColor={colors.textDim}
                     autoCapitalize={auto || 'none'}
@@ -195,6 +210,9 @@ export default function OnboardingDeclaration({ navigation }) {
                     secureTextEntry={secure}
                     returnKeyType="next"
                   />
+                  {field === 'email' && !!emailError && (
+                    <Text style={styles.fieldError}>{emailError}</Text>
+                  )}
                 </View>
               ))}
 
@@ -237,6 +255,8 @@ function makeStyles(colors) { return StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 12,
   },
   inputActive: { borderColor: colors.accent },
+  inputError: { borderColor: '#ef4444' },
+  fieldError: { fontSize: 12, color: '#ef4444', marginTop: 3 },
   subtext: { fontSize: 13, color: colors.textMuted, marginTop: 16, marginBottom: 24, lineHeight: 19 },
   commitment: {
     backgroundColor: colors.accentDim, borderWidth: 1, borderColor: colors.accentDimBorder,
