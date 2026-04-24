@@ -29,7 +29,7 @@ export default function OnboardingDeclaration({ navigation }) {
   const { login } = useAuth();
 
   const [step, setStep] = useState(1);
-  const [selectedChip, setSelectedChip] = useState(null);
+  const [selectedChips, setSelectedChips] = useState([]);
   const [customHabit, setCustomHabit] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -37,12 +37,22 @@ export default function OnboardingDeclaration({ navigation }) {
   const [form, setForm] = useState({ display_name: '', username: '', email: '', password: '' });
   const set = field => value => setForm(f => ({ ...f, [field]: value }));
 
-  const habitName = customHabit.trim() || selectedChip?.label || '';
-  const habitColor = selectedChip?.color || HABIT_COLORS[0];
+  const toggleChip = (chip) => {
+    setSelectedChips(prev => {
+      const exists = prev.some(c => c.label === chip.label);
+      return exists ? prev.filter(c => c.label !== chip.label) : [...prev, chip];
+    });
+  };
+
+  // All habits to create: selected chips + custom if filled
+  const allHabits = [
+    ...selectedChips,
+    ...(customHabit.trim() ? [{ label: customHabit.trim(), color: HABIT_COLORS[selectedChips.length % HABIT_COLORS.length] }] : []),
+  ];
 
   const goToStep2 = () => {
-    if (!habitName) {
-      Alert.alert('Pick a habit', 'Choose one of the suggestions or type your own.');
+    if (allHabits.length === 0) {
+      Alert.alert('Pick a habit', 'Choose at least one suggestion or type your own.');
       return;
     }
     setStep(2);
@@ -64,22 +74,24 @@ export default function OnboardingDeclaration({ navigation }) {
       const { data } = await api.post('/auth/register', form);
       await login(data.token, data.user);
 
-      // 2. Create the first habit
-      let habitId = null;
-      try {
-        const { data: habit } = await api.post('/habits', {
-          name: habitName,
-          frequency: 'daily',
-          color: habitColor,
-        });
-        habitId = habit.id;
-      } catch {
-        // Non-fatal — habit can be added later
+      // 2. Create all selected habits
+      let firstHabitId = null;
+      for (const h of allHabits) {
+        try {
+          const { data: habit } = await api.post('/habits', {
+            name: h.label,
+            frequency: 'daily',
+            color: h.color,
+          });
+          if (!firstHabitId) firstHabitId = habit.id;
+        } catch {
+          // Non-fatal — habits can be added later
+        }
       }
 
       navigation.navigate('FindPeople', {
-        habitName,
-        habitId,
+        habitName: allHabits[0]?.label || '',
+        habitId: firstHabitId,
         displayName: data.user.display_name,
       });
     } catch (err) {
@@ -106,7 +118,7 @@ export default function OnboardingDeclaration({ navigation }) {
 
             <View style={styles.chips}>
               {HABIT_CHIPS.map(chip => {
-                const selected = selectedChip?.label === chip.label && !customHabit.trim();
+                const selected = selectedChips.some(c => c.label === chip.label);
                 return (
                   <TouchableOpacity
                     key={chip.label}
@@ -114,7 +126,7 @@ export default function OnboardingDeclaration({ navigation }) {
                       styles.chip,
                       selected && { backgroundColor: `${chip.color}20`, borderColor: chip.color },
                     ]}
-                    onPress={() => { setSelectedChip(chip); setCustomHabit(''); }}
+                    onPress={() => toggleChip(chip)}
                     activeOpacity={0.75}
                   >
                     <Text style={[styles.chipText, selected && { color: chip.color }]}>{chip.label}</Text>
@@ -123,11 +135,11 @@ export default function OnboardingDeclaration({ navigation }) {
               })}
             </View>
 
-            <Text style={styles.orDivider}>or write your own</Text>
+            <Text style={styles.orDivider}>or add your own</Text>
             <TextInput
               style={[styles.input, customHabit.trim() && styles.inputActive]}
               value={customHabit}
-              onChangeText={t => { setCustomHabit(t); if (t.trim()) setSelectedChip(null); }}
+              onChangeText={setCustomHabit}
               placeholder="e.g. Cold shower every morning"
               placeholderTextColor={colors.textDim}
               returnKeyType="done"
@@ -137,9 +149,9 @@ export default function OnboardingDeclaration({ navigation }) {
             <Text style={styles.subtext}>The people who follow you will keep you accountable.</Text>
 
             <TouchableOpacity
-              style={[styles.btn, !habitName && styles.btnDisabled]}
+              style={[styles.btn, allHabits.length === 0 && styles.btnDisabled]}
               onPress={goToStep2}
-              disabled={!habitName}
+              disabled={allHabits.length === 0}
               activeOpacity={0.85}
             >
               <Text style={styles.btnText}>Next →</Text>
@@ -153,8 +165,13 @@ export default function OnboardingDeclaration({ navigation }) {
             <Text style={styles.stepIndicator}>Step 2 of 2</Text>
             <Text style={styles.headline}>Create your account</Text>
             <View style={styles.commitment}>
-              <Text style={styles.commitmentLabel}>Your first habit</Text>
-              <Text style={styles.commitmentHabit}>{habitName}</Text>
+              <Text style={styles.commitmentLabel}>{allHabits.length === 1 ? 'Your habit' : `Your ${allHabits.length} habits`}</Text>
+              {allHabits.map((h, i) => (
+                <View key={i} style={styles.commitmentRow}>
+                  <View style={[styles.commitmentDot, { backgroundColor: h.color }]} />
+                  <Text style={styles.commitmentHabit}>{h.label}</Text>
+                </View>
+              ))}
             </View>
 
             <View style={styles.form}>
@@ -225,8 +242,10 @@ function makeStyles(colors) { return StyleSheet.create({
     backgroundColor: colors.accentDim, borderWidth: 1, borderColor: colors.accentDimBorder,
     borderRadius: radius.sm, padding: 14, marginBottom: 24,
   },
-  commitmentLabel: { fontSize: 11, fontWeight: '700', color: colors.accent, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 },
-  commitmentHabit: { fontSize: 17, fontWeight: '700', color: colors.text },
+  commitmentLabel: { fontSize: 11, fontWeight: '700', color: colors.accent, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 },
+  commitmentRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  commitmentDot: { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
+  commitmentHabit: { fontSize: 16, fontWeight: '700', color: colors.text },
   form: { gap: 14 },
   field: { gap: 5 },
   fieldLabel: { fontSize: 11, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },

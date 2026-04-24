@@ -11,6 +11,7 @@
 ### New Features
 - **Tappable posts** — Tapping a post's content or image opens a detail view showing the full post at the top with the comment thread below. (`PostCard.jsx`, `CommentsScreen.jsx`)
 - **@mention hyperlinks** — Any @username tag in posts or comments is now a tappable link that navigates to that user's profile. (`PostCard.jsx`, `CommentsScreen.jsx`)
+- **Multi-habit onboarding** — Users can now select multiple habits during signup. All selected habits are created at registration and shown in the step 2 summary. (`OnboardingDeclaration.jsx`)
 
 ---
 
