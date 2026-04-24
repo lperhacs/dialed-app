@@ -28,6 +28,8 @@ function formatTime(t) {
   return `${hour}:${String(m).padStart(2, '0')} ${ampm}`;
 }
 
+const HABIT_NUDGE_KEY = 'dialed_habit_nudge_v1';
+
 const CAL_OPTIONS = [7, 30, 90, 180, 365];
 const CAL_LABELS  = { 7: '7d', 30: '30d', 90: '90d', 180: '180d', 365: '1yr' };
 const CAL_DEFAULT_KEY = 'dialed_calendar_default';
@@ -468,6 +470,7 @@ export default function HabitsScreen() {
   const [showForm, setShowForm] = useState(false);
   const [editHabit, setEditHabit] = useState(null);
   const [calDefault, setCalDefault] = useState(7);
+  const [showNudge, setShowNudge] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem(CAL_DEFAULT_KEY).then(v => {
@@ -487,6 +490,10 @@ export default function HabitsScreen() {
     const { data } = await api.get('/habits');
     setHabits(data);
     syncAllHabitReminders(data);
+    if (data.length === 0) {
+      const seen = await AsyncStorage.getItem(HABIT_NUDGE_KEY);
+      if (!seen) setShowNudge(true);
+    }
   }, []);
 
   useFocusEffect(useCallback(() => {
@@ -518,6 +525,15 @@ export default function HabitsScreen() {
         },
       },
     ]);
+  };
+
+  const dismissNudge = async (openForm = false) => {
+    await AsyncStorage.setItem(HABIT_NUDGE_KEY, 'true');
+    setShowNudge(false);
+    if (openForm) {
+      setEditHabit(null);
+      setShowForm(true);
+    }
   };
 
   const handleSave = (habit, isNew) => {
@@ -578,6 +594,27 @@ export default function HabitsScreen() {
         onClose={() => setShowForm(false)}
         onSave={handleSave}
       />
+
+      <Modal visible={showNudge} transparent animationType="none" onRequestClose={() => dismissNudge()}>
+        <View style={styles.nudgeOverlay}>
+          <TouchableOpacity style={StyleSheet.absoluteFill} onPress={() => dismissNudge()} activeOpacity={1} />
+          <View style={styles.nudgeCard}>
+            <View style={styles.nudgeIconWrap}>
+              <Ionicons name="radio-button-on" size={28} color={colors.accent} />
+            </View>
+            <Text style={styles.nudgeTitle}>Create your first habit</Text>
+            <Text style={styles.nudgeDesc}>
+              Pick something you want to show up for. One tap to log it each day, week, or month. Your streak starts now.
+            </Text>
+            <TouchableOpacity style={styles.nudgeBtn} onPress={() => dismissNudge(true)} activeOpacity={0.85}>
+              <Text style={styles.nudgeBtnText}>Create a habit</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => dismissNudge()} style={styles.nudgeSkip} hitSlop={10}>
+              <Text style={styles.nudgeSkipText}>Skip for now</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -726,5 +763,70 @@ function makeStyles(colors) {
       width: '100%', alignItems: 'center',
     },
     milestoneBtnText: { fontSize: 15, fontWeight: '600' },
+
+    // Habit nudge
+    nudgeOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.6)',
+      justifyContent: 'flex-end',
+      paddingHorizontal: spacing.lg,
+      paddingBottom: 100,
+    },
+    nudgeCard: {
+      backgroundColor: colors.bgCard,
+      borderRadius: radius.lg,
+      padding: 28,
+      borderWidth: 1,
+      borderColor: colors.borderSubtle,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.3,
+      shadowRadius: 20,
+      elevation: 12,
+    },
+    nudgeIconWrap: {
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      backgroundColor: colors.accentDim,
+      borderWidth: 1,
+      borderColor: colors.accentDimBorder,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 16,
+    },
+    nudgeTitle: {
+      fontSize: 20,
+      fontWeight: '700',
+      color: colors.text,
+      marginBottom: 8,
+      letterSpacing: -0.3,
+    },
+    nudgeDesc: {
+      fontSize: 14,
+      color: colors.textMuted,
+      lineHeight: 21,
+      marginBottom: 24,
+    },
+    nudgeBtn: {
+      backgroundColor: colors.accent,
+      borderRadius: radius.sm,
+      paddingVertical: 13,
+      alignItems: 'center',
+      marginBottom: 12,
+    },
+    nudgeBtnText: {
+      color: colors.bg,
+      fontSize: 15,
+      fontWeight: '700',
+    },
+    nudgeSkip: {
+      alignItems: 'center',
+      paddingVertical: 4,
+    },
+    nudgeSkipText: {
+      fontSize: 13,
+      color: colors.textDim,
+    },
   });
 }
