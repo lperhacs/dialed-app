@@ -42,18 +42,26 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
   const [loggedThisPeriod, setLoggedThisPeriod] = useState(!!habit.logged_this_period);
   const [calDays, setCalDays] = useState(defaultDays);
   const [milestone, setMilestone] = useState(null);
+  const [showPostPrompt, setShowPostPrompt] = useState(false);
+  const [loggedDay, setLoggedDay] = useState(null);
 
   // Sync if the parent's default changes (e.g. user changes setting and refreshes)
   useEffect(() => { setCalDays(defaultDays); }, [defaultDays]);
 
   const handleLog = async () => {
     setLogging(true);
+    setLoggedThisPeriod(true);
     try {
       const { data } = await api.post(`/habits/${habit.id}/log`, { note: '' });
-      setLoggedThisPeriod(true);
       onLog(habit.id, data);
-      if (data.milestone) setMilestone(data.milestone);
+      if (data.milestone) {
+        setMilestone(data.milestone);
+      } else {
+        setLoggedDay(data.day != null ? Math.max(1, data.day) : null);
+        setShowPostPrompt(true);
+      }
     } catch (err) {
+      setLoggedThisPeriod(false);
       Alert.alert('Already logged', err.response?.data?.error || 'Try again later.');
     } finally {
       setLogging(false);
@@ -122,6 +130,36 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
             : `Log ${habit.frequency === 'daily' ? 'Today' : habit.frequency === 'weekly' ? 'This Week' : 'This Month'}`}
         </Text>
       </TouchableOpacity>
+
+      {/* Post-to-feed prompt */}
+      <Modal visible={showPostPrompt} transparent animationType="fade" onRequestClose={() => setShowPostPrompt(false)}>
+        <View style={styles.milestoneOverlay}>
+          <View style={styles.milestoneCard}>
+            <Text style={[styles.milestoneDay, { color: habit.color }]}>
+              {loggedDay ? `Day ${loggedDay}` : 'Logged'}
+            </Text>
+            <Text style={styles.milestoneTitle}>Share to your feed?</Text>
+            <Text style={styles.milestoneHabit}>{habit.name}</Text>
+            <TouchableOpacity
+              style={[styles.milestoneShareBtn, { backgroundColor: habit.color }]}
+              onPress={() => {
+                setShowPostPrompt(false);
+                navigation.navigate('CreatePost', {
+                  draft: loggedDay ? `Day ${loggedDay} of ${habit.name}.` : `Logged ${habit.name} today.`,
+                  habit_id: habit.id,
+                  habit_day: loggedDay,
+                });
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.milestoneBtnText, { color: colors.bg }]}>Share to Feed</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowPostPrompt(false)} style={{ marginTop: 12 }}>
+              <Text style={{ color: colors.textMuted, fontSize: 14 }}>Skip</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Milestone celebration modal */}
       <Modal visible={!!milestone} transparent animationType="fade" onRequestClose={() => setMilestone(null)}>

@@ -195,7 +195,7 @@ export default function CommentsScreen({ route }) {
       {postParam.habit_name && (
         <View style={[styles.postHabitTag, { backgroundColor: `${postParam.habit_color || colors.accent}18`, borderColor: postParam.habit_color || colors.accent }]}>
           <Text style={[styles.postHabitTagText, { color: postParam.habit_color || colors.accent }]}>
-            Day {postParam.habit_day} · {postParam.habit_name}
+            Day {Math.max(1, postParam.habit_day || 1)} · {postParam.habit_name}
           </Text>
         </View>
       )}

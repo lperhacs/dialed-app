@@ -299,7 +299,7 @@ export default function PostCard({ post, onDelete }) {
           { backgroundColor: `${post.habit_color || colors.accent}18`, borderColor: post.habit_color || colors.accent },
         ]}>
           <Text style={[styles.habitTagText, { color: post.habit_color || colors.accent }]}>
-            Day {post.habit_day} · {post.habit_name}
+            Day {Math.max(1, post.habit_day || 1)} · {post.habit_name}
           </Text>
         </View>
       )}
