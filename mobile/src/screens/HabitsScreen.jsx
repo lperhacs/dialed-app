@@ -161,6 +161,8 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
                   draft: loggedDay ? `Day ${loggedDay} of ${habit.name}.` : `Logged ${habit.name} today.`,
                   habit_id: habit.id,
                   habit_day: loggedDay,
+                  habit_name: habit.name,
+                  habit_color: habit.color,
                 });
               }}
               activeOpacity={0.85}
@@ -192,6 +194,8 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
                   draft: `Day ${milestone?.day} of ${habit.name} - ${milestone?.label}!`,
                   habit_id: habit.id,
                   habit_day: milestone?.day,
+                  habit_name: habit.name,
+                  habit_color: habit.color,
                 });
               }}
               activeOpacity={0.85}

@@ -81,7 +81,11 @@ export default function CreatePostScreen() {
     }
   };
 
-  const selectedHabit = habits.find(h => h.id === habitId);
+  const selectedHabit = habits.find(h => h.id === habitId) || (
+    habitId && route.params?.habit_name
+      ? { id: habitId, name: route.params.habit_name, color: route.params.habit_color || '#34d399' }
+      : null
+  );
 
   return (
     <KeyboardAvoidingView
