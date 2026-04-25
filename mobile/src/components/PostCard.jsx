@@ -169,7 +169,7 @@ function ShareModal({ visible, onClose, postId, post }) {
           {/* Search results / recent convos - shown while searching */}
           {!selectedUser && (
             <FlatList
-              data={results.length > 0 || query.trim() ? results : recentConvos.map(c => c.other)}
+              data={results.length > 0 || query.trim() ? results : recentConvos.filter(c => !c.is_group).map(c => c.other)}
               keyExtractor={item => item?.id}
               contentContainerStyle={{ padding: spacing.md, gap: 4 }}
               keyboardShouldPersistTaps="handled"

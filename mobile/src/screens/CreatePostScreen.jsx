@@ -190,7 +190,7 @@ export default function CreatePostScreen() {
                     <Text style={styles.habitName}>{h.name}</Text>
                     <Text style={styles.habitStreak}>{h.streak}d streak</Text>
                   </View>
-                  {habitId === h.id && <Ionicons name="checkmark" size={16} color={colors.accent} />}
+                  {String(h.id) === habitId && <Ionicons name="checkmark" size={16} color={colors.accent} />}
                 </TouchableOpacity>
               ))
             )}

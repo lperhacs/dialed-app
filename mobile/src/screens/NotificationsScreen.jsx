@@ -139,7 +139,7 @@ export default function NotificationsScreen() {
       refreshBadges();
     }, 2500);
     return () => clearTimeout(markReadTimer);
-  }, []);
+  }, [refreshBadges]);
 
   const handlePress = (notif) => {
     if ((notif.type === 'like' || notif.type === 'comment' || notif.type === 'cheer') && notif.post_id) {

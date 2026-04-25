@@ -109,7 +109,7 @@ export default function LeaderboardScreen() {
         >
           {myChallenges.map(c => (
             <TouchableOpacity
-              key={c.id}
+              key={String(c.id)}
               style={[styles.challengeChip, selectedChallenge === c.id && styles.challengeChipActive]}
               onPress={() => setSelectedChallenge(c.id)}
             >

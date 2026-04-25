@@ -716,7 +716,7 @@ export default function ChallengeDetailScreen({ route }) {
             ) : (
               habits.map(h => (
                 <TouchableOpacity
-                  key={h.id}
+                  key={String(h.id)}
                   style={[styles.habitOption, selectedHabit === h.id && styles.habitOptionSelected]}
                   onPress={() => setSelectedHabit(h.id)}
                 >
