@@ -124,6 +124,12 @@ function getDb() {
       }
     }
 
+    // Message read tracking
+    const cpCols = db.prepare("PRAGMA table_info(conversation_participants)").all().map(c => c.name);
+    if (!cpCols.includes('last_read_at')) {
+      db.exec("ALTER TABLE conversation_participants ADD COLUMN last_read_at DATETIME DEFAULT NULL");
+    }
+
     // Cheers (one-tap encouragement reaction on posts)
     db.exec(`
       CREATE TABLE IF NOT EXISTS cheers (

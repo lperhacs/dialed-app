@@ -5,6 +5,32 @@ const { authMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
 
+// GET /api/notifications/counts — lightweight badge counts (notifications + unread DMs)
+router.get('/counts', authMiddleware, (req, res) => {
+  const db = getDb();
+  const notifications = db.prepare(
+    'SELECT COUNT(*) as c FROM notifications WHERE user_id = ? AND is_read = 0'
+  ).get(req.user.id).c;
+
+  // Count conversations where the last message was sent by someone else
+  // and arrived after the user last read that conversation
+  const convIds = db.prepare(
+    'SELECT conversation_id, last_read_at FROM conversation_participants WHERE user_id = ?'
+  ).all(req.user.id);
+
+  let messages = 0;
+  for (const { conversation_id, last_read_at } of convIds) {
+    const lastMsg = db.prepare(
+      'SELECT sender_id, created_at FROM direct_messages WHERE conversation_id = ? ORDER BY created_at DESC LIMIT 1'
+    ).get(conversation_id);
+    if (!lastMsg) continue;
+    if (lastMsg.sender_id === req.user.id) continue; // sent by me, not unread
+    if (!last_read_at || lastMsg.created_at > last_read_at) messages++;
+  }
+
+  res.json({ notifications, messages });
+});
+
 // GET /api/notifications
 router.get('/', authMiddleware, (req, res) => {
   const db = getDb();

@@ -8,6 +8,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { AuthProvider } from './src/context/AuthContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
+import { BadgeProvider } from './src/context/BadgeContext';
 import RootNavigator from './src/navigation/RootNavigator';
 
 class ErrorBoundary extends React.Component {
@@ -43,7 +44,9 @@ function App() {
         <SafeAreaProvider>
           <ThemeProvider>
             <AuthProvider>
-              <AppInner />
+              <BadgeProvider>
+                <AppInner />
+              </BadgeProvider>
             </AuthProvider>
           </ThemeProvider>
         </SafeAreaProvider>

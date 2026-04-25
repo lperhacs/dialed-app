@@ -21,6 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { radius } from '../theme';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { useBadges } from '../context/BadgeContext';
 import TabTour from '../components/TabTour';
 
 const Tab = createBottomTabNavigator();
@@ -46,6 +47,39 @@ function HomeStackNavigator() {
   );
 }
 
+function badgeLabel(n) {
+  if (!n || n <= 0) return null;
+  return n > 10 ? '10+' : String(n);
+}
+
+function Badge({ count, style }) {
+  const label = badgeLabel(count);
+  if (!label) return null;
+  return (
+    <View style={[badgeStyles.badge, style]}>
+      <Text style={badgeStyles.text}>{label}</Text>
+    </View>
+  );
+}
+
+const badgeStyles = StyleSheet.create({
+  badge: {
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#ef4444',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 3,
+  },
+  text: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '700',
+    lineHeight: 11,
+  },
+});
+
 function TabIcon({ name, focused }) {
   const { colors } = useTheme();
   return (
@@ -54,6 +88,24 @@ function TabIcon({ name, focused }) {
       size={22}
       color={focused ? colors.accent : colors.textMuted}
     />
+  );
+}
+
+function HomeTabIcon({ focused }) {
+  const { colors } = useTheme();
+  const { notifCount, msgCount } = useBadges();
+  const total = notifCount + msgCount;
+  return (
+    <View style={{ position: 'relative' }}>
+      <Ionicons
+        name={focused ? 'home' : 'home-outline'}
+        size={22}
+        color={focused ? colors.accent : colors.textMuted}
+      />
+      {total > 0 && (
+        <Badge count={total} style={{ position: 'absolute', top: -5, right: -8 }} />
+      )}
+    </View>
   );
 }
 
@@ -183,7 +235,7 @@ export default function TabNavigator() {
           tabBarItemStyle: styles.tabItem,
         }}
       >
-        <Tab.Screen name="Home" component={HomeStackNavigator} options={{ tabBarIcon: ({ focused }) => <TabIcon name="home" focused={focused} /> }} />
+        <Tab.Screen name="Home" component={HomeStackNavigator} options={{ tabBarIcon: ({ focused }) => <HomeTabIcon focused={focused} /> }} />
         <Tab.Screen name="Habits" component={HabitsScreen} options={{ tabBarIcon: ({ focused }) => <TabIcon name="radio-button-on" focused={focused} /> }} />
         <Tab.Screen
           name="CreateDummy"

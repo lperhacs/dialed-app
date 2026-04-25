@@ -4,6 +4,7 @@ import {
   ActivityIndicator, Image,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useBadges } from '../context/BadgeContext';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../api/client';
 import Avatar from '../components/Avatar';
@@ -124,6 +125,7 @@ function NotifItem({ notif, onPress, onAvatarPress }) {
 export default function NotificationsScreen() {
   const { colors } = useTheme();
   const navigation = useNavigation();
+  const { refresh: refreshBadges } = useBadges();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -132,7 +134,10 @@ export default function NotificationsScreen() {
       .then(r => setNotifications(groupNotifications(r.data.notifications)))
       .finally(() => setLoading(false));
 
-    setTimeout(() => api.put('/notifications/read').catch(() => {}), 2500);
+    setTimeout(() => {
+      api.put('/notifications/read').catch(() => {});
+      refreshBadges();
+    }, 2500);
   }, []);
 
   const handlePress = (notif) => {

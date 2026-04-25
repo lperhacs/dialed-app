@@ -176,6 +176,11 @@ router.get('/conversations/:id/messages', authMiddleware, (req, res) => {
     return result;
   });
 
+  // Mark this conversation as read for the current user
+  db.prepare(
+    "UPDATE conversation_participants SET last_read_at = datetime('now') WHERE conversation_id = ? AND user_id = ?"
+  ).run(req.params.id, req.user.id);
+
   res.json(enriched);
 });
 

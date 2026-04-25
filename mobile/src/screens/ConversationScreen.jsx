@@ -13,6 +13,7 @@ import MentionSuggestions from '../components/MentionSuggestions';
 import useMentionInput from '../hooks/useMentionInput';
 import { radius, spacing } from '../theme';
 import { useTheme } from '../context/ThemeContext';
+import { useBadges } from '../context/BadgeContext';
 
 import { timeAgo } from '../utils/timeAgo';
 
@@ -136,6 +137,7 @@ export default function ConversationScreen({ route }) {
   const styles = makeStyles(colors);
   const { conversationId, other, groupName, isGroup, participantCount } = route.params;
   const { user } = useAuth();
+  const { refresh: refreshBadges } = useBadges();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const [messages, setMessages] = useState([]);
@@ -175,6 +177,8 @@ export default function ConversationScreen({ route }) {
       setMessages(msgRes.data);
       setIsMuted(muteRes.data.is_muted);
       setMutedUntil(muteRes.data.muted_until);
+      // Backend marks conversation read on GET messages; refresh badge counts
+      refreshBadges();
     }).catch(() => {}).finally(() => setLoading(false));
   }, [conversationId]);
 
