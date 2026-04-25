@@ -27,7 +27,7 @@ export function BadgeProvider({ children }) {
       return;
     }
     refresh();
-    intervalRef.current = setInterval(refresh, 30_000);
+    intervalRef.current = setInterval(refresh, 5_000);
     return () => clearInterval(intervalRef.current);
   }, [user, refresh]);
 
