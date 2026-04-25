@@ -77,4 +77,16 @@ app.use((err, _req, res, _next) => {
 
 app.listen(PORT, () => {
   console.log(`\n🔥 Dialed API running on http://localhost:${PORT}\n`);
+
+  // Schedule monthly habit reminders.
+  // Runs daily at 09:00 UTC — the dedup logic in runMonthlyHabitReminders
+  // ensures each user gets at most one push per habit per calendar month.
+  const cron = require('node-cron');
+  const { runMonthlyHabitReminders } = require('./cron/habitReminders');
+  cron.schedule('0 9 * * *', () => {
+    runMonthlyHabitReminders().catch(err =>
+      console.error('[Cron] monthly-habit-reminders failed:', err)
+    );
+  }, { timezone: 'UTC' });
+  console.log('[Cron] monthly habit reminder scheduler started (daily 09:00 UTC)\n');
 });

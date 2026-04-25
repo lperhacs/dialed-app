@@ -15,15 +15,9 @@ function requireServerKey(req, res, next) {
 /**
  * POST /api/cron/habit-reminders
  *
- * Trigger monthly habit reminder push notifications.
- * Call this on the 15th and 25th of each month (or any schedule you prefer).
- *
- * Requires header:  X-Server-Key: <SERVER_SECRET>
- *
- * Railway cron example (runs 9am UTC on the 15th and 25th):
- *   Schedule:  0 9 15,25 * *
- *   Command:   curl -s -X POST $RAILWAY_PUBLIC_DOMAIN/api/cron/habit-reminders \
- *                   -H "X-Server-Key: $SERVER_SECRET"
+ * Manually trigger the monthly habit reminder job (admin/testing use).
+ * The job also runs automatically every day at 09:00 UTC via node-cron
+ * (see server.js). Requires header: X-Server-Key: <SERVER_SECRET>
  */
 router.post('/habit-reminders', requireServerKey, async (_req, res) => {
   try {
