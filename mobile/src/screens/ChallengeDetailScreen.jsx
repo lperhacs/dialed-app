@@ -442,6 +442,7 @@ export default function ChallengeDetailScreen({ route }) {
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
   const [habits, setHabits] = useState([]);
+  const [linkedHabit, setLinkedHabit] = useState(null);
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [selectedHabit, setSelectedHabit] = useState('');
   const [linking, setLinking] = useState(false);
@@ -454,6 +455,8 @@ export default function ChallengeDetailScreen({ route }) {
       .then(r => {
         setChallenge(r.data);
         setPendingRequests(r.data.pending_requests || []);
+        setLinkedHabit(r.data.my_linked_habit || null);
+        if (r.data.my_linked_habit) setSelectedHabit(r.data.my_linked_habit.id);
       })
       .finally(() => setLoading(false));
     api.get('/habits').then(r => setHabits(r.data.filter(h => h.is_active))).catch(() => {});
@@ -512,8 +515,9 @@ export default function ChallengeDetailScreen({ route }) {
     setLinking(true);
     try {
       await api.post(`/clubs/${id}/link-habit`, { habit_id: selectedHabit });
+      const linked = habits.find(h => h.id === selectedHabit);
+      setLinkedHabit(linked ? { id: linked.id, name: linked.name, color: linked.color } : null);
       setShowLinkModal(false);
-      Alert.alert('Linked!', 'Your habit is now linked to this club.');
     } catch (err) {
       Alert.alert('Error', err.response?.data?.error || 'Failed to link');
     } finally {
@@ -580,14 +584,24 @@ export default function ChallengeDetailScreen({ route }) {
         </TouchableOpacity>
 
         {isActiveMember && (
-          <TouchableOpacity style={styles.linkBtn} onPress={() => setShowLinkModal(true)} activeOpacity={0.85}>
-            <Text style={styles.linkBtnText}>🔗 Link Habit</Text>
+          <TouchableOpacity
+            style={[styles.linkBtn, linkedHabit && styles.linkBtnLinked]}
+            onPress={() => setShowLinkModal(true)}
+            activeOpacity={0.85}
+          >
+            <View style={linkedHabit ? [styles.linkedDot, { backgroundColor: linkedHabit.color }] : null} />
+            <Text style={[styles.linkBtnText, linkedHabit && styles.linkBtnTextLinked]}>
+              {linkedHabit ? linkedHabit.name : 'Link Habit'}
+            </Text>
+            {linkedHabit && <Ionicons name="pencil" size={11} color={colors.accent} />}
           </TouchableOpacity>
         )}
+
         <TouchableOpacity style={styles.linkBtn} onPress={() => setShowForwardClub(true)} activeOpacity={0.85}>
-          <Ionicons name="arrow-redo-outline" size={15} color={colors.text} style={{ marginRight: 4 }} />
+          <Ionicons name="arrow-redo-outline" size={15} color={colors.text} />
           <Text style={styles.linkBtnText}>Share</Text>
         </TouchableOpacity>
+
         {isCreator && (
           <TouchableOpacity style={styles.deleteClubBtn} onPress={handleDeleteClub} activeOpacity={0.85}>
             <Ionicons name="trash-outline" size={15} color="#ef4444" />
@@ -682,15 +696,21 @@ export default function ChallengeDetailScreen({ route }) {
             <TouchableOpacity onPress={() => setShowLinkModal(false)}>
               <Text style={{ color: colors.textMuted }}>Cancel</Text>
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>Link a Habit</Text>
+            <Text style={styles.modalTitle}>{linkedHabit ? 'Change Linked Habit' : 'Link a Habit'}</Text>
             <TouchableOpacity onPress={linkHabit} disabled={linking || !selectedHabit}>
               <Text style={{ color: selectedHabit ? colors.accent : colors.textDim, fontWeight: '700' }}>
-                {linking ? '…' : 'Link'}
+                {linking ? '…' : linkedHabit ? 'Update' : 'Link'}
               </Text>
             </TouchableOpacity>
           </View>
           <ScrollView contentContainerStyle={{ padding: spacing.lg }}>
-            <Text style={styles.linkDesc}>Link your personal habit to track progress in this challenge.</Text>
+            {linkedHabit && (
+              <View style={[styles.currentLinkBanner, { borderColor: linkedHabit.color }]}>
+                <View style={[styles.linkedDot, { backgroundColor: linkedHabit.color, width: 10, height: 10, borderRadius: 5 }]} />
+                <Text style={[styles.currentLinkText, { color: linkedHabit.color }]}>Currently linked: {linkedHabit.name}</Text>
+              </View>
+            )}
+            <Text style={styles.linkDesc}>{linkedHabit ? 'Choose a different habit to link to this club.' : 'Link your personal habit to track progress in this challenge.'}</Text>
             {habits.length === 0 ? (
               <Text style={{ color: colors.textMuted, fontSize: 14 }}>No active habits. Create one in the Habits tab first.</Text>
             ) : (
@@ -726,13 +746,16 @@ function makeStyles(colors) {
   challengeName: { fontSize: 20, fontWeight: '800', color: colors.text, flexShrink: 1 },
   challengeMeta: { fontSize: 12, color: colors.textMuted },
   challengeDesc: { fontSize: 14, color: colors.text, lineHeight: 20, marginTop: 2 },
-  actionRow: { flexDirection: 'row', gap: 10, marginTop: 10 },
-  joinBtn: { backgroundColor: colors.accent, borderRadius: radius.pill, paddingHorizontal: 18, paddingVertical: 9 },
+  actionRow: { flexDirection: 'row', gap: 8, marginTop: 10, flexWrap: 'wrap' },
+  joinBtn: { backgroundColor: colors.accent, borderRadius: radius.sm, paddingHorizontal: 16, paddingVertical: 8 },
   joinBtnOutline: { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: colors.border },
   joinBtnText: { color: 'white', fontWeight: '700', fontSize: 14 },
-  linkBtn: { backgroundColor: colors.bgHover, borderRadius: radius.pill, paddingHorizontal: 14, paddingVertical: 9 },
+  linkBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: colors.bgHover, borderRadius: radius.sm, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: colors.borderSubtle },
+  linkBtnLinked: { borderColor: colors.accent, backgroundColor: colors.accentDim },
   linkBtnText: { color: colors.text, fontWeight: '600', fontSize: 13 },
-  deleteClubBtn: { backgroundColor: 'rgba(239,68,68,0.1)', borderRadius: radius.pill, paddingHorizontal: 12, paddingVertical: 9, borderWidth: 1, borderColor: 'rgba(239,68,68,0.25)' },
+  linkBtnTextLinked: { color: colors.accent },
+  linkedDot: { width: 8, height: 8, borderRadius: 4 },
+  deleteClubBtn: { backgroundColor: 'rgba(239,68,68,0.08)', borderRadius: radius.sm, paddingHorizontal: 10, paddingVertical: 8, borderWidth: 1, borderColor: 'rgba(239,68,68,0.2)', justifyContent: 'center', alignItems: 'center' },
   pendingNote: { fontSize: 12, color: colors.textMuted, fontStyle: 'italic', marginTop: 4 },
   // Tabs
   tabBar: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.borderSubtle, marginTop: spacing.md },
@@ -750,9 +773,9 @@ function makeStyles(colors) {
   emptyText: { color: colors.textMuted, fontSize: 14, textAlign: 'center' },
   // Requests
   requestRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.lg, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle },
-  approveBtn: { backgroundColor: colors.green, borderRadius: radius.pill, paddingHorizontal: 14, paddingVertical: 7 },
+  approveBtn: { backgroundColor: colors.green, borderRadius: radius.sm, paddingHorizontal: 14, paddingVertical: 7 },
   approveBtnText: { color: 'white', fontWeight: '700', fontSize: 13 },
-  rejectBtn: { backgroundColor: colors.bgHover, borderRadius: radius.pill, paddingHorizontal: 12, paddingVertical: 7 },
+  rejectBtn: { backgroundColor: colors.bgHover, borderRadius: radius.sm, paddingHorizontal: 12, paddingVertical: 7 },
   rejectBtnText: { color: colors.textMuted, fontWeight: '700', fontSize: 13 },
   // Chat
   chatHeaderBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle },
@@ -820,6 +843,8 @@ function makeStyles(colors) {
   linkModal: { flex: 1, backgroundColor: colors.bg },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle },
   modalTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
+  currentLinkBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: radius.sm, borderWidth: 1, backgroundColor: colors.bgHover, marginBottom: 12 },
+  currentLinkText: { fontSize: 13, fontWeight: '600' },
   linkDesc: { fontSize: 14, color: colors.textMuted, marginBottom: 16, lineHeight: 20 },
   habitOption: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 10, borderRadius: radius.sm },
   habitOptionSelected: { backgroundColor: colors.accentDim },

@@ -10,9 +10,11 @@ router.get('/', authMiddleware, (req, res) => {
   const db = getDb();
   const notifications = db.prepare(
     `SELECT n.*,
-       u.username as from_username, u.display_name as from_display_name, u.avatar_url as from_avatar
+       u.username as from_username, u.display_name as from_display_name, u.avatar_url as from_avatar,
+       p.image_url as post_image, p.content as post_content
      FROM notifications n
      LEFT JOIN users u ON u.id = n.from_user_id
+     LEFT JOIN posts p ON p.id = n.post_id
      WHERE n.user_id = ?
      ORDER BY n.created_at DESC LIMIT 50`
   ).all(req.user.id);

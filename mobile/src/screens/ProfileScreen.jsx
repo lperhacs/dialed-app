@@ -159,8 +159,6 @@ export default function ProfileScreen({ route, routeUsername, isOwn }) {
     );
   }
 
-  const anyAtRisk = habits.some(h => h.at_risk);
-
   // The full header (avatar, name, bio, stats, badges, tabs) rendered as FlatList header
   const ListHeader = (
     <View>
@@ -168,7 +166,7 @@ export default function ProfileScreen({ route, routeUsername, isOwn }) {
       <View style={[styles.profileHeader, { paddingTop: 12 }]}>
         {/* Avatar row */}
         <View style={styles.topRow}>
-          <Avatar user={profile} size="xl" atRisk={anyAtRisk} />
+          <Avatar user={profile} size="xl" />
         </View>
 
         {/* Name + handle */}

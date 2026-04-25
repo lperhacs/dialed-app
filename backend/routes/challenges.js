@@ -267,7 +267,16 @@ router.get('/:id', optionalAuth, (req, res) => {
 
   const member_count = db.prepare("SELECT COUNT(*) as c FROM challenge_members WHERE challenge_id = ? AND status = 'active'").get(req.params.id).c;
 
-  res.json({ ...challenge, members, pending_requests, memberStatus, member_count });
+  let my_linked_habit = null;
+  if (userId && memberStatus === 'active') {
+    my_linked_habit = db.prepare(
+      `SELECT h.id, h.name, h.color FROM challenge_habit_links chl
+       JOIN habits h ON h.id = chl.habit_id
+       WHERE chl.challenge_id = ? AND chl.user_id = ?`
+    ).get(req.params.id, userId) || null;
+  }
+
+  res.json({ ...challenge, members, pending_requests, memberStatus, member_count, my_linked_habit });
 });
 
 // POST /api/challenges/:id/join
