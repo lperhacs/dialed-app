@@ -67,12 +67,22 @@ export async function scheduleHabitReminder(habit) {
     // Fire every Monday at the specified time
     trigger = { type: 'weekly', weekday: 2, hour, minute, repeats: true };
   } else if (habit.frequency === 'monthly') {
-    // Fire on the 1st of each month
-    // expo-notifications doesn't have a native monthly trigger, so use
-    // a calendar trigger for the 1st day of the next occurring month
-    const now  = new Date();
-    const next = new Date(now.getFullYear(), now.getMonth() + 1, 1, hour, minute, 0);
-    trigger    = { date: next, repeats: false };
+    // expo-notifications has no native monthly repeat trigger.
+    // Schedule a one-shot for 5 days before end of the current month as a
+    // "last chance" nudge. The server-side cron (POST /api/cron/habit-reminders)
+    // is the primary recurring reminder; this is a local fallback.
+    const now = new Date();
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0); // last day this month
+    const nudgeDate = new Date(endOfMonth.getFullYear(), endOfMonth.getMonth(), endOfMonth.getDate() - 4, hour, minute, 0);
+    // If that date has already passed this month, push to next month
+    const target = nudgeDate > now
+      ? nudgeDate
+      : new Date(now.getFullYear(), now.getMonth() + 2, 0);
+    if (target !== nudgeDate) {
+      target.setDate(target.getDate() - 4);
+      target.setHours(hour, minute, 0, 0);
+    }
+    trigger = { date: target, repeats: false };
   } else {
     return;
   }
