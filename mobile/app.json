@@ -14,6 +14,9 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.loganperhacs.dialed",
       "buildNumber": "9",
+      "entitlements": {
+        "aps-environment": "production"
+      },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -29,6 +32,15 @@
       ]
     },
     "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#34d399",
+          "defaultChannel": "default",
+          "sounds": []
+        }
+      ],
       [
         "expo-image-picker",
         {

@@ -14,7 +14,6 @@ import StreakBadge from '../components/StreakBadge';
 import { radius, spacing } from '../theme';
 import { useTheme } from '../context/ThemeContext';
 import {
-  requestNotificationPermission,
   scheduleHabitReminder,
   cancelHabitReminder,
   syncAllHabitReminders,
@@ -487,8 +486,6 @@ export default function HabitsScreen() {
     AsyncStorage.getItem(CAL_DEFAULT_KEY).then(v => { if (v) setCalDefault(Number(v)); });
   }, []));
 
-  // Request notification permission once on mount
-  useEffect(() => { requestNotificationPermission(); }, []);
 
   const load = useCallback(async () => {
     const { data } = await api.get('/habits');

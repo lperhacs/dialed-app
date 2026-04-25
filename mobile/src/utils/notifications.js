@@ -1,4 +1,5 @@
 import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import api from '../api/client';
 
@@ -31,7 +32,8 @@ export async function registerPushToken() {
     }
     if (finalStatus !== 'granted') return;
 
-    const { data: token } = await Notifications.getExpoPushTokenAsync();
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+    const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
     await api.put('/users/me/push-token', { token });
   } catch {
     // Never crash the app over push registration
