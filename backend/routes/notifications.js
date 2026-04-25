@@ -67,7 +67,7 @@ router.put('/:id/read', authMiddleware, (req, res) => {
 });
 
 // POST /api/notifications/habit-reminder  (internal / cron use — requires server secret)
-router.post('/habit-reminder', authMiddleware, (req, res) => {
+router.post('/habit-reminder', (req, res) => {
   const serverKey = req.headers['x-server-key'];
   if (!serverKey || serverKey !== process.env.SERVER_SECRET) {
     return res.status(403).json({ error: 'Forbidden' });

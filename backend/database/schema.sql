@@ -158,6 +158,8 @@ CREATE TABLE IF NOT EXISTS direct_messages (
   sender_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   content         TEXT DEFAULT '',
   post_id         TEXT REFERENCES posts(id) ON DELETE SET NULL,
+  event_id        TEXT REFERENCES events(id) ON DELETE SET NULL,
+  club_id         TEXT REFERENCES challenges(id) ON DELETE SET NULL,
   created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

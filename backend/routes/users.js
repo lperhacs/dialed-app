@@ -123,9 +123,11 @@ router.get('/search', optionalAuth, (req, res) => {
   if (!q) return res.json([]);
   if (q.length > 50) return res.json([]);
   const db = getDb();
+  const escaped = q.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+  const pattern = `%${escaped}%`;
   const users = db.prepare(
-    "SELECT id, username, display_name, avatar_url FROM users WHERE username LIKE ? OR display_name LIKE ? LIMIT 10"
-  ).all(`%${q}%`, `%${q}%`);
+    "SELECT id, username, display_name, avatar_url FROM users WHERE username LIKE ? ESCAPE '\\' OR display_name LIKE ? ESCAPE '\\' LIMIT 10"
+  ).all(pattern, pattern);
   res.json(users);
 });
 
@@ -550,6 +552,8 @@ router.delete('/me', authMiddleware, (req, res) => {
   db.prepare('DELETE FROM badges WHERE user_id = ?').run(id);
   db.prepare('DELETE FROM notifications WHERE user_id = ?').run(id);
   db.prepare('DELETE FROM challenge_members WHERE user_id = ?').run(id);
+  db.prepare('DELETE FROM direct_messages WHERE sender_id = ?').run(id);
+  db.prepare('DELETE FROM conversation_participants WHERE user_id = ?').run(id);
   db.prepare('DELETE FROM users WHERE id = ?').run(id);
 
   res.json({ ok: true });

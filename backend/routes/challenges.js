@@ -348,6 +348,11 @@ router.delete('/:id/leave', authMiddleware, (req, res) => {
   const db = getDb();
   db.prepare('DELETE FROM challenge_members WHERE challenge_id = ? AND user_id = ?').run(req.params.id, req.user.id);
   db.prepare('DELETE FROM challenge_habit_links WHERE challenge_id = ? AND user_id = ?').run(req.params.id, req.user.id);
+  const remaining = db.prepare("SELECT COUNT(*) as c FROM challenge_members WHERE challenge_id = ? AND status = 'active'").get(req.params.id).c;
+  if (remaining === 0) {
+    db.prepare('DELETE FROM challenge_habit_links WHERE challenge_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM challenges WHERE id = ?').run(req.params.id);
+  }
   res.json({ memberStatus: null });
 });
 

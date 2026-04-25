@@ -96,7 +96,6 @@ router.post('/send-otp', (req, res) => {
   otpStore.set(cleaned, { otp, expires: Date.now() + 10 * 60 * 1000, attempts: 0 });
 
   // TODO: replace with Twilio SMS — `twilio.messages.create({ to: cleaned, from: TWILIO_FROM, body: ... })`
-  console.log(`[OTP] ${cleaned}: ${otp}`);
 
   res.json({ sent: true });
 });

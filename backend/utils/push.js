@@ -44,7 +44,7 @@ async function sendPush(userId, payload, prefKey) {
       sound: 'default',
     };
 
-    await fetch(EXPO_PUSH_URL, {
+    const response = await fetch(EXPO_PUSH_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -52,6 +52,9 @@ async function sendPush(userId, payload, prefKey) {
       },
       body: JSON.stringify(message),
     });
+    const result = await response.json();
+    const errors = (result.data || []).filter(t => t.status === 'error');
+    if (errors.length) console.error('[Push] delivery errors:', JSON.stringify(errors));
   } catch {
     // Never let push failures surface to the caller
   }

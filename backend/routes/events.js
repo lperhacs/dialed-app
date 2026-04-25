@@ -89,6 +89,7 @@ router.get('/mine', authMiddleware, (req, res) => {
   const db = getDb();
   const rows = db.prepare(`${EVENT_SELECT}
     JOIN event_attendees ea ON ea.event_id = e.id AND ea.user_id = :userId AND ea.status = 'going'
+    WHERE e.event_date >= date('now')
     ORDER BY e.event_date ASC`)
     .all({ userId: req.user.id });
   res.json(rows);
