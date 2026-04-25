@@ -152,7 +152,7 @@ function EventsTab({ clubId, currentUser }) {
   return (
     <FlatList
       data={events}
-      keyExtractor={item => item.id}
+      keyExtractor={item => String(item.id)}
       renderItem={({ item }) => (
         <ForwardedEventCard
           event={item}
@@ -373,7 +373,7 @@ function ChatTab({ challengeId, insets }) {
       <FlatList
         ref={listRef}
         data={messages}
-        keyExtractor={item => item.id}
+        keyExtractor={item => String(item.id)}
         contentContainerStyle={{ padding: spacing.md, gap: 4, paddingBottom: 12 }}
         showsVerticalScrollIndicator={false}
         onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
@@ -638,7 +638,7 @@ export default function ChallengeDetailScreen({ route }) {
       {activeTab === 'leaderboard' && (
         <FlatList
           data={sorted}
-          keyExtractor={item => item.id}
+          keyExtractor={item => String(item.id)}
           renderItem={({ item, index }) => <MemberRow member={item} rank={index + 1} currentUserId={user?.id} />}
           contentContainerStyle={{ paddingBottom: 40 }}
           showsVerticalScrollIndicator={false}
@@ -665,7 +665,7 @@ export default function ChallengeDetailScreen({ route }) {
       {activeTab === 'requests' && isCreator && (
         <FlatList
           data={pendingRequests}
-          keyExtractor={item => item.id}
+          keyExtractor={item => String(item.id)}
           renderItem={({ item }) => (
             <RequestRow
               request={item}

@@ -81,7 +81,7 @@ export default function CreatePostScreen() {
     }
   };
 
-  const selectedHabit = habits.find(h => h.id === habitId) || (
+  const selectedHabit = habits.find(h => String(h.id) === habitId) || (
     habitId && route.params?.habit_name
       ? { id: habitId, name: route.params.habit_name, color: route.params.habit_color || '#34d399' }
       : null
@@ -182,8 +182,8 @@ export default function CreatePostScreen() {
               habits.map(h => (
                 <TouchableOpacity
                   key={h.id}
-                  style={[styles.habitOption, habitId === h.id && styles.habitOptionSelected]}
-                  onPress={() => { setHabitId(h.id); setShowHabits(false); }}
+                  style={[styles.habitOption, String(h.id) === habitId && styles.habitOptionSelected]}
+                  onPress={() => { setHabitId(String(h.id)); setShowHabits(false); }}
                 >
                   <View style={[styles.habitDot, { backgroundColor: h.color }]} />
                   <View style={{ flex: 1 }}>

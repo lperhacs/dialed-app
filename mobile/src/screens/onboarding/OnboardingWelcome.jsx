@@ -78,12 +78,13 @@ export default function OnboardingWelcome({ route, onDone }) {
     Animated.parallel(reactionAnimations).start();
 
     // 3. Bottom text fades in after 1.2s
-    setTimeout(() => {
+    const textTimer = setTimeout(() => {
       Animated.timing(textOpacity, { toValue: 1, duration: 600, useNativeDriver: true }).start();
     }, 1200);
 
     return () => {
       reactionAnimations.forEach(a => a.stop());
+      clearTimeout(textTimer);
     };
   }, []);
 

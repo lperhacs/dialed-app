@@ -402,7 +402,7 @@ export default function ProfileScreen({ route, routeUsername, isOwn }) {
               <Text style={styles.habitMeta}>{h.frequency}</Text>
               <Text style={styles.habitMeta}>{h.total_logs} logs</Text>
             </View>
-            <HabitCalendar calendar={[]} color={h.color} compact />
+            <HabitCalendar calendar={h.calendar || []} color={h.color} compact />
           </View>
         );
       };

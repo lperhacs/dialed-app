@@ -91,16 +91,6 @@ export default function LoginScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* Demo hint */}
-        <View style={styles.demoBox}>
-          <Text style={styles.demoTitle}>Demo accounts</Text>
-          <Text style={styles.demoText}>alex@dialed.app · jess@dialed.app</Text>
-          <Text style={styles.demoText}>marco@dialed.app · priya@dialed.app</Text>
-          <Text style={[styles.demoText, { color: colors.accent, fontWeight: '500' }]}>
-            password: password123
-          </Text>
-        </View>
-
         <View style={styles.switchRow}>
           <Text style={styles.switchText}>Don't have an account? </Text>
           <TouchableOpacity onPress={() => navigation.navigate('Register')}>

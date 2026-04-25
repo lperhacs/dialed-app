@@ -135,7 +135,7 @@ export default function LeaderboardScreen() {
       ) : (
         <FlatList
           data={listData}
-          keyExtractor={item => item.id}
+          keyExtractor={item => String(item.id)}
           renderItem={({ item }) => <LeaderRow entry={item} currentUserId={user?.id} />}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 40 }}

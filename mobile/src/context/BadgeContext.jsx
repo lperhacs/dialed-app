@@ -11,13 +11,17 @@ export function BadgeProvider({ children }) {
   const [msgCount, setMsgCount] = useState(0);
   const intervalRef = useRef(null);
 
+  const inFlight = useRef(false);
   const refresh = useCallback(async () => {
-    if (!user) return;
+    if (!user || inFlight.current) return;
+    inFlight.current = true;
     try {
       const { data } = await api.get('/notifications/counts');
       setNotifCount(data.notifications ?? 0);
       setMsgCount(data.messages ?? 0);
-    } catch (_) {}
+    } catch (_) {} finally {
+      inFlight.current = false;
+    }
   }, [user]);
 
   useEffect(() => {

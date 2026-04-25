@@ -78,7 +78,7 @@ export async function scheduleHabitReminder(habit) {
   }
 
   await Notifications.scheduleNotificationAsync({
-    identifier: habit.id,
+    identifier: String(habit.id),
     content: {
       title: 'Stay Dialed',
       body: `Time to ${habit.name}!`,
@@ -90,7 +90,7 @@ export async function scheduleHabitReminder(habit) {
 
 export async function cancelHabitReminder(habitId) {
   try {
-    await Notifications.cancelScheduledNotificationAsync(habitId);
+    await Notifications.cancelScheduledNotificationAsync(String(habitId));
   } catch {
     // Notification may not exist - that's fine
   }

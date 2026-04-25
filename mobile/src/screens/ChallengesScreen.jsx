@@ -322,6 +322,7 @@ export default function ClubsScreen() {
   useFocusEffect(useCallback(() => {
     setLoading(true);
     load().finally(() => setLoading(false));
+    return () => clearTimeout(searchTimeout.current);
   }, []));
 
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };

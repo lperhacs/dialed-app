@@ -245,7 +245,7 @@ function TimePicker({ value, onChange }) {
   return (
     <View>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: enabled ? 14 : 0 }}>
-        <Text style={styles.fieldLabel}>REMINDER (optional)</Text>
+        <Text style={styles.fieldLabel}>Reminder (optional)</Text>
         <TouchableOpacity
           onPress={() => toggle(!enabled)}
           style={[styles.togglePill, enabled && styles.togglePillOn]}
@@ -351,7 +351,7 @@ function HabitFormModal({ habit, visible, onClose, onSave }) {
 
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: spacing.lg, gap: 16 }}>
           <View style={styles.formField}>
-            <Text style={styles.fieldLabel}>HABIT NAME</Text>
+            <Text style={styles.fieldLabel}>Habit name</Text>
             <TextInput
               style={styles.textInput}
               value={form.name}
@@ -362,7 +362,7 @@ function HabitFormModal({ habit, visible, onClose, onSave }) {
           </View>
 
           <View style={styles.formField}>
-            <Text style={styles.fieldLabel}>DESCRIPTION (optional)</Text>
+            <Text style={styles.fieldLabel}>Description (optional)</Text>
             <TextInput
               style={[styles.textInput, { minHeight: 60 }]}
               value={form.description}
@@ -374,7 +374,7 @@ function HabitFormModal({ habit, visible, onClose, onSave }) {
           </View>
 
           <View style={styles.formField}>
-            <Text style={styles.fieldLabel}>FREQUENCY</Text>
+            <Text style={styles.fieldLabel}>Frequency</Text>
             <View style={styles.segmentRow}>
               {['daily', 'weekly', 'monthly'].map(f => (
                 <TouchableOpacity
@@ -397,7 +397,7 @@ function HabitFormModal({ habit, visible, onClose, onSave }) {
           {form.frequency !== 'daily' && (
             <View style={styles.formField}>
               <Text style={styles.fieldLabel}>
-                {form.frequency === 'weekly' ? 'DAYS PER WEEK' : 'TIMES PER MONTH'}
+                {form.frequency === 'weekly' ? 'Days per week' : 'Times per month'}
               </Text>
               <View style={styles.stepperRow}>
                 <TouchableOpacity
@@ -422,7 +422,7 @@ function HabitFormModal({ habit, visible, onClose, onSave }) {
           )}
 
           <View style={styles.formField}>
-            <Text style={styles.fieldLabel}>MISSED DAYS VISIBILITY</Text>
+            <Text style={styles.fieldLabel}>Missed days visibility</Text>
             <View style={styles.segmentRow}>
               {['public', 'friends', 'private'].map(v => (
                 <TouchableOpacity
@@ -446,7 +446,7 @@ function HabitFormModal({ habit, visible, onClose, onSave }) {
           </View>
 
           <View style={styles.formField}>
-            <Text style={styles.fieldLabel}>COLOR</Text>
+            <Text style={styles.fieldLabel}>Color</Text>
             <View style={styles.colorRow}>
               {COLORS.map(c => (
                 <TouchableOpacity
@@ -573,7 +573,7 @@ export default function HabitsScreen() {
       ) : (
         <FlatList
           data={habits}
-          keyExtractor={item => item.id}
+          keyExtractor={item => String(item.id)}
           renderItem={({ item }) => (
             <HabitCard
               habit={item}

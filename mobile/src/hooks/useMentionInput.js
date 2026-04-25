@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import api from '../api/client';
 
 // Detects a @mention being typed at the end of the text
@@ -10,6 +10,8 @@ function getActiveQuery(text) {
 export default function useMentionInput(value, setValue) {
   const [suggestions, setSuggestions] = useState([]);
   const timer = useRef(null);
+
+  useEffect(() => () => clearTimeout(timer.current), []);
 
   function onChangeText(text) {
     setValue(text);

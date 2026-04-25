@@ -136,7 +136,7 @@ export default function HomeScreen() {
             <FlatList
               data={posts}
               renderItem={renderPost}
-              keyExtractor={item => item.id}
+              keyExtractor={item => String(item.id)}
               ListHeaderComponent={null}
               ListEmptyComponent={!loading ? <EmptyFeed tab={tab} /> : null}
               ListFooterComponent={loadingMore ? <ActivityIndicator color={colors.accent} style={{ padding: 20 }} /> : null}

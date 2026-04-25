@@ -31,7 +31,7 @@ function ShareModal({ visible, onClose, postId, post }) {
 
   React.useEffect(() => {
     if (visible) {
-      api.get('/dm/conversations').then(r => setRecentConvos(r.data.slice(0, 5))).catch(() => {});
+      api.get('/dm/inbox').then(r => setRecentConvos(r.data.slice(0, 5))).catch(() => {});
     }
   }, [visible]);
 

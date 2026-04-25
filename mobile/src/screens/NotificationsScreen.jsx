@@ -134,10 +134,11 @@ export default function NotificationsScreen() {
       .then(r => setNotifications(groupNotifications(r.data.notifications)))
       .finally(() => setLoading(false));
 
-    setTimeout(() => {
+    const markReadTimer = setTimeout(() => {
       api.put('/notifications/read').catch(() => {});
       refreshBadges();
     }, 2500);
+    return () => clearTimeout(markReadTimer);
   }, []);
 
   const handlePress = (notif) => {
