@@ -2,7 +2,7 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../database/db');
 const { authMiddleware } = require('../middleware/auth');
-const { calculateStreak, isStreakAtRisk, buildStreakCalendar, getEarnedBadges } = require('../utils/streaks');
+const { calculateStreak, isStreakAtRisk, buildStreakCalendar, getEarnedBadges, getPeriodKeyTz } = require('../utils/streaks');
 
 const router = express.Router();
 
@@ -32,7 +32,7 @@ router.get('/', authMiddleware, (req, res) => {
   const db = getDb();
   const habits = db.prepare('SELECT * FROM habits WHERE user_id = ? ORDER BY created_at DESC').all(req.user.id);
 
-  const { getPeriodKey } = require('../utils/streaks');
+  const tz = req.headers['x-client-timezone'] || null;
   const enriched = habits.map(h => {
     const target = h.target_count || 1;
     const logs = db.prepare('SELECT logged_at FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(h.id);
@@ -40,8 +40,8 @@ router.get('/', authMiddleware, (req, res) => {
     const at_risk = isStreakAtRisk(logs, h.frequency, target);
     const total_logs = logs.length;
     const calendar = buildStreakCalendar(logs, h.frequency, target, 365);
-    const currentPeriod = getPeriodKey(new Date(), h.frequency);
-    const period_count = logs.filter(l => getPeriodKey(l.logged_at, h.frequency) === currentPeriod).length;
+    const currentPeriod = getPeriodKeyTz(new Date(), h.frequency, tz);
+    const period_count = logs.filter(l => getPeriodKeyTz(l.logged_at, h.frequency, tz) === currentPeriod).length;
     const logged_this_period = period_count > 0;
     return { ...h, streak, at_risk, total_logs, calendar, period_count, logged_this_period };
   });
@@ -161,17 +161,17 @@ router.post('/:id/log', authMiddleware, (req, res) => {
     }
   }
 
-  // Prevent double-logging same period
-  const { getPeriodKey } = require('../utils/streaks');
+  // Prevent double-logging same period (uses client timezone so resets at user's midnight)
+  const tz = req.headers['x-client-timezone'] || null;
   const logDate = loggedAtOverride ? new Date(loggedAtOverride) : new Date();
-  const today = getPeriodKey(logDate, habit.frequency);
+  const today = getPeriodKeyTz(logDate, habit.frequency, tz);
   const lookback = habit.frequency === 'monthly' ? '-32 days' : habit.frequency === 'weekly' ? '-8 days' : '-2 days';
   const recentLogs = db.prepare(
     `SELECT logged_at FROM habit_logs WHERE habit_id = ? AND logged_at >= date('now', '${lookback}')`
   ).all(habit.id);
 
   const target = habit.target_count || 1;
-  const periodCount = recentLogs.filter(l => getPeriodKey(l.logged_at, habit.frequency) === today).length;
+  const periodCount = recentLogs.filter(l => getPeriodKeyTz(l.logged_at, habit.frequency, tz) === today).length;
   if (periodCount >= target) {
     return res.status(400).json({ error: target > 1 ? `Goal reached! You've already logged ${target}x this period.` : 'Already logged this period' });
   }

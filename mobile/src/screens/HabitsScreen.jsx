@@ -8,7 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import api from '../api/client';
+import api, { invalidateCache } from '../api/client';
 import HabitCalendar from '../components/HabitCalendar';
 import StreakBadge from '../components/StreakBadge';
 import { radius, spacing } from '../theme';
@@ -512,9 +512,21 @@ export default function HabitsScreen() {
   };
 
   const handleLog = (habitId, data) => {
-    setHabits(prev => prev.map(h =>
-      h.id === habitId ? { ...h, streak: data.streak, at_risk: data.at_risk, total_logs: data.total_logs } : h
-    ));
+    // Bust the habits cache so a tab-switch reload doesn't serve stale period_count
+    invalidateCache('/habits');
+    setHabits(prev => prev.map(h => {
+      if (h.id !== habitId) return h;
+      const target = h.target_count || 1;
+      const newPeriodCount = data.period_count ?? (h.period_count || 0) + 1;
+      return {
+        ...h,
+        streak: data.streak,
+        at_risk: data.at_risk,
+        total_logs: data.total_logs,
+        period_count: newPeriodCount,
+        logged_this_period: newPeriodCount >= target,
+      };
+    }));
   };
 
   const handleDelete = id => {

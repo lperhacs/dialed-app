@@ -171,8 +171,36 @@ function getEarnedBadges(streak, totalLogs, frequency) {
   });
 }
 
+/**
+ * Timezone-aware period key — uses the client's local date instead of UTC.
+ * Falls back to UTC if tz is missing or invalid.
+ */
+function getPeriodKeyTz(date, frequency, tz) {
+  if (!tz) return getPeriodKey(date, frequency);
+  try {
+    const d = toUtcDate(date);
+    // en-CA locale gives YYYY-MM-DD which is exactly what we need
+    const localDate = d.toLocaleDateString('en-CA', { timeZone: tz });
+    if (frequency === 'daily') return localDate;
+    if (frequency === 'monthly') return localDate.slice(0, 7);
+    if (frequency === 'weekly') {
+      const [year, month, day] = localDate.split('-').map(Number);
+      const tmp = new Date(Date.UTC(year, month - 1, day));
+      const dayNum = tmp.getUTCDay() || 7;
+      tmp.setUTCDate(tmp.getUTCDate() + 4 - dayNum);
+      const yearStart = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 1));
+      const week = Math.ceil(((tmp - yearStart) / 86400000 + 1) / 7);
+      return `${tmp.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+    }
+  } catch (_) {
+    return getPeriodKey(date, frequency);
+  }
+  return '';
+}
+
 module.exports = {
   getPeriodKey,
+  getPeriodKeyTz,
   calculateStreak,
   isStreakAtRisk,
   buildStreakCalendar,

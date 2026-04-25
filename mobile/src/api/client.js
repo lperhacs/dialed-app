@@ -34,6 +34,12 @@ api.interceptors.request.use(async (config) => {
   const token = await AsyncStorage.getItem('dialed_token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
 
+  // Let the backend know the client's local timezone so habit periods
+  // reset at the user's midnight, not the server's UTC midnight.
+  try {
+    config.headers['X-Client-Timezone'] = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch (_) {}
+
   // Serve from cache for eligible GET requests
   if (config.method === 'get' || !config.method) {
     const url = config.url + (config.params ? JSON.stringify(config.params) : '');
