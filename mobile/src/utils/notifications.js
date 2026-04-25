@@ -6,7 +6,8 @@ import api from '../api/client';
 // Show notification banners when the app is in the foreground too
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
   }),

@@ -30,7 +30,12 @@
       "Bash(pip3 install:*)",
       "Bash(python3 -c \"from PIL import Image; print\\('ready'\\)\")",
       "Bash(python3:*)",
-      "Bash(ls \"/Users/loganperhacs/Desktop/Projects/App Idea/mobile/App\"*)"
+      "Bash(ls \"/Users/loganperhacs/Desktop/Projects/App Idea/mobile/App\"*)",
+      "Bash(eas submit:*)",
+      "Bash(npm info:*)",
+      "WebSearch",
+      "Bash(npx expo-doctor@latest --help)",
+      "Bash(npx expo-doctor:*)"
     ]
   }
 }
