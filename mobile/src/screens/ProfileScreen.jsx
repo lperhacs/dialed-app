@@ -8,7 +8,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import api from '../api/client';
+import api, { invalidateCache } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
 import BadgeChip, { getBadgeInfo } from '../components/BadgeChip';
@@ -98,6 +98,7 @@ export default function ProfileScreen({ route, routeUsername, isOwn }) {
     setPinning(badge.id);
     try {
       await api.patch(`/users/profile/badges/${badge.id}/pin`);
+      invalidateCache(`/users/${username}`);
       reloadBadges();
     } catch (err) {
       Alert.alert('Error', err.response?.data?.error || 'Could not update badge');
