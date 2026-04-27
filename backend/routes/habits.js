@@ -82,7 +82,7 @@ router.get('/:id', authMiddleware, (req, res) => {
   if (!habit) return res.status(404).json({ error: 'Habit not found' });
 
   const logs = db.prepare('SELECT * FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(habit.id);
-  const streak = calculateStreak(logs, habit.frequency);
+  const streak = calculateStreak(logs, habit.frequency, habit.target_count || 1);
   const at_risk = isStreakAtRisk(logs, habit.frequency);
   const calendar = buildStreakCalendar(logs, habit.frequency, 365);
 

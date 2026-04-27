@@ -1,5 +1,4 @@
 const express = require('express');
-const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../database/db');
 const { authMiddleware } = require('../middleware/auth');
 
@@ -66,37 +65,5 @@ router.put('/:id/read', authMiddleware, (req, res) => {
   res.json({ ok: true });
 });
 
-// POST /api/notifications/habit-reminder  (internal / cron use — requires server secret)
-router.post('/habit-reminder', (req, res) => {
-  const serverKey = req.headers['x-server-key'];
-  if (!serverKey || serverKey !== process.env.SERVER_SECRET) {
-    return res.status(403).json({ error: 'Forbidden' });
-  }
-  const db = getDb();
-  // Check which habits haven't been logged today and send nudge
-  const { getPeriodKey, isStreakAtRisk } = require('../utils/streaks');
-
-  const habits = db.prepare('SELECT * FROM habits WHERE user_id = ? AND is_active = 1').all(req.user.id);
-  let nudged = 0;
-
-  for (const habit of habits) {
-    const logs = db.prepare('SELECT logged_at FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(habit.id);
-    if (isStreakAtRisk(logs, habit.frequency)) {
-      const today = getPeriodKey(new Date(), habit.frequency);
-      const existing = db.prepare(
-        "SELECT 1 FROM notifications WHERE user_id = ? AND type = 'reminder' AND message LIKE ? AND created_at >= date('now', '-1 day')"
-      ).get(req.user.id, `%${habit.name}%`);
-
-      if (!existing) {
-        db.prepare(
-          "INSERT INTO notifications (id, user_id, type, message) VALUES (?, ?, 'reminder', ?)"
-        ).run(uuidv4(), req.user.id, `Don't break your streak! Log "${habit.name}" before the day ends.`);
-        nudged++;
-      }
-    }
-  }
-
-  res.json({ nudged });
-});
 
 module.exports = router;
