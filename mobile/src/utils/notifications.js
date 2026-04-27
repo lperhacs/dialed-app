@@ -63,10 +63,10 @@ export async function scheduleHabitReminder(habit) {
   let trigger;
 
   if (habit.frequency === 'daily') {
-    trigger = { type: 'daily', hour, minute, repeats: true };
+    trigger = { type: 'daily', hour, minute };
   } else if (habit.frequency === 'weekly') {
     // Fire every Monday at the specified time
-    trigger = { type: 'weekly', weekday: 2, hour, minute, repeats: true };
+    trigger = { type: 'weekly', weekday: 2, hour, minute };
   } else if (habit.frequency === 'monthly') {
     // expo-notifications has no native monthly repeat trigger.
     // Schedule a one-shot for 5 days before end of the current month as a
@@ -83,7 +83,7 @@ export async function scheduleHabitReminder(habit) {
       target.setDate(target.getDate() - 4);
       target.setHours(hour, minute, 0, 0);
     }
-    trigger = { date: target, repeats: false };
+    trigger = { date: target };
   } else {
     return;
   }

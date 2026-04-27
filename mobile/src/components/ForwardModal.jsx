@@ -170,7 +170,7 @@ export default function ForwardModal({ visible, onClose, type, item }) {
           {!selectedUser && (
             <FlatList
               data={results.length > 0 || query.trim() ? results : recentConvos.map(c => c.other).filter(Boolean)}
-              keyExtractor={item => item?.id}
+              keyExtractor={item => String(item?.id || Math.random())}
               contentContainerStyle={{ padding: spacing.md, gap: 4 }}
               keyboardShouldPersistTaps="handled"
               ListHeaderComponent={
