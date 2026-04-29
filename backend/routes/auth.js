@@ -5,6 +5,7 @@ const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../database/db');
 const { generateToken, authMiddleware } = require('../middleware/auth');
 const { trackEvent, metaFromReq } = require('../utils/analytics');
+const { sendVerificationEmail } = require('../utils/email');
 
 const router = express.Router();
 
@@ -42,6 +43,14 @@ router.post('/register', (req, res) => {
   const user = db.prepare('SELECT id, username, email, display_name, bio, avatar_url, created_at FROM users WHERE id = ?').get(id);
   const token = generateToken(user);
   trackEvent(id, 'user_registered', {}, metaFromReq(req));
+
+  // Send verification email (non-blocking — don't fail registration if email fails)
+  const verifyCode = randomInt(100000, 1000000).toString();
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+  db.prepare('DELETE FROM email_verifications WHERE user_id = ?').run(id);
+  db.prepare('INSERT INTO email_verifications (id, user_id, code, expires_at) VALUES (?, ?, ?, ?)').run(uuidv4(), id, verifyCode, expiresAt);
+  sendVerificationEmail(email.toLowerCase(), verifyCode).catch(err => console.error('[Email] verification send failed:', err));
+
   res.status(201).json({ token, user });
 });
 
@@ -72,7 +81,7 @@ router.post('/login', (req, res) => {
 router.get('/me', authMiddleware, (req, res) => {
   const db = getDb();
   const user = db.prepare(
-    'SELECT id, username, email, display_name, bio, avatar_url, location, rsvp_private, buddy_visibility, created_at FROM users WHERE id = ?'
+    'SELECT id, username, email, display_name, bio, avatar_url, location, rsvp_private, buddy_visibility, email_verified, created_at FROM users WHERE id = ?'
   ).get(req.user.id);
 
   if (!user) return res.status(404).json({ error: 'User not found' });
@@ -81,6 +90,61 @@ router.get('/me', authMiddleware, (req, res) => {
   const followingCount = db.prepare('SELECT COUNT(*) as c FROM follows WHERE follower_id = ?').get(req.user.id).c;
 
   res.json({ ...user, follower_count: followerCount, following_count: followingCount });
+});
+
+// POST /api/auth/resend-verification — resend email verification code
+router.post('/resend-verification', authMiddleware, async (req, res) => {
+  const db = getDb();
+  const user = db.prepare('SELECT id, email, email_verified FROM users WHERE id = ?').get(req.user.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  if (user.email_verified) return res.status(400).json({ error: 'Email already verified' });
+
+  // Rate limit: max 1 resend per 60 seconds
+  const recent = db.prepare(
+    "SELECT created_at FROM email_verifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 1"
+  ).get(req.user.id);
+  if (recent && new Date() - new Date(recent.created_at) < 60000) {
+    return res.status(429).json({ error: 'Please wait a minute before requesting another code.' });
+  }
+
+  const code = randomInt(100000, 1000000).toString();
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+  db.prepare('DELETE FROM email_verifications WHERE user_id = ?').run(req.user.id);
+  db.prepare('INSERT INTO email_verifications (id, user_id, code, expires_at) VALUES (?, ?, ?, ?)').run(uuidv4(), req.user.id, code, expiresAt);
+
+  try {
+    await sendVerificationEmail(user.email, code);
+    res.json({ sent: true });
+  } catch (err) {
+    console.error('[Email] resend failed:', err);
+    res.status(500).json({ error: 'Failed to send email. Please try again.' });
+  }
+});
+
+// POST /api/auth/verify-email
+router.post('/verify-email', authMiddleware, (req, res) => {
+  const { code } = req.body;
+  if (!code) return res.status(400).json({ error: 'Code required' });
+
+  const db = getDb();
+  const record = db.prepare(
+    'SELECT * FROM email_verifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 1'
+  ).get(req.user.id);
+
+  if (!record || new Date() > new Date(record.expires_at)) {
+    db.prepare('DELETE FROM email_verifications WHERE user_id = ?').run(req.user.id);
+    return res.status(400).json({ error: 'Code expired. Please request a new one.' });
+  }
+
+  if (record.code !== code.toString().trim()) {
+    return res.status(400).json({ error: 'Incorrect code.' });
+  }
+
+  db.prepare('UPDATE users SET email_verified = 1 WHERE id = ?').run(req.user.id);
+  db.prepare('DELETE FROM email_verifications WHERE user_id = ?').run(req.user.id);
+
+  const user = db.prepare('SELECT id, username, email, display_name, bio, avatar_url, email_verified, created_at FROM users WHERE id = ?').get(req.user.id);
+  res.json({ verified: true, user });
 });
 
 // ── OTP (SMS verification placeholder — swap Twilio in for production) ────────

@@ -43,6 +43,7 @@ export default function RegisterScreen({ navigation }) {
     try {
       const { data } = await api.post('/auth/register', form);
       await login(data.token, data.user);
+      navigation.navigate('VerifyEmail', { email: form.email });
     } catch (err) {
       Alert.alert('Registration failed', err.response?.data?.error || 'Something went wrong.');
     } finally {
