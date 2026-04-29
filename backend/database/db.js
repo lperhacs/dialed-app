@@ -130,6 +130,18 @@ function getDb() {
       }
     }
 
+    // Pro subscription columns
+    const proUserCols = db.prepare("PRAGMA table_info(users)").all().map(c => c.name);
+    if (!proUserCols.includes('is_pro')) {
+      db.exec("ALTER TABLE users ADD COLUMN is_pro INTEGER NOT NULL DEFAULT 0");
+    }
+    if (!proUserCols.includes('pro_expires_at')) {
+      db.exec("ALTER TABLE users ADD COLUMN pro_expires_at DATETIME DEFAULT NULL");
+    }
+    if (!proUserCols.includes('streak_freezes')) {
+      db.exec("ALTER TABLE users ADD COLUMN streak_freezes INTEGER NOT NULL DEFAULT 0");
+    }
+
     // Email verification
     const userCols = db.prepare("PRAGMA table_info(users)").all().map(c => c.name);
     if (!userCols.includes('email_verified')) {

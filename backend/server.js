@@ -68,6 +68,7 @@ app.use('/api/buddies',       writeOnly(writeLimiter),  require('./routes/buddie
 app.use('/api/recap',                                   require('./routes/recap'));
 app.use('/api/cron',                                    require('./routes/cron'));
 app.use('/api/analytics',     analyticsLimiter,         require('./routes/analytics'));
+app.use('/api/pro',           writeOnly(writeLimiter),  require('./routes/pro'));
 
 // Health check
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', app: 'Dialed' }));

@@ -7,6 +7,9 @@ const { trackEvent, metaFromReq } = require('../utils/analytics');
 
 const router = express.Router();
 
+const FREE_BUDDY_LIMIT = 1;
+const PRO_BUDDY_LIMIT  = 3;
+
 function getActiveBuddy(db, userId) {
   return db.prepare(`
     SELECT b.*,
@@ -19,6 +22,12 @@ function getActiveBuddy(db, userId) {
     WHERE (b.requester_id = ? OR b.recipient_id = ?) AND b.status = 'active'
     LIMIT 1
   `).get(userId, userId, userId, userId);
+}
+
+function getActiveBuddyCount(db, userId) {
+  return db.prepare(
+    "SELECT COUNT(*) as c FROM buddies WHERE (requester_id = ? OR recipient_id = ?) AND status = 'active'"
+  ).get(userId, userId).c;
 }
 
 // GET /api/buddies — current buddy pair + habit status
@@ -93,8 +102,22 @@ router.post('/request', authMiddleware, (req, res) => {
   const target = db.prepare('SELECT id FROM users WHERE id = ?').get(user_id);
   if (!target) return res.status(404).json({ error: 'User not found' });
 
-  if (getActiveBuddy(db, req.user.id)) return res.status(400).json({ error: 'You already have a buddy' });
-  if (getActiveBuddy(db, user_id)) return res.status(400).json({ error: 'This user already has a buddy' });
+  // Pro plan gating
+  const requester = db.prepare('SELECT is_pro FROM users WHERE id = ?').get(req.user.id);
+  const myLimit = requester?.is_pro ? PRO_BUDDY_LIMIT : FREE_BUDDY_LIMIT;
+  const myCount = getActiveBuddyCount(db, req.user.id);
+  if (myCount >= myLimit) {
+    return res.status(403).json({
+      error: myLimit === FREE_BUDDY_LIMIT
+        ? 'Free plan allows 1 buddy. Upgrade to Dialed Pro for up to 3 buddies.'
+        : 'You have reached the maximum of 3 active buddies.',
+      pro_gate: !requester?.is_pro,
+    });
+  }
+  const recipient = db.prepare('SELECT is_pro FROM users WHERE id = ?').get(user_id);
+  const theirLimit = recipient?.is_pro ? PRO_BUDDY_LIMIT : FREE_BUDDY_LIMIT;
+  const theirCount = getActiveBuddyCount(db, user_id);
+  if (theirCount >= theirLimit) return res.status(400).json({ error: 'This user has reached their buddy limit' });
 
   const existing = db.prepare(
     'SELECT * FROM buddies WHERE (requester_id = ? AND recipient_id = ?) OR (requester_id = ? AND recipient_id = ?)'

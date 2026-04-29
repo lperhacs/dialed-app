@@ -50,10 +50,21 @@ router.get('/', authMiddleware, (req, res) => {
   res.json(enriched);
 });
 
+const FREE_HABIT_LIMIT = 5;
+
 // POST /api/habits
 router.post('/', authMiddleware, (req, res) => {
   const db = getDb();
   const { name, description, frequency, visibility_missed, color, reminder_time, target_count } = req.body;
+
+  // Free plan gate — max 5 active habits
+  const user = db.prepare('SELECT is_pro FROM users WHERE id = ?').get(req.user.id);
+  if (!user?.is_pro) {
+    const habitCount = db.prepare('SELECT COUNT(*) as c FROM habits WHERE user_id = ? AND is_active = 1').get(req.user.id).c;
+    if (habitCount >= FREE_HABIT_LIMIT) {
+      return res.status(403).json({ error: `Free plan is limited to ${FREE_HABIT_LIMIT} habits. Upgrade to Dialed Pro for unlimited habits.`, pro_gate: true });
+    }
+  }
 
   if (!name || !frequency) return res.status(400).json({ error: 'Name and frequency are required' });
   if (!['daily', 'weekly', 'monthly'].includes(frequency)) {

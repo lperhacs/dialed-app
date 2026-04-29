@@ -25,6 +25,7 @@ import * as ImagePicker from 'expo-image-picker';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { usePro } from '../context/ProContext';
 import Avatar from '../components/Avatar';
 import { radius, spacing } from '../theme';
 
@@ -302,6 +303,7 @@ export default function SettingsScreen() {
   const navigation = useNavigation();
   const { user, logout, refresh } = useAuth();
   const { colors, themeMode, setThemeMode, isDark } = useTheme();
+  const { isPro, streakFreezes, proExpiresAt } = usePro();
   const styles = makeStyles(colors);
 
   // Prefs
@@ -448,6 +450,40 @@ export default function SettingsScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }}>
+
+        {/* ─── Dialed Pro ───────────────────────────────────────────────── */}
+        <SectionHeader title="Subscription" />
+        <View style={styles.section}>
+          {isPro ? (
+            <>
+              <View style={[styles.row, { gap: 12 }]}>
+                <View style={styles.proBadge}>
+                  <Text style={styles.proBadgeText}>Pro</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.rowLabel}>Dialed Pro</Text>
+                  {proExpiresAt && (
+                    <Text style={[styles.rowDetail, { fontSize: 12 }]}>
+                      Renews {new Date(proExpiresAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </Text>
+                  )}
+                </View>
+              </View>
+              <SettingsRow
+                label="Streak freezes"
+                detail={`${streakFreezes} remaining`}
+                last
+              />
+            </>
+          ) : (
+            <SettingsRow
+              label="Upgrade to Dialed Pro"
+              detail="Unlimited habits, streak freezes & more"
+              onPress={() => navigation.navigate('Paywall', { source: 'settings' })}
+              last
+            />
+          )}
+        </View>
 
         {/* ─── Edit Profile ──────────────────────────────────────────────── */}
         <SectionHeader title="Profile" />
@@ -810,5 +846,10 @@ function makeStyles(colors) {
     avatarEditBtnText: { fontSize: 14, fontWeight: '600', color: colors.text },
     themeHint: { fontSize: 12, color: colors.textDim },
     versionText: { textAlign: 'center', fontSize: 12, color: colors.textDim, marginTop: 32, marginBottom: 8 },
+    proBadge: {
+      backgroundColor: colors.accent, borderRadius: radius.xs,
+      paddingHorizontal: 8, paddingVertical: 3, alignSelf: 'flex-start',
+    },
+    proBadgeText: { fontSize: 11, fontWeight: '700', color: colors.bg },
   });
 }

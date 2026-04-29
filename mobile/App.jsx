@@ -9,6 +9,7 @@ import { StatusBar } from 'expo-status-bar';
 import { AuthProvider } from './src/context/AuthContext';
 import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { BadgeProvider } from './src/context/BadgeContext';
+import { ProProvider } from './src/context/ProContext';
 import RootNavigator from './src/navigation/RootNavigator';
 
 class ErrorBoundary extends React.Component {
@@ -44,9 +45,11 @@ function App() {
         <SafeAreaProvider>
           <ThemeProvider>
             <AuthProvider>
-              <BadgeProvider>
-                <AppInner />
-              </BadgeProvider>
+              <ProProvider>
+                <BadgeProvider>
+                  <AppInner />
+                </BadgeProvider>
+              </ProProvider>
             </AuthProvider>
           </ThemeProvider>
         </SafeAreaProvider>

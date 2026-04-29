@@ -20,6 +20,7 @@ import ConversationScreen from '../screens/ConversationScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import FollowListScreen from '../screens/FollowListScreen';
 import EmailVerificationScreen from '../screens/EmailVerificationScreen';
+import PaywallScreen from '../screens/PaywallScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -137,6 +138,11 @@ export default function RootNavigator() {
             name="LocationPicker"
             component={LocationPickerScreen}
             options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Paywall"
+            component={PaywallScreen}
+            options={{ presentation: 'modal', headerShown: false }}
           />
         </>
       )}

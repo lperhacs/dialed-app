@@ -13,11 +13,14 @@ import HabitCalendar from '../components/HabitCalendar';
 import StreakBadge from '../components/StreakBadge';
 import { radius, spacing } from '../theme';
 import { useTheme } from '../context/ThemeContext';
+import { usePro } from '../context/ProContext';
 import {
   scheduleHabitReminder,
   cancelHabitReminder,
   syncAllHabitReminders,
 } from '../utils/notifications';
+
+const FREE_HABIT_LIMIT = 5;
 
 function formatTime(t) {
   if (!t) return '';
@@ -467,6 +470,8 @@ export default function HabitsScreen() {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
+  const { isPro } = usePro();
   const [habits, setHabits] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -561,7 +566,14 @@ export default function HabitsScreen() {
         <Text style={styles.headerTitle}>My Habits</Text>
         <TouchableOpacity
           style={styles.addBtn}
-          onPress={() => { setEditHabit(null); setShowForm(true); }}
+          onPress={() => {
+            if (!isPro && habits.length >= FREE_HABIT_LIMIT) {
+              navigation.navigate('Paywall', { source: 'habit_limit' });
+              return;
+            }
+            setEditHabit(null);
+            setShowForm(true);
+          }}
           activeOpacity={0.85}
         >
           <Text style={styles.addBtnText}>+ New</Text>
