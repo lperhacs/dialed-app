@@ -18,6 +18,15 @@ const dmLimiter = rateLimit({
   message: { error: 'Sending too fast. Please wait a moment.' },
 });
 
+// Registration — tight: 5 new accounts per hour per IP
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many accounts created from this device. Please try again later.' },
+});
+
 // Analytics admin endpoint — tight limit to prevent key brute force
 const analyticsLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -37,4 +46,4 @@ function writeOnly(limiter) {
   };
 }
 
-module.exports = { writeLimiter, dmLimiter, analyticsLimiter, writeOnly };
+module.exports = { writeLimiter, dmLimiter, analyticsLimiter, registerLimiter, writeOnly };

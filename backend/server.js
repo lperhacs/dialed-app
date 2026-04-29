@@ -36,7 +36,7 @@ app.use(cors({
 
 // ── Rate limiting ─────────────────────────────────────────────────────────────
 const { rateLimit } = require('express-rate-limit');
-const { writeLimiter, dmLimiter, analyticsLimiter, writeOnly } = require('./middleware/rateLimits');
+const { writeLimiter, dmLimiter, analyticsLimiter, registerLimiter, writeOnly } = require('./middleware/rateLimits');
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -54,6 +54,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 require('./database/db').getDb();
 
 // Routes
+app.use('/api/auth/register', registerLimiter);
 app.use('/api/auth',          authLimiter,              require('./routes/auth'));
 app.use('/api/posts',         writeOnly(writeLimiter),  require('./routes/posts'));
 app.use('/api/habits',        writeOnly(writeLimiter),  require('./routes/habits'));

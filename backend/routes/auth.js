@@ -7,6 +7,36 @@ const { generateToken, authMiddleware } = require('../middleware/auth');
 const { trackEvent, metaFromReq } = require('../utils/analytics');
 const { sendVerificationEmail } = require('../utils/email');
 
+// Monthly email budget — hard stop before hitting Resend free tier limit
+const MONTHLY_EMAIL_CAP = 2500;
+
+// Common disposable/throwaway email domains to block
+const DISPOSABLE_DOMAINS = new Set([
+  'mailinator.com','guerrillamail.com','throwaway.email','trashmail.com',
+  'tempmail.com','temp-mail.org','fakeinbox.com','maildrop.cc','sharklasers.com',
+  'guerrillamailblock.com','grr.la','guerrillamail.info','guerrillamail.biz',
+  'guerrillamail.de','guerrillamail.net','guerrillamail.org','spam4.me',
+  'yopmail.com','yopmail.fr','cool.fr.nf','jetable.fr.nf','nospam.ze.tc',
+  'nomail.xl.cx','mega.zik.dj','speed.1s.fr','courriel.fr.nf','moncourrier.fr.nf',
+  'monemail.fr.nf','monmail.fr.nf','dispostable.com','mailnull.com','spamgourmet.com',
+  'trashmail.at','trashmail.io','trashmail.me','discard.email','spamfree24.org',
+  'wegwerfmail.de','wegwerfmail.net','wegwerfmail.org','10minutemail.com',
+  'tempinbox.com','throwam.com','spamherelots.com','binkmail.com','bob.email',
+]);
+
+function isDisposableEmail(email) {
+  const domain = email.split('@')[1]?.toLowerCase();
+  return domain ? DISPOSABLE_DOMAINS.has(domain) : false;
+}
+
+function monthlyEmailBudgetExceeded(db) {
+  const month = new Date().toISOString().slice(0, 7); // YYYY-MM
+  const { c } = db.prepare(
+    "SELECT COUNT(*) as c FROM email_verifications WHERE strftime('%Y-%m', created_at) = ?"
+  ).get(month);
+  return c >= MONTHLY_EMAIL_CAP;
+}
+
 const router = express.Router();
 
 // POST /api/auth/register
@@ -23,6 +53,9 @@ router.post('/register', (req, res) => {
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return res.status(400).json({ error: 'Invalid email format' });
+  }
+  if (isDisposableEmail(email)) {
+    return res.status(400).json({ error: 'Please use a permanent email address.' });
   }
   if (display_name.trim().length < 1 || display_name.trim().length > 50) {
     return res.status(400).json({ error: 'Display name must be 1-50 characters' });
@@ -45,6 +78,10 @@ router.post('/register', (req, res) => {
   trackEvent(id, 'user_registered', {}, metaFromReq(req));
 
   // Send verification email (non-blocking — don't fail registration if email fails)
+  if (monthlyEmailBudgetExceeded(db)) {
+    console.warn('[Email] Monthly cap reached — skipping verification email for', email.toLowerCase());
+    return res.status(201).json({ token, user });
+  }
   const verifyCode = randomInt(100000, 1000000).toString();
   const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
   db.prepare('DELETE FROM email_verifications WHERE user_id = ?').run(id);
@@ -98,6 +135,9 @@ router.post('/resend-verification', authMiddleware, async (req, res) => {
   const user = db.prepare('SELECT id, email, email_verified FROM users WHERE id = ?').get(req.user.id);
   if (!user) return res.status(404).json({ error: 'User not found' });
   if (user.email_verified) return res.status(400).json({ error: 'Email already verified' });
+  if (monthlyEmailBudgetExceeded(db)) {
+    return res.status(503).json({ error: 'Email service temporarily unavailable. Please try again later.' });
+  }
 
   // Rate limit: max 1 resend per 60 seconds
   const recent = db.prepare(
