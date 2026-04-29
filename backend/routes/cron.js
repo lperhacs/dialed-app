@@ -1,6 +1,7 @@
 'use strict';
 const express = require('express');
 const { runMonthlyHabitReminders } = require('../cron/habitReminders');
+const { runDbBackup } = require('../cron/dbBackup');
 
 const router = express.Router();
 
@@ -26,6 +27,16 @@ router.post('/habit-reminders', requireServerKey, async (_req, res) => {
   } catch (err) {
     console.error('[Cron] habit-reminders error:', err);
     res.status(500).json({ error: 'Cron job failed' });
+  }
+});
+
+// POST /api/cron/db-backup — manually trigger a DB snapshot
+router.post('/db-backup', requireServerKey, (req, res) => {
+  const result = runDbBackup();
+  if (result.ok) {
+    res.json({ ok: true, snapshot: result.snapshot });
+  } else {
+    res.status(500).json({ error: result.error });
   }
 });
 

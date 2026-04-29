@@ -85,10 +85,18 @@ app.listen(PORT, () => {
   // ensures each user gets at most one push per habit per calendar month.
   const cron = require('node-cron');
   const { runMonthlyHabitReminders } = require('./cron/habitReminders');
+  const { runDbBackup } = require('./cron/dbBackup');
+
   cron.schedule('0 9 * * *', () => {
     runMonthlyHabitReminders().catch(err =>
       console.error('[Cron] monthly-habit-reminders failed:', err)
     );
   }, { timezone: 'UTC' });
-  console.log('[Cron] monthly habit reminder scheduler started (daily 09:00 UTC)\n');
+  console.log('[Cron] monthly habit reminder scheduler started (daily 09:00 UTC)');
+
+  // Daily DB backup at 03:00 UTC — keeps 7 rolling snapshots
+  cron.schedule('0 3 * * *', () => {
+    runDbBackup();
+  }, { timezone: 'UTC' });
+  console.log('[Cron] daily DB backup scheduler started (03:00 UTC, 7-day rolling)\n');
 });
