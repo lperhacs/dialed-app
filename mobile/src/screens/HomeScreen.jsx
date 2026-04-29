@@ -11,6 +11,7 @@ import PostCard from '../components/PostCard';
 import EventsScreen from './EventsScreen';
 import { spacing } from '../theme';
 import { useTheme } from '../context/ThemeContext';
+import { useBadges } from '../context/BadgeContext';
 
 const LOGO_DARK  = require('../../assets/logo-white.png');
 const LOGO_LIGHT = require('../../assets/logo-black.png');
@@ -34,6 +35,7 @@ export default function HomeScreen() {
   const { colors, isDark } = useTheme();
   const styles = makeStyles(colors);
   const navigation = useNavigation();
+  const { notifCount, msgCount } = useBadges();
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState('following');
   const [posts, setPosts] = useState([]);
@@ -114,10 +116,32 @@ export default function HomeScreen() {
             <Ionicons name="bar-chart-outline" size={24} color={colors.textMuted} />
           </TouchableOpacity>
           <TouchableOpacity onPress={() => navigation.navigate('Inbox')} hitSlop={10}>
-            <Ionicons name="mail-outline" size={24} color={colors.textMuted} />
+            <View>
+              <Ionicons
+                name={msgCount > 0 ? 'mail' : 'mail-outline'}
+                size={24}
+                color={msgCount > 0 ? colors.accent : colors.textMuted}
+              />
+              {msgCount > 0 && (
+                <View style={styles.iconBadge}>
+                  <Text style={styles.iconBadgeText}>{msgCount > 9 ? '9+' : msgCount}</Text>
+                </View>
+              )}
+            </View>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => navigation.navigate('Notifications')} hitSlop={10}>
-            <Ionicons name="notifications-outline" size={24} color={colors.textMuted} />
+            <View>
+              <Ionicons
+                name={notifCount > 0 ? 'notifications' : 'notifications-outline'}
+                size={24}
+                color={notifCount > 0 ? colors.accent : colors.textMuted}
+              />
+              {notifCount > 0 && (
+                <View style={styles.iconBadge}>
+                  <Text style={styles.iconBadgeText}>{notifCount > 9 ? '9+' : notifCount}</Text>
+                </View>
+              )}
+            </View>
           </TouchableOpacity>
         </View>
       </View>
@@ -188,5 +212,18 @@ function makeStyles(colors) {
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
   emptyTitle: { fontSize: 16, fontWeight: '600', color: colors.text, marginBottom: 6 },
   emptyText: { fontSize: 13, color: colors.textMuted, textAlign: 'center', lineHeight: 19 },
+  iconBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -6,
+    minWidth: 15,
+    height: 15,
+    borderRadius: 8,
+    backgroundColor: '#ef4444',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 3,
+  },
+  iconBadgeText: { color: '#fff', fontSize: 8, fontWeight: '700', lineHeight: 10 },
   });
 }
