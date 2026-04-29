@@ -67,6 +67,7 @@ router.post('/group', authMiddleware, (req, res) => {
   const db = getDb();
   const { name, user_ids } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'Group name is required' });
+  if (name.trim().length > 100) return res.status(400).json({ error: 'Group name must be 100 characters or fewer' });
   if (!Array.isArray(user_ids) || user_ids.length === 0) return res.status(400).json({ error: 'At least one other member is required' });
 
   const allIds = [...new Set([...user_ids, req.user.id])];
@@ -74,7 +75,7 @@ router.post('/group', authMiddleware, (req, res) => {
 
   // Validate all user IDs exist
   for (const uid of user_ids) {
-    if (typeof uid !== 'string') return res.status(400).json({ error: 'Invalid user_ids' });
+    if (typeof uid !== 'string' || uid.length > 36) return res.status(400).json({ error: 'Invalid user_ids' });
     const exists = db.prepare('SELECT 1 FROM users WHERE id = ?').get(uid);
     if (!exists) return res.status(404).json({ error: `User not found: ${uid}` });
   }

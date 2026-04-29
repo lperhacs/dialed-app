@@ -200,6 +200,13 @@ router.post('/', authMiddleware, (req, res) => {
   }
   if (name.trim().length > 100) return res.status(400).json({ error: 'Club name must be 100 characters or fewer' });
   if (description && description.length > 1000) return res.status(400).json({ error: 'Description must be 1000 characters or fewer' });
+  const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+  if (!dateRe.test(start_date) || isNaN(new Date(start_date).getTime())) {
+    return res.status(400).json({ error: 'Invalid start_date format (YYYY-MM-DD required)' });
+  }
+  if (end_date && (!dateRe.test(end_date) || isNaN(new Date(end_date).getTime()))) {
+    return res.status(400).json({ error: 'Invalid end_date format (YYYY-MM-DD required)' });
+  }
 
   const id = uuidv4();
   const vis = visibility === 'private' ? 'private' : 'public';

@@ -487,7 +487,11 @@ router.patch('/me/location', authMiddleware, (req, res) => {
 // PUT /api/users/me/push-token
 router.put('/me/push-token', authMiddleware, (req, res) => {
   const { token } = req.body;
-  if (!token) return res.status(400).json({ error: 'token required' });
+  if (!token || typeof token !== 'string') return res.status(400).json({ error: 'token required' });
+  // Expo push tokens are always ExponentPushToken[...] or ExpoPushToken[...]
+  if (!/^Expo(nent)?PushToken\[.{1,100}\]$/.test(token)) {
+    return res.status(400).json({ error: 'Invalid push token format' });
+  }
   const db = getDb();
   db.prepare('UPDATE users SET push_token = ? WHERE id = ?').run(token, req.user.id);
   res.json({ ok: true });
@@ -495,8 +499,10 @@ router.put('/me/push-token', authMiddleware, (req, res) => {
 
 // PATCH /api/users/me/notifications  — saves push notification preferences
 router.patch('/me/notifications', authMiddleware, (req, res) => {
+  const serialized = JSON.stringify(req.body);
+  if (serialized.length > 2000) return res.status(400).json({ error: 'Preferences payload too large' });
   const db = getDb();
-  db.prepare('UPDATE users SET notify_prefs = ? WHERE id = ?').run(JSON.stringify(req.body), req.user.id);
+  db.prepare('UPDATE users SET notify_prefs = ? WHERE id = ?').run(serialized, req.user.id);
   res.json({ ok: true });
 });
 
@@ -581,6 +587,8 @@ router.delete('/me', authMiddleware, (req, res) => {
 
   // Delete in dependency order
   db.prepare('DELETE FROM likes WHERE user_id = ?').run(id);
+  db.prepare('DELETE FROM cheers WHERE user_id = ?').run(id);
+  db.prepare('DELETE FROM comment_likes WHERE user_id = ?').run(id);
   db.prepare('DELETE FROM comments WHERE user_id = ?').run(id);
   db.prepare('DELETE FROM habit_logs WHERE habit_id IN (SELECT id FROM habits WHERE user_id = ?)').run(id);
   db.prepare('DELETE FROM habits WHERE user_id = ?').run(id);
@@ -589,6 +597,9 @@ router.delete('/me', authMiddleware, (req, res) => {
   db.prepare('DELETE FROM badges WHERE user_id = ?').run(id);
   db.prepare('DELETE FROM notifications WHERE user_id = ?').run(id);
   db.prepare('DELETE FROM challenge_members WHERE user_id = ?').run(id);
+  db.prepare('DELETE FROM buddies WHERE requester_id = ? OR recipient_id = ?').run(id, id);
+  db.prepare('DELETE FROM event_attendees WHERE user_id = ?').run(id);
+  db.prepare('DELETE FROM analytics_events WHERE user_id = ?').run(id);
   db.prepare('DELETE FROM direct_messages WHERE sender_id = ?').run(id);
   db.prepare('DELETE FROM conversation_participants WHERE user_id = ?').run(id);
   db.prepare('DELETE FROM users WHERE id = ?').run(id);

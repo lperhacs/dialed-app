@@ -36,6 +36,7 @@ app.use(cors({
 
 // ── Rate limiting ─────────────────────────────────────────────────────────────
 const { rateLimit } = require('express-rate-limit');
+const { writeLimiter, dmLimiter, analyticsLimiter, writeOnly } = require('./middleware/rateLimits');
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -53,19 +54,19 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 require('./database/db').getDb();
 
 // Routes
-app.use('/api/auth', authLimiter, require('./routes/auth'));
-app.use('/api/posts', require('./routes/posts'));
-app.use('/api/habits', require('./routes/habits'));
-app.use('/api/users', require('./routes/users'));
-app.use('/api/clubs', require('./routes/challenges'));
-app.use('/api/notifications', require('./routes/notifications'));
-app.use('/api/leaderboard', require('./routes/leaderboard'));
-app.use('/api/dm', require('./routes/dm'));
-app.use('/api/events', require('./routes/events'));
-app.use('/api/buddies', require('./routes/buddies'));
-app.use('/api/recap', require('./routes/recap'));
-app.use('/api/cron', require('./routes/cron'));
-app.use('/api/analytics', require('./routes/analytics'));
+app.use('/api/auth',          authLimiter,              require('./routes/auth'));
+app.use('/api/posts',         writeOnly(writeLimiter),  require('./routes/posts'));
+app.use('/api/habits',        writeOnly(writeLimiter),  require('./routes/habits'));
+app.use('/api/users',         writeOnly(writeLimiter),  require('./routes/users'));
+app.use('/api/clubs',         writeOnly(writeLimiter),  require('./routes/challenges'));
+app.use('/api/notifications', writeOnly(writeLimiter),  require('./routes/notifications'));
+app.use('/api/leaderboard',                             require('./routes/leaderboard'));
+app.use('/api/dm',            writeOnly(dmLimiter),     require('./routes/dm'));
+app.use('/api/events',        writeOnly(writeLimiter),  require('./routes/events'));
+app.use('/api/buddies',       writeOnly(writeLimiter),  require('./routes/buddies'));
+app.use('/api/recap',                                   require('./routes/recap'));
+app.use('/api/cron',                                    require('./routes/cron'));
+app.use('/api/analytics',     analyticsLimiter,         require('./routes/analytics'));
 
 // Health check
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', app: 'Dialed' }));
