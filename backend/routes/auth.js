@@ -8,7 +8,7 @@ const { trackEvent, metaFromReq } = require('../utils/analytics');
 const { sendVerificationEmail } = require('../utils/email');
 
 // Monthly email budget — hard stop before hitting Resend free tier limit
-const MONTHLY_EMAIL_CAP = 2500;
+const MONTHLY_EMAIL_CAP = 50000;
 
 // Common disposable/throwaway email domains to block
 const DISPOSABLE_DOMAINS = new Set([
