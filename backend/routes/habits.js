@@ -3,6 +3,7 @@ const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../database/db');
 const { authMiddleware } = require('../middleware/auth');
 const { calculateStreak, isStreakAtRisk, buildStreakCalendar, getEarnedBadges, getPeriodKeyTz } = require('../utils/streaks');
+const { trackEvent, metaFromReq } = require('../utils/analytics');
 
 const router = express.Router();
 
@@ -72,6 +73,7 @@ router.post('/', authMiddleware, (req, res) => {
   ).run(id, req.user.id, name.trim(), description?.trim() || '', frequency, visibility_missed || 'public', color || '#f97316', reminder_time || null, resolvedTarget);
 
   const habit = db.prepare('SELECT * FROM habits WHERE id = ?').get(id);
+  trackEvent(req.user.id, 'habit_created', { frequency, color: color || '#f97316', target_count: resolvedTarget }, metaFromReq(req));
   res.status(201).json({ ...habit, streak: 0, at_risk: false, total_logs: 0, calendar: [], period_count: 0 });
 });
 
@@ -194,6 +196,13 @@ router.post('/:id/log', authMiddleware, (req, res) => {
 
   const MILESTONES = { 7: 'First Week', 30: 'One Month', 100: '100 Days', 365: 'One Year' };
   const milestone = goalJustMet && MILESTONES[streak] ? { day: streak, label: MILESTONES[streak] } : null;
+
+  trackEvent(req.user.id, 'habit_logged', {
+    frequency: habit.frequency,
+    streak,
+    goal_met: goalJustMet,
+    milestone: milestone ? milestone.label : null,
+  }, metaFromReq(req));
 
   res.status(201).json({ logged: true, streak, at_risk, total_logs: logs.length, period_count: newPeriodCount, target_count: target, goal_met: goalJustMet, milestone });
 });

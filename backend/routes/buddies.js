@@ -3,6 +3,7 @@ const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../database/db');
 const { authMiddleware } = require('../middleware/auth');
 const { sendPush } = require('../utils/push');
+const { trackEvent, metaFromReq } = require('../utils/analytics');
 
 const router = express.Router();
 
@@ -116,6 +117,7 @@ router.post('/request', authMiddleware, (req, res) => {
     data: { type: 'buddy_request', userId: req.user.id },
   }, 'buddy');
 
+  trackEvent(req.user.id, 'buddy_request_sent', {}, metaFromReq(req));
   res.json({ requested: true, id });
 });
 
@@ -139,6 +141,7 @@ router.put('/:id/accept', authMiddleware, (req, res) => {
     data: { type: 'buddy_accepted', userId: req.user.id },
   }, 'buddy');
 
+  trackEvent(req.user.id, 'buddy_accepted', {}, metaFromReq(req));
   res.json({ accepted: true });
 });
 

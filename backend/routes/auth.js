@@ -4,6 +4,7 @@ const { randomInt } = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../database/db');
 const { generateToken, authMiddleware } = require('../middleware/auth');
+const { trackEvent, metaFromReq } = require('../utils/analytics');
 
 const router = express.Router();
 
@@ -40,6 +41,7 @@ router.post('/register', (req, res) => {
 
   const user = db.prepare('SELECT id, username, email, display_name, bio, avatar_url, created_at FROM users WHERE id = ?').get(id);
   const token = generateToken(user);
+  trackEvent(id, 'user_registered', {}, metaFromReq(req));
   res.status(201).json({ token, user });
 });
 
@@ -62,6 +64,7 @@ router.post('/login', (req, res) => {
 
   const { password_hash: _, ...safeUser } = user;
   const token = generateToken(safeUser);
+  trackEvent(safeUser.id, 'user_login', {}, metaFromReq(req));
   res.json({ token, user: safeUser });
 });
 

@@ -130,6 +130,22 @@ function getDb() {
       }
     }
 
+    // Analytics event stream
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS analytics_events (
+        id TEXT PRIMARY KEY,
+        user_id TEXT DEFAULT NULL,
+        event_name TEXT NOT NULL,
+        properties TEXT DEFAULT '{}',
+        platform TEXT DEFAULT NULL,
+        app_version TEXT DEFAULT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_analytics_event_name ON analytics_events(event_name);
+      CREATE INDEX IF NOT EXISTS idx_analytics_created_at ON analytics_events(created_at);
+      CREATE INDEX IF NOT EXISTS idx_analytics_user_id ON analytics_events(user_id);
+    `);
+
     // Message read tracking
     const cpCols = db.prepare("PRAGMA table_info(conversation_participants)").all().map(c => c.name);
     if (!cpCols.includes('last_read_at')) {

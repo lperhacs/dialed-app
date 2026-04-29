@@ -1,5 +1,6 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import { API_BASE_URL } from '../theme';
 
 // ── In-memory GET cache ───────────────────────────────────────────────────────
@@ -38,6 +39,13 @@ api.interceptors.request.use(async (config) => {
   // reset at the user's midnight, not the server's UTC midnight.
   try {
     config.headers['X-Client-Timezone'] = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch (_) {}
+
+  // Analytics metadata
+  config.headers['X-Platform'] = Platform.OS;
+  try {
+    const { default: Constants } = await import('expo-constants');
+    config.headers['X-App-Version'] = Constants.expoConfig?.version || '';
   } catch (_) {}
 
   // Serve from cache for eligible GET requests

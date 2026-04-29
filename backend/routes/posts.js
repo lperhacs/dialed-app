@@ -4,6 +4,7 @@ const { getDb } = require('../database/db');
 const { authMiddleware, optionalAuth } = require('../middleware/auth');
 const upload = require('../middleware/upload');
 const { sendPush } = require('../utils/push');
+const { trackEvent, metaFromReq } = require('../utils/analytics');
 
 const router = express.Router();
 
@@ -246,6 +247,7 @@ router.post('/', authMiddleware, upload.single('image'), (req, res) => {
      WHERE p.id = ?`
   ).get(id);
 
+  trackEvent(req.user.id, 'post_created', { has_image: !!req.file, has_habit: !!habit_id }, metaFromReq(req));
   res.status(201).json({ ...post, liked_by_me: false, cheer_count: 0, cheered_by_me: false });
 });
 
@@ -278,6 +280,7 @@ router.post('/:id/like', authMiddleware, (req, res) => {
   }
 
   const like_count = db.prepare('SELECT COUNT(*) as c FROM likes WHERE post_id = ?').get(req.params.id).c;
+  if (!existing) trackEvent(req.user.id, 'post_liked', {}, metaFromReq(req));
   res.json({ liked: true, like_count });
 });
 
@@ -410,6 +413,7 @@ router.post('/:id/cheer', authMiddleware, (req, res) => {
     }
   }
   const cheer_count = db.prepare('SELECT COUNT(*) as c FROM cheers WHERE post_id = ?').get(req.params.id).c;
+  if (!existing) trackEvent(req.user.id, 'post_cheered', {}, metaFromReq(req));
   res.json({ cheered: true, cheer_count });
 });
 

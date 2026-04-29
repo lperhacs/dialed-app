@@ -5,6 +5,7 @@ const { authMiddleware, optionalAuth } = require('../middleware/auth');
 const upload = require('../middleware/upload');
 const { calculateStreak, isStreakAtRisk, getEarnedBadges, BADGE_DEFS } = require('../utils/streaks');
 const { sendPush } = require('../utils/push');
+const { trackEvent, metaFromReq } = require('../utils/analytics');
 
 const router = express.Router();
 
@@ -331,6 +332,7 @@ router.post('/:id/follow', authMiddleware, (req, res) => {
     }
   }
 
+  if (!existing) trackEvent(req.user.id, 'user_followed', {}, metaFromReq(req));
   res.json({ following: true });
 });
 

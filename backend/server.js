@@ -65,6 +65,7 @@ app.use('/api/events', require('./routes/events'));
 app.use('/api/buddies', require('./routes/buddies'));
 app.use('/api/recap', require('./routes/recap'));
 app.use('/api/cron', require('./routes/cron'));
+app.use('/api/analytics', require('./routes/analytics'));
 
 // Health check
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', app: 'Dialed' }));
