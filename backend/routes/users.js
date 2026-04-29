@@ -30,7 +30,37 @@ function enrichUser(db, user, viewerId) {
     }
   }
 
-  return { ...user, follower_count: followerCount, following_count: followingCount, post_count: postCount, is_following, badges, featured_streak };
+  // Buddy visibility
+  const buddyVisibility = user.buddy_visibility || 'public';
+  let buddy_info = null;
+
+  const canSeeBuddy = (() => {
+    if (viewerId === user.id) return true; // always see own
+    if (buddyVisibility === 'public') return true;
+    if (buddyVisibility === 'private' && viewerId) {
+      // Only the buddy themselves can see it
+      const isBuddy = !!db.prepare(`
+        SELECT 1 FROM buddies
+        WHERE ((requester_id = ? AND recipient_id = ?) OR (requester_id = ? AND recipient_id = ?))
+          AND status = 'active'
+      `).get(user.id, viewerId, viewerId, user.id);
+      return isBuddy;
+    }
+    return false;
+  })();
+
+  if (canSeeBuddy) {
+    const activeBuddy = db.prepare(`
+      SELECT u.id, u.username, u.display_name, u.avatar_url
+      FROM buddies b
+      JOIN users u ON u.id = CASE WHEN b.requester_id = ? THEN b.recipient_id ELSE b.requester_id END
+      WHERE (b.requester_id = ? OR b.recipient_id = ?) AND b.status = 'active'
+      LIMIT 1
+    `).get(user.id, user.id, user.id);
+    if (activeBuddy) buddy_info = activeBuddy;
+  }
+
+  return { ...user, follower_count: followerCount, following_count: followingCount, post_count: postCount, is_following, badges, featured_streak, buddy_info, buddy_visibility: buddyVisibility };
 }
 
 // GET /api/users/recommended  — people to follow during onboarding
@@ -135,7 +165,7 @@ router.get('/search', optionalAuth, (req, res) => {
 router.get('/:username', optionalAuth, (req, res) => {
   const db = getDb();
   const user = db.prepare(
-    'SELECT id, username, display_name, bio, avatar_url, featured_habit_id, created_at FROM users WHERE username = ?'
+    'SELECT id, username, display_name, bio, avatar_url, featured_habit_id, buddy_visibility, created_at FROM users WHERE username = ?'
   ).get(req.params.username);
 
   if (!user) return res.status(404).json({ error: 'User not found' });
@@ -147,7 +177,7 @@ router.get('/:username', optionalAuth, (req, res) => {
 // PUT /api/users/profile
 router.put('/profile', authMiddleware, upload.single('avatar'), (req, res) => {
   const db = getDb();
-  const { display_name, bio, featured_habit_id, username } = req.body;
+  const { display_name, bio, featured_habit_id, username, buddy_visibility } = req.body;
   const avatar_url = req.file ? `/uploads/${req.file.filename}` : undefined;
 
   if (display_name !== undefined && display_name.trim().length > 50) {
@@ -166,6 +196,11 @@ router.put('/profile', authMiddleware, upload.single('avatar'), (req, res) => {
     const taken = db.prepare('SELECT id FROM users WHERE username = ? AND id != ?').get(username.trim().toLowerCase(), req.user.id);
     if (taken) return res.status(400).json({ error: 'Username already taken' });
     updates.push('username = ?'); values.push(username.trim().toLowerCase());
+  }
+  if (buddy_visibility !== undefined) {
+    if (['public', 'private'].includes(buddy_visibility)) {
+      updates.push('buddy_visibility = ?'); values.push(buddy_visibility);
+    }
   }
   if (featured_habit_id !== undefined) {
     // null clears the feature; otherwise verify it belongs to this user

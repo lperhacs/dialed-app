@@ -320,6 +320,7 @@ export default function SettingsScreen() {
 
   const [defaultVisibility, setDefaultVisibility] = useState('public');
   const [rsvpPrivate, setRsvpPrivate] = useState(false);
+  const [buddyVisibility, setBuddyVisibility] = useState('public');
   const [calDefault, setCalDefault] = useState(7);
 
   // Modals
@@ -347,6 +348,7 @@ export default function SettingsScreen() {
     });
     if (user?.location) setLocation(user.location);
     if (user?.rsvp_private !== undefined) setRsvpPrivate(!!user.rsvp_private);
+    if (user?.buddy_visibility) setBuddyVisibility(user.buddy_visibility);
   }, [user]);
 
   const saveNotifyPrefs = async (patch) => {
@@ -381,6 +383,11 @@ export default function SettingsScreen() {
   const saveRsvpPrivate = (v) => {
     setRsvpPrivate(v);
     api.patch('/users/me/privacy', { rsvp_private: v }).catch(() => {});
+  };
+
+  const saveBuddyVisibility = (v) => {
+    setBuddyVisibility(v);
+    api.put('/users/profile', { buddy_visibility: v }).catch(() => {});
   };
 
   const setCalDefaultAndSave = async (d) => {
@@ -532,6 +539,24 @@ export default function SettingsScreen() {
               />
             }
           />
+          <View style={[styles.row, { flexDirection: 'column', alignItems: 'flex-start', gap: 10 }]}>
+            <Text style={styles.rowLabel}>Buddy visibility</Text>
+            <Text style={[styles.rowDetail, { fontSize: 12 }]}>Who can see your buddy on your profile</Text>
+            <View style={styles.segmentRow}>
+              {[['public', 'Everyone'], ['private', 'Only you & buddy']].map(([v, label]) => (
+                <TouchableOpacity
+                  key={v}
+                  style={[styles.segment, buddyVisibility === v && styles.segmentActive]}
+                  onPress={() => saveBuddyVisibility(v)}
+                  activeOpacity={0.75}
+                >
+                  <Text style={[styles.segmentText, buddyVisibility === v && styles.segmentTextActive]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
           <View style={[styles.row, styles.rowLast, { flexDirection: 'column', alignItems: 'flex-start', gap: 10 }]}>
             <Text style={styles.rowLabel}>Default habit visibility</Text>
             <View style={styles.segmentRow}>

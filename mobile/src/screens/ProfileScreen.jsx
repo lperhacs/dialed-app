@@ -260,7 +260,7 @@ export default function ProfileScreen({ route, routeUsername, isOwn }) {
         )}
       </View>
 
-      {/* Buddy card - own profile only */}
+      {/* Buddy card */}
       {isSelf && buddyData && (
         <View style={styles.buddyCard}>
           <Ionicons name="people-outline" size={16} color={colors.accent} />
@@ -296,6 +296,24 @@ export default function ProfileScreen({ route, routeUsername, isOwn }) {
             </TouchableOpacity>
           )}
         </View>
+      )}
+
+      {/* Buddy card - other user's profile (only shown when backend returns buddy_info) */}
+      {!isSelf && profile?.buddy_info && (
+        <TouchableOpacity
+          style={styles.buddyCard}
+          onPress={() => navigation.push('UserProfile', { username: profile.buddy_info.username })}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="people-outline" size={16} color={colors.accent} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.buddyName}>
+              Buddy: <Text style={{ color: colors.text }}>{profile.buddy_info.display_name}</Text>
+            </Text>
+            <Text style={styles.buddyMeta}>@{profile.buddy_info.username}</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={14} color={colors.textDim} />
+        </TouchableOpacity>
       )}
 
       {/* Pinned badges */}

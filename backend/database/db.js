@@ -104,6 +104,12 @@ function getDb() {
       db.exec("ALTER TABLE users ADD COLUMN rsvp_private INTEGER NOT NULL DEFAULT 0");
     }
 
+    // Buddy visibility
+    const colsNow2 = db.prepare("PRAGMA table_info(users)").all().map(c => c.name);
+    if (!colsNow2.includes('buddy_visibility')) {
+      db.exec("ALTER TABLE users ADD COLUMN buddy_visibility TEXT NOT NULL DEFAULT 'public'");
+    }
+
     // Push notifications
     if (!colsNow.includes('push_token')) {
       db.exec("ALTER TABLE users ADD COLUMN push_token TEXT DEFAULT NULL");
