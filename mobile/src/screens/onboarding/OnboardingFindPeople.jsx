@@ -157,7 +157,7 @@ export default function OnboardingFindPeople({ navigation, route }) {
   };
 
   const proceed = () => {
-    navigation.navigate('Welcome', { habitName, displayName });
+    navigation.navigate('Invite', { habitName, displayName });
   };
 
   return (
