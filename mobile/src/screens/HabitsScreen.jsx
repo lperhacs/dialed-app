@@ -42,7 +42,9 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
   const navigation = useNavigation();
+  const { isPro, streakFreezes, useFreeze } = usePro();
   const [logging, setLogging] = useState(false);
+  const [freezing, setFreezing] = useState(false);
   const target = habit.target_count || 1;
   const [periodCount, setPeriodCount] = useState(habit.period_count ?? (habit.logged_this_period ? target : 0));
   const [calDays, setCalDays] = useState(defaultDays);
@@ -54,6 +56,30 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
 
   // Sync if the parent's default changes (e.g. user changes setting and refreshes)
   useEffect(() => { setCalDays(defaultDays); }, [defaultDays]);
+
+  const handleFreeze = async () => {
+    Alert.alert(
+      'Use a streak freeze?',
+      `This will protect your ${habit.streak}-day streak on "${habit.name}". You have ${streakFreezes} freeze${streakFreezes === 1 ? '' : 's'} remaining.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Use freeze',
+          onPress: async () => {
+            setFreezing(true);
+            try {
+              await useFreeze(habit.id);
+              Alert.alert('Streak protected', `Your streak is safe. ${streakFreezes - 1} freeze${streakFreezes - 1 === 1 ? '' : 's'} remaining.`);
+            } catch (err) {
+              Alert.alert('Error', err.response?.data?.error || 'Could not use freeze.');
+            } finally {
+              setFreezing(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const handleLog = async () => {
     setLogging(true);
@@ -145,6 +171,37 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
           </TouchableOpacity>
         );
       })()}
+
+      {/* At-risk streak banner */}
+      {habit.at_risk && habit.streak > 0 && !goalMet && (
+        isPro ? (
+          <TouchableOpacity
+            style={[styles.riskBanner, styles.riskBannerPro]}
+            onPress={handleFreeze}
+            disabled={freezing || streakFreezes < 1}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="snow-outline" size={14} color="#60a5fa" />
+            <Text style={styles.riskBannerTextPro}>
+              {freezing ? 'Saving streak…'
+                : streakFreezes > 0 ? `${habit.streak}-day streak at risk · Use a freeze (${streakFreezes} left)`
+                : `${habit.streak}-day streak at risk · No freezes remaining`}
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={[styles.riskBanner, styles.riskBannerFree]}
+            onPress={() => navigation.navigate('Paywall', { source: 'streak_risk' })}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="warning-outline" size={14} color={colors.red} />
+            <Text style={styles.riskBannerTextFree}>
+              {habit.streak}-day streak at risk · Protect it with Pro
+            </Text>
+            <Ionicons name="chevron-forward" size={12} color={colors.red} />
+          </TouchableOpacity>
+        )
+      )}
 
       {/* Post-to-feed prompt */}
       <Modal visible={showPostPrompt} transparent animationType="fade" onRequestClose={() => setShowPostPrompt(false)}>
@@ -704,6 +761,20 @@ function makeStyles(colors) {
     },
     calRangeBtnActive: { borderColor: 'transparent', backgroundColor: colors.bgHover },
     calRangeText: { fontSize: 11, fontWeight: '500', color: colors.textDim },
+
+    riskBanner: {
+      flexDirection: 'row', alignItems: 'center', gap: 6,
+      borderRadius: radius.sm, paddingHorizontal: 12, paddingVertical: 8,
+      borderWidth: 1,
+    },
+    riskBannerPro: {
+      backgroundColor: 'rgba(96,165,250,0.08)', borderColor: 'rgba(96,165,250,0.25)',
+    },
+    riskBannerFree: {
+      backgroundColor: colors.redDim, borderColor: 'rgba(248,113,113,0.25)',
+    },
+    riskBannerTextPro: { flex: 1, fontSize: 12, fontWeight: '500', color: '#60a5fa' },
+    riskBannerTextFree: { flex: 1, fontSize: 12, fontWeight: '500', color: colors.red },
 
     logBtn: { borderRadius: radius.sm, paddingVertical: 10, alignItems: 'center' },
     logBtnDisabled: { opacity: 0.6 },
