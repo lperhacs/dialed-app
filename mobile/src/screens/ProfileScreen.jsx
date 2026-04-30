@@ -232,14 +232,12 @@ export default function ProfileScreen({ route, routeUsername, isOwn }) {
                 {following ? 'Unfollow' : 'Follow'}
               </Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionBtn} onPress={openMessage} activeOpacity={0.85}>
-              <Ionicons name="mail-outline" size={16} color={colors.textMuted} style={{ marginRight: 6 }} />
-              <Text style={styles.actionBtnText}>Message</Text>
-            </TouchableOpacity>
             <TouchableOpacity
               style={[
-                styles.actionBtn,
-                buddyStatus === 'active' && { borderColor: colors.accent },
+                styles.actionBtnFilled, { flex: 1 },
+                buddyStatus === 'active'
+                  ? { backgroundColor: colors.accentDim, borderWidth: 1, borderColor: colors.accent }
+                  : { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.border },
                 buddyStatus === 'pending' && { opacity: 0.6 },
               ]}
               disabled={buddyLoading || buddyStatus === 'pending' || buddyStatus === 'active'}
@@ -256,15 +254,12 @@ export default function ProfileScreen({ route, routeUsername, isOwn }) {
               }}
               activeOpacity={0.85}
             >
-              <Ionicons
-                name={buddyStatus === 'active' ? 'people' : 'people-outline'}
-                size={16}
-                color={buddyStatus === 'active' ? colors.accent : colors.textMuted}
-                style={{ marginRight: 6 }}
-              />
-              <Text style={[styles.actionBtnText, buddyStatus === 'active' && { color: colors.accent }]}>
+              <Text style={[styles.actionBtnFilledText, { color: buddyStatus === 'active' ? colors.accent : colors.text }]}>
                 {buddyStatus === 'active' ? 'Buddies' : buddyStatus === 'pending' ? 'Requested' : 'Buddy up'}
               </Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.actionBtnIcon} onPress={openMessage} activeOpacity={0.85}>
+              <Ionicons name="mail-outline" size={18} color={colors.textMuted} />
             </TouchableOpacity>
           </View>
         )}
