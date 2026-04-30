@@ -283,7 +283,12 @@ export default function PostCard({ post, onDelete }) {
           <TouchableOpacity onPress={goToProfile}>
             <Text style={styles.displayName}>{post.display_name}</Text>
           </TouchableOpacity>
-          <Text style={styles.username}>@{post.username} · {timeAgo(post.created_at)}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={styles.username}>@{post.username} · {timeAgo(post.created_at)}</Text>
+            {post._discovery && (
+              <Text style={styles.suggestedLabel}>Suggested</Text>
+            )}
+          </View>
         </View>
         {isOwn && (
           <TouchableOpacity onPress={handleDelete} style={styles.deleteBtn} hitSlop={12}>
@@ -362,6 +367,7 @@ function makeStyles(colors) { return StyleSheet.create({
   userInfo: { flex: 1 },
   displayName: { fontSize: 14, fontWeight: '600', color: colors.text },
   username: { fontSize: 12, color: colors.textMuted, marginTop: 1 },
+  suggestedLabel: { fontSize: 10, color: colors.textDim, fontWeight: '500' },
   deleteBtn: { paddingLeft: 8 },
   habitTag: {
     alignSelf: 'flex-start',

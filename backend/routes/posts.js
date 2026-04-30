@@ -34,20 +34,111 @@ function buildPostQuery(whereClause, userId) {
   `;
 }
 
-// GET /api/posts — following feed
+// GET /api/posts — following feed, blended with discovery for new users
+//
+// Discovery blend thresholds (by following count):
+//   0–4  follows → 65% discovery (app feels alive on day one)
+//   5–14 follows → 40% discovery
+//   15–29 follows → 20% discovery
+//   30+  follows → pure following feed
+//
+// Discovery posts are interleaved throughout the page (not clumped at the end)
+// and tagged with _discovery: true so the client can optionally label them.
 router.get('/', authMiddleware, (req, res) => {
   const db = getDb();
-  const page = parseInt(req.query.page) || 1;
+  const page  = parseInt(req.query.page) || 1;
   const limit = 20;
   const offset = (page - 1) * limit;
+  const userId = req.user.id;
 
-  const posts = db.prepare(
+  // How many people this user follows
+  const followingCount = db.prepare(
+    'SELECT COUNT(*) as c FROM follows WHERE follower_id = ?'
+  ).get(userId).c;
+
+  // Determine discovery ratio
+  let discoveryRatio = 0;
+  if      (followingCount < 5)  discoveryRatio = 0.65;
+  else if (followingCount < 15) discoveryRatio = 0.40;
+  else if (followingCount < 30) discoveryRatio = 0.20;
+
+  const discoverySlots  = Math.round(limit * discoveryRatio);
+  const followingSlots  = limit - discoverySlots;
+
+  // ── Followed posts ──────────────────────────────────────────────────────
+  const followedPosts = db.prepare(
     buildPostQuery(`WHERE (p.user_id IN (
       SELECT following_id FROM follows WHERE follower_id = ?
     ) OR p.user_id = ?)`) + ' LIMIT ? OFFSET ?'
-  ).all(req.user.id, req.user.id, limit, offset);
+  ).all(userId, userId, followingSlots, offset);
 
-  res.json(posts.map(p => enrichPost(db, p, req.user.id)));
+  if (discoverySlots === 0) {
+    return res.json(followedPosts.map(p => enrichPost(db, p, userId)));
+  }
+
+  // ── Discovery posts ─────────────────────────────────────────────────────
+  // Exclude: self, people already followed, people already in followedPosts
+  const followedIds = db.prepare(
+    'SELECT following_id FROM follows WHERE follower_id = ?'
+  ).all(userId).map(f => f.following_id);
+
+  const excludeIds = [userId, ...followedIds];
+  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+  const oneDayAgo    = new Date(Date.now() - 86400000).toISOString();
+
+  const whereClause = `WHERE p.created_at > ? AND p.user_id NOT IN (${excludeIds.map(() => '?').join(',')})`;
+  const candidates = db.prepare(
+    buildPostQuery(whereClause) + ' LIMIT 100'
+  ).all(sevenDaysAgo, ...excludeIds);
+
+  // Score by velocity (recent engagement) + freshness
+  const recentLikesMap = new Map(
+    db.prepare('SELECT post_id, COUNT(*) as c FROM likes WHERE created_at > ? GROUP BY post_id')
+      .all(oneDayAgo).map(r => [r.post_id, r.c])
+  );
+  const recentCommentsMap = new Map(
+    db.prepare('SELECT post_id, COUNT(*) as c FROM comments WHERE created_at > ? GROUP BY post_id')
+      .all(oneDayAgo).map(r => [r.post_id, r.c])
+  );
+
+  const now = Date.now();
+  const scored = candidates.map(p => {
+    const ageHours = (now - new Date(p.created_at).getTime()) / 3600000;
+    const freshness = ageHours < 6 ? 1.0 : ageHours < 24 ? 0.85 : ageHours < 72 ? 0.65 : 0.4;
+    const score =
+      (recentLikesMap.get(p.id)    || 0) * 5 +
+      (recentCommentsMap.get(p.id) || 0) * 7 +
+      (p.like_count    || 0) * 1 +
+      (p.comment_count || 0) * 2 +
+      Math.random() * 4; // small shuffle so the feed varies on refresh
+    return { ...p, _score: score * freshness, _discovery: true };
+  }).sort((a, b) => b._score - a._score).slice(0, discoverySlots);
+
+  // ── Interleave ──────────────────────────────────────────────────────────
+  // Scatter discovery posts evenly throughout followed posts.
+  // e.g. 13 followed + 7 discovery → insert 1 discovery every ~2 posts.
+  const result = [];
+  const step = followedPosts.length > 0
+    ? Math.max(1, Math.floor(followedPosts.length / (discoverySlots + 1)))
+    : 1;
+
+  let fi = 0; // followed index
+  let di = 0; // discovery index
+
+  for (let i = 0; i < limit; i++) {
+    const insertDiscovery = di < scored.length && (fi === 0 || fi % step === 0) && fi <= followedPosts.length;
+    if (insertDiscovery) {
+      result.push(enrichPost(db, scored[di++], userId));
+    } else if (fi < followedPosts.length) {
+      result.push(enrichPost(db, followedPosts[fi++], userId));
+    } else if (di < scored.length) {
+      result.push(enrichPost(db, scored[di++], userId));
+    } else {
+      break;
+    }
+  }
+
+  res.json(result);
 });
 
 // GET /api/posts/explore — global explore feed (plain, for HomeScreen tab)
