@@ -1,6 +1,7 @@
 'use strict';
 const express = require('express');
 const { runMonthlyHabitReminders } = require('../cron/habitReminders');
+const { runDailyHabitReminders } = require('../cron/dailyHabitReminders');
 const { runDbBackup } = require('../cron/dbBackup');
 
 const router = express.Router();
@@ -26,6 +27,16 @@ router.post('/habit-reminders', requireServerKey, async (_req, res) => {
     res.json({ ok: true, sent });
   } catch (err) {
     console.error('[Cron] habit-reminders error:', err);
+    res.status(500).json({ error: 'Cron job failed' });
+  }
+});
+
+router.post('/daily-reminders', requireServerKey, async (_req, res) => {
+  try {
+    const sent = await runDailyHabitReminders();
+    res.json({ ok: true, sent });
+  } catch (err) {
+    console.error('[Cron] daily-reminders error:', err);
     res.status(500).json({ error: 'Cron job failed' });
   }
 });

@@ -87,14 +87,35 @@ app.listen(PORT, () => {
   // ensures each user gets at most one push per habit per calendar month.
   const cron = require('node-cron');
   const { runMonthlyHabitReminders } = require('./cron/habitReminders');
+  const { runDailyHabitReminders } = require('./cron/dailyHabitReminders');
+  const { runChallengeStartReminders } = require('./cron/challengeReminders');
   const { runDbBackup } = require('./cron/dbBackup');
 
+  // Daily evening reminder — 19:00 UTC (3pm ET / noon PT)
+  // Nudges users who haven't logged their daily or weekly habits yet
+  cron.schedule('0 19 * * *', () => {
+    runDailyHabitReminders().catch(err =>
+      console.error('[Cron] daily-habit-reminders failed:', err)
+    );
+  }, { timezone: 'UTC' });
+  console.log('[Cron] daily habit reminder scheduler started (19:00 UTC)');
+
+  // Challenge start reminder — 10:00 UTC, fires day before a challenge begins
+  cron.schedule('0 10 * * *', () => {
+    runChallengeStartReminders().catch(err =>
+      console.error('[Cron] challenge-start-reminders failed:', err)
+    );
+  }, { timezone: 'UTC' });
+  console.log('[Cron] challenge start reminder scheduler started (10:00 UTC)');
+
+  // Monthly catch-up reminder — runs at 09:00 UTC
+  // Nudges users who haven't hit their monthly habit target
   cron.schedule('0 9 * * *', () => {
     runMonthlyHabitReminders().catch(err =>
       console.error('[Cron] monthly-habit-reminders failed:', err)
     );
   }, { timezone: 'UTC' });
-  console.log('[Cron] monthly habit reminder scheduler started (daily 09:00 UTC)');
+  console.log('[Cron] monthly habit reminder scheduler started (09:00 UTC)');
 
   // Daily DB backup at 03:00 UTC — keeps 7 rolling snapshots
   cron.schedule('0 3 * * *', () => {

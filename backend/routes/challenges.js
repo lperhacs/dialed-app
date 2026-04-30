@@ -3,6 +3,7 @@ const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../database/db');
 const { authMiddleware, optionalAuth } = require('../middleware/auth');
 const { calculateStreak } = require('../utils/streaks');
+const { sendPush } = require('../utils/push');
 
 const router = express.Router();
 
@@ -404,6 +405,13 @@ router.post('/:id/invite', authMiddleware, (req, res) => {
     "INSERT INTO notifications (id, user_id, type, from_user_id, challenge_id, message) VALUES (?, ?, 'challenge_invite', ?, ?, ?)"
   ).run(uuidv4(), user_id, req.user.id, req.params.id, `invited you to join the club "${challenge.name}"`);
 
+  const actor = db.prepare('SELECT display_name FROM users WHERE id = ?').get(req.user.id);
+  sendPush(user_id, {
+    title: 'Club invite',
+    body: `${actor?.display_name || 'Someone'} invited you to join "${challenge.name}"`,
+    data: { type: 'challenge_invite', challengeId: req.params.id },
+  }, 'challenges');
+
   res.json({ invited: true });
 });
 
@@ -475,6 +483,27 @@ router.post('/:id/messages', authMiddleware, (req, res) => {
     `SELECT m.id, m.content, m.created_at, u.id as user_id, u.username, u.display_name, u.avatar_url
      FROM challenge_messages m JOIN users u ON u.id = m.user_id WHERE m.id = ?`
   ).get(id);
+
+  // Push to all other active members who haven't muted this club
+  const challenge = db.prepare('SELECT name FROM challenges WHERE id = ?').get(req.params.id);
+  const otherMembers = db.prepare(`
+    SELECT cm.user_id FROM challenge_members cm
+    WHERE cm.challenge_id = ? AND cm.status = 'active' AND cm.user_id != ?
+      AND NOT EXISTS (
+        SELECT 1 FROM chat_mutes mu
+        WHERE mu.user_id = cm.user_id AND mu.context_type = 'club'
+          AND mu.context_id = ? AND (mu.muted_until IS NULL OR mu.muted_until > datetime('now'))
+      )
+  `).all(req.params.id, req.user.id, req.params.id);
+
+  const preview = message.content.length > 60 ? message.content.slice(0, 60) + '…' : message.content;
+  for (const m of otherMembers) {
+    sendPush(m.user_id, {
+      title: challenge?.name || 'Club',
+      body: `${message.display_name}: ${preview}`,
+      data: { type: 'challenge_message', challengeId: req.params.id },
+    }, 'challenges');
+  }
 
   res.status(201).json(message);
 });
