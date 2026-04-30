@@ -303,10 +303,22 @@ router.post('/:id/join', authMiddleware, (req, res) => {
     db.prepare(
       "INSERT INTO notifications (id, user_id, type, from_user_id, challenge_id, message) VALUES (?, ?, 'challenge_join', ?, ?, ?)"
     ).run(uuidv4(), challenge.creator_id, req.user.id, req.params.id, `joined your club "${challenge.name}"`);
+    const joiner = db.prepare('SELECT display_name FROM users WHERE id = ?').get(req.user.id);
+    sendPush(challenge.creator_id, {
+      title: challenge.name,
+      body: `${joiner?.display_name || 'Someone'} joined your club.`,
+      data: { type: 'challenge_join', challengeId: req.params.id },
+    }, 'challenges');
   } else if (status === 'pending') {
     db.prepare(
       "INSERT INTO notifications (id, user_id, type, from_user_id, challenge_id, message) VALUES (?, ?, 'challenge_join', ?, ?, ?)"
     ).run(uuidv4(), challenge.creator_id, req.user.id, req.params.id, `requested to join your club "${challenge.name}"`);
+    const requester = db.prepare('SELECT display_name FROM users WHERE id = ?').get(req.user.id);
+    sendPush(challenge.creator_id, {
+      title: challenge.name,
+      body: `${requester?.display_name || 'Someone'} requested to join your club.`,
+      data: { type: 'challenge_join_request', challengeId: req.params.id },
+    }, 'challenges');
   }
 
   res.json({ memberStatus: status });

@@ -157,6 +157,10 @@ function getDb() {
       );
       CREATE INDEX IF NOT EXISTS idx_email_verif_user ON email_verifications(user_id);
     `);
+    const evCols2 = db.prepare("PRAGMA table_info(email_verifications)").all().map(c => c.name);
+    if (!evCols2.includes('pending_email')) {
+      db.exec("ALTER TABLE email_verifications ADD COLUMN pending_email TEXT DEFAULT NULL");
+    }
 
     // Analytics event stream
     db.exec(`
@@ -201,6 +205,40 @@ function getDb() {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(requester_id, recipient_id)
       );
+    `);
+
+    // Phone OTP storage (DB-backed so codes survive server restarts)
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS phone_otps (
+        phone TEXT PRIMARY KEY,
+        otp TEXT NOT NULL,
+        expires_at DATETIME NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Chat mutes (DM conversations and club chats)
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS chat_mutes (
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        context_type TEXT NOT NULL,
+        context_id TEXT NOT NULL,
+        muted_until DATETIME DEFAULT NULL,
+        PRIMARY KEY (user_id, context_type, context_id)
+      );
+    `);
+
+    // Challenge habit links (member's linked habit for a challenge)
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS challenge_habit_links (
+        challenge_id TEXT NOT NULL REFERENCES challenges(id) ON DELETE CASCADE,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        habit_id TEXT NOT NULL REFERENCES habits(id) ON DELETE CASCADE,
+        PRIMARY KEY (challenge_id, user_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_chl_challenge ON challenge_habit_links(challenge_id);
+      CREATE INDEX IF NOT EXISTS idx_chl_user ON challenge_habit_links(user_id);
     `);
 
     // Events

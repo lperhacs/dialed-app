@@ -4,6 +4,7 @@ const { getDb } = require('../database/db');
 const { authMiddleware } = require('../middleware/auth');
 const { calculateStreak, isStreakAtRisk, buildStreakCalendar, getEarnedBadges, getPeriodKeyTz } = require('../utils/streaks');
 const { trackEvent, metaFromReq } = require('../utils/analytics');
+const { sendPush } = require('../utils/push');
 
 const router = express.Router();
 
@@ -21,9 +22,16 @@ function awardBadges(db, userId, habitId) {
     if (!exists) {
       db.prepare('INSERT OR IGNORE INTO badges (id, user_id, badge_type, habit_id) VALUES (?, ?, ?, ?)').run(uuidv4(), userId, badge.type, habitId);
 
+      const msg = `You earned the "${badge.label}" badge!`;
       db.prepare(
         "INSERT INTO notifications (id, user_id, type, message) VALUES (?, ?, 'badge', ?)"
-      ).run(uuidv4(), userId, `You earned the "${badge.label}" badge! ${badge.icon}`);
+      ).run(uuidv4(), userId, msg);
+
+      sendPush(userId, {
+        title: 'New badge unlocked',
+        body: msg,
+        data: { type: 'badge', badgeType: badge.type },
+      }, 'badges');
     }
   }
 }
@@ -96,7 +104,7 @@ router.get('/:id', authMiddleware, (req, res) => {
 
   const logs = db.prepare('SELECT * FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(habit.id);
   const streak = calculateStreak(logs, habit.frequency, habit.target_count || 1);
-  const at_risk = isStreakAtRisk(logs, habit.frequency);
+  const at_risk = isStreakAtRisk(logs, habit.frequency, habit.target_count || 1);
   const calendar = buildStreakCalendar(logs, habit.frequency, 365);
 
   res.json({ ...habit, streak, at_risk, total_logs: logs.length, calendar, recent_logs: logs.slice(0, 10) });
@@ -174,26 +182,35 @@ router.post('/:id/log', authMiddleware, (req, res) => {
     }
   }
 
-  // Prevent double-logging same period (uses client timezone so resets at user's midnight)
+  // Prevent double-logging same period — wrap check+insert in a transaction to prevent
+  // race conditions from rapid double-taps or concurrent requests.
   const tz = req.headers['x-client-timezone'] || null;
   const logDate = loggedAtOverride ? new Date(loggedAtOverride) : new Date();
   const today = getPeriodKeyTz(logDate, habit.frequency, tz);
-  const lookback = habit.frequency === 'monthly' ? '-32 days' : habit.frequency === 'weekly' ? '-8 days' : '-2 days';
-  const recentLogs = db.prepare(
-    `SELECT logged_at FROM habit_logs WHERE habit_id = ? AND logged_at >= date('now', '${lookback}')`
-  ).all(habit.id);
+  const lookbackMap = { monthly: '-32 days', weekly: '-8 days', daily: '-2 days' };
+  const lookback = lookbackMap[habit.frequency] || '-2 days';
 
   const target = habit.target_count || 1;
-  const periodCount = recentLogs.filter(l => getPeriodKeyTz(l.logged_at, habit.frequency, tz) === today).length;
-  if (periodCount >= target) {
-    return res.status(400).json({ error: target > 1 ? `Goal reached! You've already logged ${target}x this period.` : 'Already logged this period' });
-  }
-
+  let periodCount = 0;
   const id = uuidv4();
-  if (loggedAtOverride) {
-    db.prepare('INSERT INTO habit_logs (id, habit_id, user_id, note, logged_at) VALUES (?, ?, ?, ?, ?)').run(id, habit.id, req.user.id, note || '', loggedAtOverride);
-  } else {
-    db.prepare('INSERT INTO habit_logs (id, habit_id, user_id, note) VALUES (?, ?, ?, ?)').run(id, habit.id, req.user.id, note || '');
+
+  const insertLog = db.transaction(() => {
+    const recentLogs = db.prepare(
+      `SELECT logged_at FROM habit_logs WHERE habit_id = ? AND logged_at >= date('now', '${lookback}')`
+    ).all(habit.id);
+    periodCount = recentLogs.filter(l => getPeriodKeyTz(l.logged_at, habit.frequency, tz) === today).length;
+    if (periodCount >= target) return false; // signal already logged
+    if (loggedAtOverride) {
+      db.prepare('INSERT INTO habit_logs (id, habit_id, user_id, note, logged_at) VALUES (?, ?, ?, ?, ?)').run(id, habit.id, req.user.id, note || '', loggedAtOverride);
+    } else {
+      db.prepare('INSERT INTO habit_logs (id, habit_id, user_id, note) VALUES (?, ?, ?, ?)').run(id, habit.id, req.user.id, note || '');
+    }
+    return true;
+  });
+
+  const inserted = insertLog();
+  if (!inserted) {
+    return res.status(400).json({ error: target > 1 ? `Goal reached! You've already logged ${target}x this period.` : 'Already logged this period' });
   }
 
   // Award badges

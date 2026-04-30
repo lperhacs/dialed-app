@@ -1,24 +1,23 @@
 'use strict';
 const { getDb } = require('../database/db');
-const { getPeriodKey } = require('../utils/streaks');
+const { getPeriodKey, calculateStreak } = require('../utils/streaks');
 const { sendPush } = require('../utils/push');
 
 /**
  * Send evening push reminders to users who haven't logged their
  * daily (and weekly) habits yet for the current period.
  *
- * Deduped: at most one reminder per habit per period.
+ * Deduped by habit_id (stored in reference_id) — one reminder per habit per day.
  * Called by the node-cron scheduler in server.js at 19:00 UTC.
  */
 async function runDailyHabitReminders() {
   const db = getDb();
   const now = new Date();
-  const todayKey   = getPeriodKey(now, 'daily');   // e.g. "2026-04-29"
-  const weekKey    = getPeriodKey(now, 'weekly');   // e.g. "2026-W18"
+  const todayKey = getPeriodKey(now, 'daily');   // e.g. "2026-04-29"
 
   // All active daily + weekly habits with their owner's push token
   const habits = db.prepare(`
-    SELECT h.id, h.name, h.user_id, h.frequency, h.target_count, h.streak,
+    SELECT h.id, h.name, h.user_id, h.frequency, h.target_count,
            u.push_token, u.notify_prefs
     FROM habits h
     JOIN users u ON u.id = h.user_id
@@ -38,7 +37,6 @@ async function runDailyHabitReminders() {
       } catch { /* malformed — send anyway */ }
     }
 
-    const periodKey = habit.frequency === 'daily' ? todayKey : weekKey;
     const target = habit.target_count || 1;
 
     // How many logs this period?
@@ -49,7 +47,7 @@ async function runDailyHabitReminders() {
         WHERE habit_id = ? AND strftime('%Y-%m-%d', logged_at) = ?
       `).get(habit.id, todayKey));
     } else {
-      // Weekly: count logs in the ISO week
+      // Weekly: count logs in the current ISO week
       ({ c: periodCount } = db.prepare(`
         SELECT COUNT(*) as c FROM habit_logs
         WHERE habit_id = ?
@@ -59,19 +57,27 @@ async function runDailyHabitReminders() {
 
     if (periodCount >= target) continue; // already done
 
-    // Dedup: skip if we already sent a reminder for this habit this period
+    // Dedup: one reminder per habit per calendar day, keyed by habit_id in reference_id
     const alreadySent = db.prepare(`
       SELECT 1 FROM notifications
       WHERE user_id = ?
         AND type = 'reminder'
-        AND message LIKE ?
+        AND reference_id = ?
         AND created_at >= date('now', 'start of day')
-    `).get(habit.user_id, `%${habit.name}%`);
+    `).get(habit.user_id, habit.id);
 
     if (alreadySent) continue;
 
-    const streakLine = habit.streak > 0
-      ? ` You're on a ${habit.streak}-day streak — don't break it.`
+    // Calculate current streak from the last 90 days of logs
+    const recentLogs = db.prepare(`
+      SELECT logged_at FROM habit_logs
+      WHERE habit_id = ? AND logged_at >= date('now', '-90 days')
+      ORDER BY logged_at DESC
+    `).all(habit.id);
+    const streak = calculateStreak(recentLogs, habit.frequency, target);
+
+    const streakLine = streak > 0
+      ? ` You're on a ${streak}-${habit.frequency === 'weekly' ? 'week' : 'day'} streak — don't break it.`
       : '';
 
     const body = habit.frequency === 'daily'
@@ -84,12 +90,11 @@ async function runDailyHabitReminders() {
       'reminders'
     );
 
-    // In-app notification (lightweight — no icon needed, just the nudge)
     const { v4: uuidv4 } = require('uuid');
     db.prepare(`
-      INSERT INTO notifications (id, user_id, type, message)
-      VALUES (?, ?, 'reminder', ?)
-    `).run(uuidv4(), habit.user_id, body);
+      INSERT INTO notifications (id, user_id, type, reference_id, message)
+      VALUES (?, ?, 'reminder', ?, ?)
+    `).run(uuidv4(), habit.user_id, habit.id, body);
 
     sent++;
   }

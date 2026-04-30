@@ -82,15 +82,16 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
   useEffect(() => { setCalDays(defaultDays); }, [defaultDays]);
 
   const handleFreeze = async () => {
+    if (freezing) return;
+    setFreezing(true);
     Alert.alert(
       'Use a streak freeze?',
       `This will protect your ${habit.streak}-day streak on "${habit.name}". You have ${streakFreezes} freeze${streakFreezes === 1 ? '' : 's'} remaining.`,
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel', onPress: () => setFreezing(false) },
         {
           text: 'Use freeze',
           onPress: async () => {
-            setFreezing(true);
             try {
               await useFreeze(habit.id);
               Alert.alert('Streak protected', `Your streak is safe. ${streakFreezes - 1} freeze${streakFreezes - 1 === 1 ? '' : 's'} remaining.`);
@@ -108,15 +109,16 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
   const { canRestore, lastStreak } = getRestoreInfo(habit.calendar);
 
   const handleRestore = async () => {
+    if (freezing) return;
+    setFreezing(true);
     Alert.alert(
       'Restore streak?',
       `This will bring back your ${lastStreak}-day streak on "${habit.name}" by filling in the missed ${habit.frequency === 'daily' ? 'days' : habit.frequency === 'weekly' ? 'weeks' : 'months'}. Costs 1 streak freeze (${streakFreezes} remaining).`,
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel', onPress: () => setFreezing(false) },
         {
           text: 'Restore',
           onPress: async () => {
-            setFreezing(true);
             try {
               const { data } = await api.post('/pro/restore-streak', { habit_id: habit.id });
               // Reload the habit list so calendar + streak update

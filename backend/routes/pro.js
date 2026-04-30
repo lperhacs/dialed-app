@@ -3,6 +3,25 @@ const { getDb } = require('../database/db');
 const { authMiddleware } = require('../middleware/auth');
 const { trackEvent, metaFromReq } = require('../utils/analytics');
 
+// Return a Date representing yesterday at noon in the client's timezone.
+// Falls back to UTC if the timezone header is missing or invalid.
+function localYesterday(tz) {
+  try {
+    const now = new Date();
+    // Get today's date string in the user's timezone (en-CA gives YYYY-MM-DD)
+    const todayLocal = now.toLocaleDateString('en-CA', { timeZone: tz || 'UTC' });
+    const [y, m, d] = todayLocal.split('-').map(Number);
+    // Subtract one day
+    const yest = new Date(Date.UTC(y, m - 1, d - 1, 12, 0, 0));
+    return yest;
+  } catch (_) {
+    const y = new Date();
+    y.setUTCDate(y.getUTCDate() - 1);
+    y.setUTCHours(12, 0, 0, 0);
+    return y;
+  }
+}
+
 const router = express.Router();
 
 // GET /api/pro/status
@@ -71,10 +90,10 @@ router.post('/use-freeze', authMiddleware, (req, res) => {
   const habit = db.prepare('SELECT * FROM habits WHERE id = ? AND user_id = ?').get(habit_id, req.user.id);
   if (!habit) return res.status(404).json({ error: 'Habit not found' });
 
-  // Insert a backdated log for yesterday to preserve streak
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
+  // Insert a backdated log for yesterday (in the user's local timezone) to preserve streak
   const { v4: uuidv4 } = require('uuid');
+  const tz = req.headers['x-client-timezone'];
+  const yesterday = localYesterday(tz);
   db.prepare(
     "INSERT INTO habit_logs (id, habit_id, user_id, note, logged_at) VALUES (?, ?, ?, '[freeze]', ?)"
   ).run(uuidv4(), habit_id, req.user.id, yesterday.toISOString());
@@ -107,52 +126,71 @@ router.post('/restore-streak', authMiddleware, (req, res) => {
   ).get(habit_id);
   if (!lastLog) return res.status(400).json({ error: 'No logs to restore from' });
 
-  const now = new Date();
-  const last = new Date(lastLog.logged_at);
-
-  // Calculate missed periods and validate restoration window
+  const { getPeriodKey } = require('../utils/streaks');
   const { v4: uuidv4 } = require('uuid');
+  const tz = req.headers['x-client-timezone'];
+
+  // Get today's date string in user's local timezone
+  const now = new Date();
+  const todayLocal = now.toLocaleDateString('en-CA', { timeZone: tz || 'UTC' });
+  const lastLocal = new Date(lastLog.logged_at).toLocaleDateString('en-CA', { timeZone: tz || 'UTC' });
+
   const RESTORATION_LIMITS = { daily: 3, weekly: 2, monthly: 1 };
   const maxMissed = RESTORATION_LIMITS[habit.frequency] || 3;
 
   let missedDates = [];
 
   if (habit.frequency === 'daily') {
-    const msPerDay = 24 * 60 * 60 * 1000;
-    const daysSince = Math.floor((now - last) / msPerDay);
+    // Parse local date strings to get day counts
+    const [ty, tm, td] = todayLocal.split('-').map(Number);
+    const [ly, lm, ld] = lastLocal.split('-').map(Number);
+    const todayUtcMidnight = Date.UTC(ty, tm - 1, td);
+    const lastUtcMidnight = Date.UTC(ly, lm - 1, ld);
+    const daysSince = Math.round((todayUtcMidnight - lastUtcMidnight) / 86400000);
     if (daysSince < 1) return res.status(400).json({ error: 'Streak is not broken' });
     if (daysSince - 1 > maxMissed) return res.status(400).json({ error: `Streak can only be restored if broken within ${maxMissed} days` });
-    // Fill each missed day (not today — today is a new period the user should log themselves)
+    // Fill each missed day (not today — user should log today themselves)
     for (let d = daysSince - 1; d >= 1; d--) {
-      const missed = new Date(now);
-      missed.setDate(now.getDate() - d);
-      missed.setHours(12, 0, 0, 0);
+      const missed = new Date(Date.UTC(ty, tm - 1, td - d, 12, 0, 0));
       missedDates.push(missed.toISOString());
     }
-    // Also fill yesterday if not already there (the gap day)
-    const yesterday = new Date(now);
-    yesterday.setDate(now.getDate() - 1);
-    yesterday.setHours(12, 0, 0, 0);
-    if (!missedDates.find(d => d.slice(0, 10) === yesterday.toISOString().slice(0, 10))) {
-      missedDates.push(yesterday.toISOString());
+    // Fill yesterday if not already included
+    const yest = new Date(Date.UTC(ty, tm - 1, td - 1, 12, 0, 0));
+    const yestKey = yest.toISOString().slice(0, 10);
+    if (!missedDates.find(d => d.slice(0, 10) === yestKey)) {
+      missedDates.push(yest.toISOString());
     }
   } else if (habit.frequency === 'weekly') {
-    const msPerWeek = 7 * 24 * 60 * 60 * 1000;
-    const weeksSince = Math.floor((now - last) / msPerWeek);
-    if (weeksSince < 1) return res.status(400).json({ error: 'Streak is not broken' });
-    if (weeksSince - 1 > maxMissed) return res.status(400).json({ error: `Streak can only be restored if broken within ${maxMissed} weeks` });
-    for (let w = weeksSince; w >= 1; w--) {
-      const missed = new Date(now);
-      missed.setDate(now.getDate() - (w * 7));
-      missed.setHours(12, 0, 0, 0);
-      missedDates.push(missed.toISOString());
+    // Count missed ISO weeks between last log and today
+    const currentWeek = getPeriodKey(now, 'weekly');
+    const lastWeek = getPeriodKey(new Date(lastLog.logged_at), 'weekly');
+    if (currentWeek === lastWeek) return res.status(400).json({ error: 'Streak is not broken' });
+    // Walk back week by week from last week before current, filling missed ones
+    let check = new Date(now);
+    check.setUTCDate(check.getUTCDate() - 7); // start from last week
+    const missedWeeks = [];
+    while (true) {
+      const wk = getPeriodKey(check, 'weekly');
+      if (wk === lastWeek) break;
+      missedWeeks.push(new Date(check));
+      check.setUTCDate(check.getUTCDate() - 7);
+      if (missedWeeks.length > 10) break; // safety guard
+    }
+    if (missedWeeks.length === 0) return res.status(400).json({ error: 'Streak is not broken' });
+    if (missedWeeks.length > maxMissed) return res.status(400).json({ error: `Streak can only be restored if broken within ${maxMissed} weeks` });
+    for (const d of missedWeeks) {
+      d.setUTCHours(12, 0, 0, 0);
+      missedDates.push(d.toISOString());
     }
   } else if (habit.frequency === 'monthly') {
-    const monthsSince = (now.getFullYear() - last.getFullYear()) * 12 + (now.getMonth() - last.getMonth());
+    const [ty, tm] = todayLocal.split('-').map(Number);
+    const [ly, lm] = lastLocal.split('-').map(Number);
+    const monthsSince = (ty - ly) * 12 + (tm - lm);
     if (monthsSince < 1) return res.status(400).json({ error: 'Streak is not broken' });
     if (monthsSince - 1 > maxMissed) return res.status(400).json({ error: `Streak can only be restored if broken within ${maxMissed} months` });
     for (let m = monthsSince; m >= 1; m--) {
-      const missed = new Date(now.getFullYear(), now.getMonth() - m, 15, 12, 0, 0);
+      // Use the 15th at noon UTC for the missed month
+      const missed = new Date(Date.UTC(ty, tm - 1 - m, 15, 12, 0, 0));
       missedDates.push(missed.toISOString());
     }
   }

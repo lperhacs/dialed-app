@@ -188,8 +188,6 @@ router.post('/verify-email', authMiddleware, (req, res) => {
 });
 
 // ── OTP (SMS verification placeholder — swap Twilio in for production) ────────
-// In-memory store: phone → { otp, expires, attempts }. Use Redis/DB in production.
-const otpStore = new Map();
 const OTP_MAX_ATTEMPTS = 5;
 
 // POST /api/auth/send-otp
@@ -200,7 +198,15 @@ router.post('/send-otp', (req, res) => {
   }
   const cleaned = phone.replace(/\D/g, '');
   const otp = randomInt(100000, 1000000).toString();
-  otpStore.set(cleaned, { otp, expires: Date.now() + 10 * 60 * 1000, attempts: 0 });
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+  const db = getDb();
+  // Upsert — replaces any existing code for this phone
+  db.prepare(`
+    INSERT INTO phone_otps (phone, otp, expires_at, attempts)
+    VALUES (?, ?, ?, 0)
+    ON CONFLICT(phone) DO UPDATE SET otp = excluded.otp, expires_at = excluded.expires_at, attempts = 0
+  `).run(cleaned, otp, expiresAt);
 
   // TODO: replace with Twilio SMS — `twilio.messages.create({ to: cleaned, from: TWILIO_FROM, body: ... })`
 
@@ -213,23 +219,26 @@ router.post('/verify-otp', authMiddleware, (req, res) => {
   if (!phone || !otp) return res.status(400).json({ error: 'Phone and code required' });
 
   const cleaned = phone.replace(/\D/g, '');
-  const record = otpStore.get(cleaned);
+  const db = getDb();
+  const record = db.prepare('SELECT * FROM phone_otps WHERE phone = ?').get(cleaned);
 
-  if (!record || Date.now() > record.expires) {
-    otpStore.delete(cleaned);
+  if (!record || new Date(record.expires_at) < new Date()) {
+    if (record) db.prepare('DELETE FROM phone_otps WHERE phone = ?').run(cleaned);
     return res.status(400).json({ error: 'Invalid or expired code' });
   }
 
-  record.attempts += 1;
-  if (record.attempts > OTP_MAX_ATTEMPTS) {
-    otpStore.delete(cleaned);
+  const newAttempts = record.attempts + 1;
+  if (newAttempts > OTP_MAX_ATTEMPTS) {
+    db.prepare('DELETE FROM phone_otps WHERE phone = ?').run(cleaned);
     return res.status(429).json({ error: 'Too many attempts. Please request a new code.' });
   }
+
+  db.prepare('UPDATE phone_otps SET attempts = ? WHERE phone = ?').run(newAttempts, cleaned);
 
   if (record.otp !== otp.toString()) {
     return res.status(400).json({ error: 'Invalid or expired code' });
   }
-  otpStore.delete(cleaned);
+  db.prepare('DELETE FROM phone_otps WHERE phone = ?').run(cleaned);
 
   // Return a handful of suggested users to follow (contact-matched users would be filtered here
   // once phone numbers are stored on user profiles)

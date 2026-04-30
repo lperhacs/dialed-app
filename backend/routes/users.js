@@ -541,8 +541,8 @@ router.patch('/me/password', authMiddleware, (req, res) => {
   res.json({ ok: true });
 });
 
-// PATCH /api/users/me/email
-router.patch('/me/email', authMiddleware, (req, res) => {
+// PATCH /api/users/me/email — step 1: verify password + send code to new email
+router.patch('/me/email', authMiddleware, async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -550,6 +550,8 @@ router.patch('/me/email', authMiddleware, (req, res) => {
   }
 
   const bcrypt = require('bcryptjs');
+  const { v4: uuidv4 } = require('uuid');
+  const { sendVerificationEmail } = require('../utils/email');
   const db = getDb();
   const user = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.id);
 
@@ -557,10 +559,43 @@ router.patch('/me/email', authMiddleware, (req, res) => {
     return res.status(401).json({ error: 'Password is incorrect' });
   }
 
-  const taken = db.prepare('SELECT id FROM users WHERE email = ? AND id != ?').get(email.toLowerCase(), req.user.id);
+  const newEmail = email.toLowerCase();
+  const taken = db.prepare('SELECT id FROM users WHERE email = ? AND id != ?').get(newEmail, req.user.id);
   if (taken) return res.status(409).json({ error: 'Email already in use' });
 
-  db.prepare('UPDATE users SET email = ? WHERE id = ?').run(email.toLowerCase(), req.user.id);
+  // Send a verification code to the *new* email before committing the change
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+  db.prepare('DELETE FROM email_verifications WHERE user_id = ?').run(req.user.id);
+  db.prepare('INSERT INTO email_verifications (id, user_id, code, expires_at, pending_email) VALUES (?, ?, ?, ?, ?)')
+    .run(uuidv4(), req.user.id, code, expiresAt, newEmail);
+
+  try {
+    await sendVerificationEmail(newEmail, code);
+  } catch (err) {
+    console.error('[Email] email change verification send failed:', err);
+    return res.status(500).json({ error: 'Could not send verification email. Try again.' });
+  }
+
+  res.json({ ok: true, verify_required: true });
+});
+
+// POST /api/users/me/email/confirm — step 2: submit code to commit the new email
+router.post('/me/email/confirm', authMiddleware, (req, res) => {
+  const { code } = req.body;
+  if (!code) return res.status(400).json({ error: 'Verification code required' });
+
+  const db = getDb();
+  const record = db.prepare('SELECT * FROM email_verifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 1').get(req.user.id);
+  if (!record || !record.pending_email) return res.status(400).json({ error: 'No pending email change. Please restart the process.' });
+  if (new Date(record.expires_at) < new Date()) {
+    db.prepare('DELETE FROM email_verifications WHERE user_id = ?').run(req.user.id);
+    return res.status(400).json({ error: 'Code expired. Please restart the process.' });
+  }
+  if (record.code !== code.toString()) return res.status(400).json({ error: 'Invalid code' });
+
+  db.prepare('UPDATE users SET email = ?, email_verified = 1 WHERE id = ?').run(record.pending_email, req.user.id);
+  db.prepare('DELETE FROM email_verifications WHERE user_id = ?').run(req.user.id);
   res.json({ ok: true });
 });
 

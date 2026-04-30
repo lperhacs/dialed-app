@@ -39,14 +39,14 @@ async function runMonthlyHabitReminders() {
 
     if (periodCount >= target) continue; // already done for the month
 
-    // Dedup: only one reminder per habit per calendar month
+    // Dedup: only one reminder per habit per calendar month, keyed by habit_id
     const alreadySent = db.prepare(`
       SELECT 1 FROM notifications
       WHERE user_id = ?
         AND type = 'reminder'
-        AND message LIKE ?
+        AND reference_id = ?
         AND strftime('%Y-%m', created_at) = ?
-    `).get(habit.user_id, `%${habit.name}%`, currentPeriod);
+    `).get(habit.user_id, habit.id, currentPeriod);
 
     if (alreadySent) continue;
 
@@ -61,9 +61,9 @@ async function runMonthlyHabitReminders() {
 
     // In-app notification
     db.prepare(`
-      INSERT INTO notifications (id, user_id, type, message)
-      VALUES (?, ?, 'reminder', ?)
-    `).run(uuidv4(), habit.user_id, msg);
+      INSERT INTO notifications (id, user_id, type, reference_id, message)
+      VALUES (?, ?, 'reminder', ?, ?)
+    `).run(uuidv4(), habit.user_id, habit.id, msg);
 
     sent++;
   }
