@@ -564,20 +564,29 @@ export default function HabitsScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>My Habits</Text>
-        <TouchableOpacity
-          style={styles.addBtn}
-          onPress={() => {
-            if (!isPro && habits.length >= FREE_HABIT_LIMIT) {
-              navigation.navigate('Paywall', { source: 'habit_limit' });
-              return;
-            }
-            setEditHabit(null);
-            setShowForm(true);
-          }}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.addBtnText}>+ New</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Analytics')}
+            hitSlop={10}
+            style={styles.analyticsBtn}
+          >
+            <Ionicons name="bar-chart-outline" size={18} color={colors.textMuted} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.addBtn}
+            onPress={() => {
+              if (!isPro && habits.length >= FREE_HABIT_LIMIT) {
+                navigation.navigate('Paywall', { source: 'habit_limit' });
+                return;
+              }
+              setEditHabit(null);
+              setShowForm(true);
+            }}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.addBtnText}>+ New</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {loading ? (
@@ -653,6 +662,11 @@ function makeStyles(colors) {
       borderBottomWidth: 1, borderBottomColor: colors.borderSubtle,
     },
     headerTitle: { fontSize: 20, fontWeight: '700', color: colors.text, letterSpacing: -0.3 },
+    analyticsBtn: {
+      width: 32, height: 32, borderRadius: radius.sm,
+      borderWidth: 1, borderColor: colors.borderSubtle,
+      justifyContent: 'center', alignItems: 'center',
+    },
     addBtn: {
       backgroundColor: colors.accent,
       borderRadius: radius.sm,

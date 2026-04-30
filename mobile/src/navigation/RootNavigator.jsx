@@ -21,6 +21,7 @@ import SettingsScreen from '../screens/SettingsScreen';
 import FollowListScreen from '../screens/FollowListScreen';
 import EmailVerificationScreen from '../screens/EmailVerificationScreen';
 import PaywallScreen from '../screens/PaywallScreen';
+import AnalyticsScreen from '../screens/AnalyticsScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -143,6 +144,11 @@ export default function RootNavigator() {
             name="Paywall"
             component={PaywallScreen}
             options={{ presentation: 'modal', headerShown: false }}
+          />
+          <Stack.Screen
+            name="Analytics"
+            component={AnalyticsScreen}
+            options={{ headerShown: false }}
           />
         </>
       )}
