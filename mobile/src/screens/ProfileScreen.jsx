@@ -237,7 +237,11 @@ export default function ProfileScreen({ route, routeUsername, isOwn }) {
               <Text style={styles.actionBtnText}>Message</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.actionBtnIcon, buddyStatus === 'active' && { borderColor: colors.accent }]}
+              style={[
+                styles.actionBtn,
+                buddyStatus === 'active' && { borderColor: colors.accent },
+                buddyStatus === 'pending' && { opacity: 0.6 },
+              ]}
               disabled={buddyLoading || buddyStatus === 'pending' || buddyStatus === 'active'}
               onPress={async () => {
                 setBuddyLoading(true);
@@ -254,9 +258,13 @@ export default function ProfileScreen({ route, routeUsername, isOwn }) {
             >
               <Ionicons
                 name={buddyStatus === 'active' ? 'people' : 'people-outline'}
-                size={18}
-                color={buddyStatus === 'active' ? colors.accent : buddyStatus === 'pending' ? colors.textDim : colors.textMuted}
+                size={16}
+                color={buddyStatus === 'active' ? colors.accent : colors.textMuted}
+                style={{ marginRight: 6 }}
               />
+              <Text style={[styles.actionBtnText, buddyStatus === 'active' && { color: colors.accent }]}>
+                {buddyStatus === 'active' ? 'Buddies' : buddyStatus === 'pending' ? 'Requested' : 'Buddy up'}
+              </Text>
             </TouchableOpacity>
           </View>
         )}
