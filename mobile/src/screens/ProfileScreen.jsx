@@ -139,6 +139,8 @@ export default function ProfileScreen({ route, routeUsername, isOwn }) {
         setFollowing(true);
         setProfile(p => ({ ...p, follower_count: p.follower_count + 1 }));
       }
+      // Bust the cached profile so a refresh returns fresh is_following state
+      invalidateCache(`/users/${username}`);
     } finally {
       setFollowLoading(false);
     }
