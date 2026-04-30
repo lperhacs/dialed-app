@@ -22,6 +22,30 @@ import {
 
 const FREE_HABIT_LIMIT = 5;
 
+// Returns { canRestore, lastStreak } by inspecting the calendar for a recently broken streak.
+// "Recent" = ≤3 missed periods from the last completed one.
+function getRestoreInfo(calendar = []) {
+  if (!calendar.length) return { canRestore: false, lastStreak: 0 };
+
+  // Find how many trailing missed periods there are
+  let missedTail = 0;
+  for (let i = calendar.length - 1; i >= 0; i--) {
+    if (calendar[i].count >= calendar[i].target) break;
+    missedTail++;
+  }
+  if (missedTail === 0 || missedTail > 3) return { canRestore: false, lastStreak: 0 };
+
+  // Count the consecutive run just before the break
+  let lastStreak = 0;
+  const lastCompletedIdx = calendar.length - 1 - missedTail;
+  for (let i = lastCompletedIdx; i >= 0; i--) {
+    if (calendar[i].count >= calendar[i].target) lastStreak++;
+    else break;
+  }
+
+  return { canRestore: lastStreak > 0, lastStreak };
+}
+
 function formatTime(t) {
   if (!t) return '';
   const [h, m] = t.split(':').map(Number);
@@ -72,6 +96,34 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
               Alert.alert('Streak protected', `Your streak is safe. ${streakFreezes - 1} freeze${streakFreezes - 1 === 1 ? '' : 's'} remaining.`);
             } catch (err) {
               Alert.alert('Error', err.response?.data?.error || 'Could not use freeze.');
+            } finally {
+              setFreezing(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const { canRestore, lastStreak } = getRestoreInfo(habit.calendar);
+
+  const handleRestore = async () => {
+    Alert.alert(
+      'Restore streak?',
+      `This will bring back your ${lastStreak}-day streak on "${habit.name}" by filling in the missed ${habit.frequency === 'daily' ? 'days' : habit.frequency === 'weekly' ? 'weeks' : 'months'}. Costs 1 streak freeze (${streakFreezes} remaining).`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Restore',
+          onPress: async () => {
+            setFreezing(true);
+            try {
+              const { data } = await api.post('/pro/restore-streak', { habit_id: habit.id });
+              // Reload the habit list so calendar + streak update
+              onLog(habit.id, { streak: lastStreak, at_risk: false, total_logs: habit.total_logs + data.periods_filled, period_count: habit.period_count });
+              Alert.alert('Streak restored!', `Your ${lastStreak}-day streak is back. ${data.freezes_remaining} freeze${data.freezes_remaining === 1 ? '' : 's'} remaining.`);
+            } catch (err) {
+              Alert.alert('Error', err.response?.data?.error || 'Could not restore streak.');
             } finally {
               setFreezing(false);
             }
@@ -199,6 +251,38 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
               {habit.streak}-day streak at risk · Protect it with Pro
             </Text>
             <Ionicons name="chevron-forward" size={12} color={colors.red} />
+          </TouchableOpacity>
+        )
+      )}
+
+      {/* Broken streak restore banner */}
+      {habit.streak === 0 && canRestore && (
+        isPro ? (
+          <TouchableOpacity
+            style={[styles.riskBanner, styles.restoreBannerPro]}
+            onPress={handleRestore}
+            disabled={freezing || streakFreezes < 1}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="refresh-outline" size={14} color={colors.accent} />
+            <Text style={styles.restoreBannerTextPro}>
+              {freezing ? 'Restoring…'
+                : streakFreezes > 0
+                  ? `Restore your ${lastStreak}-day streak · 1 freeze (${streakFreezes} left)`
+                  : `${lastStreak}-day streak expired · No freezes remaining`}
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={[styles.riskBanner, styles.restoreBannerFree]}
+            onPress={() => navigation.navigate('Paywall', { source: 'streak_restore' })}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="refresh-outline" size={14} color="#a78bfa" />
+            <Text style={styles.restoreBannerTextFree}>
+              Restore your {lastStreak}-day streak with Pro
+            </Text>
+            <Ionicons name="chevron-forward" size={12} color="#a78bfa" />
           </TouchableOpacity>
         )
       )}
@@ -775,6 +859,14 @@ function makeStyles(colors) {
     },
     riskBannerTextPro: { flex: 1, fontSize: 12, fontWeight: '500', color: '#60a5fa' },
     riskBannerTextFree: { flex: 1, fontSize: 12, fontWeight: '500', color: colors.red },
+    restoreBannerPro: {
+      backgroundColor: colors.accentDim, borderColor: colors.accentDimBorder,
+    },
+    restoreBannerFree: {
+      backgroundColor: 'rgba(167,139,250,0.08)', borderColor: 'rgba(167,139,250,0.25)',
+    },
+    restoreBannerTextPro: { flex: 1, fontSize: 12, fontWeight: '500', color: colors.accent },
+    restoreBannerTextFree: { flex: 1, fontSize: 12, fontWeight: '500', color: '#a78bfa' },
 
     logBtn: { borderRadius: radius.sm, paddingVertical: 10, alignItems: 'center' },
     logBtnDisabled: { opacity: 0.6 },
