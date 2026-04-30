@@ -1,11 +1,11 @@
 # Terms of Service
 
 **Dialed App**
-Last updated: April 19, 2026
+Last updated: April 29, 2026
 
 ## 1. Acceptance of Terms
 
-By downloading, installing, or using the Dialed mobile application ("App"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree to these Terms, do not use the App.
+By downloading, installing, or using the Dialed mobile application ("App"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree, do not use the App.
 
 ---
 
@@ -48,51 +48,62 @@ You agree not to use the App to:
 
 ---
 
-## 6. Privacy
+## 6. Dialed Pro Subscription
 
-Your use of the App is also governed by our Privacy Policy, which is incorporated into these Terms by reference.
+- Dialed Pro is an optional paid subscription available on a monthly ($3.99/month) or annual ($29.99/year) basis.
+- Subscriptions are billed through the Apple App Store. Payment is charged to your Apple ID at confirmation of purchase.
+- Subscriptions automatically renew unless cancelled at least 24 hours before the end of the current period.
+- You can manage or cancel your subscription in your App Store account settings at any time.
+- No refunds are provided for partial subscription periods, except where required by applicable law.
+- Pro features (streak freezes, unlimited habits, analytics) are available only while your subscription is active.
 
 ---
 
-## 7. Intellectual Property
+## 7. Privacy and Data
+
+Your use of the App is governed by our Privacy Policy, which is incorporated into these Terms by reference. By using the App, you acknowledge that we collect usage analytics and may share anonymized, aggregate data with partners as described in the Privacy Policy.
+
+---
+
+## 8. Intellectual Property
 
 The App, including its design, features, and underlying code, is owned by Dialed and protected by intellectual property laws. You may not copy, modify, distribute, or reverse engineer any part of the App.
 
 ---
 
-## 8. Termination
+## 9. Termination
 
-We reserve the right to suspend or terminate your account at any time for violations of these Terms, or for any other reason at our discretion. You may delete your account at any time through the App settings or by contacting us.
+We reserve the right to suspend or terminate your account at any time for violations of these Terms or at our discretion. You may delete your account at any time through the App settings.
 
 ---
 
-## 9. Disclaimers
+## 10. Disclaimers
 
 THE APP IS PROVIDED "AS IS" WITHOUT WARRANTIES OF ANY KIND. WE DO NOT GUARANTEE THAT THE APP WILL BE UNINTERRUPTED, ERROR-FREE, OR FREE OF HARMFUL COMPONENTS. YOUR USE OF THE APP IS AT YOUR OWN RISK.
 
 ---
 
-## 10. Limitation of Liability
+## 11. Limitation of Liability
 
 TO THE FULLEST EXTENT PERMITTED BY LAW, DIALED SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, OR CONSEQUENTIAL DAMAGES ARISING FROM YOUR USE OF THE APP, EVEN IF WE HAVE BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
 
 ---
 
-## 11. Changes to Terms
+## 12. Changes to Terms
 
 We may update these Terms from time to time. We will notify you of significant changes through the App or by email. Continued use of the App after changes constitutes acceptance of the updated Terms.
 
 ---
 
-## 12. Governing Law
+## 13. Governing Law
 
 These Terms are governed by the laws of the State of Texas, without regard to conflict of law principles.
 
 ---
 
-## 13. Contact Us
+## 14. Contact Us
 
 If you have questions about these Terms, contact us at:
 
-**Email:** [YOUR EMAIL ADDRESS]
+**Email:** support@dialed.app
 **App:** Dialed

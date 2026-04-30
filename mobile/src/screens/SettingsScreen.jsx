@@ -729,6 +729,13 @@ export default function SettingsScreen() {
           </View>
         )}
 
+        {/* ─── Legal ────────────────────────────────────────────────────── */}
+        <SectionHeader title="Legal" />
+        <View style={styles.section}>
+          <SettingsRow label="Terms of Service" onPress={() => navigation.navigate('Legal', { doc: 'terms' })} />
+          <SettingsRow label="Privacy Policy" onPress={() => navigation.navigate('Legal', { doc: 'privacy' })} last />
+        </View>
+
         <Text style={styles.versionText}>Dialed · v1.0.0</Text>
       </ScrollView>
 

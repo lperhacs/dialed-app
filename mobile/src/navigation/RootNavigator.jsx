@@ -22,6 +22,7 @@ import FollowListScreen from '../screens/FollowListScreen';
 import EmailVerificationScreen from '../screens/EmailVerificationScreen';
 import PaywallScreen from '../screens/PaywallScreen';
 import AnalyticsScreen from '../screens/AnalyticsScreen';
+import LegalScreen from '../screens/LegalScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -149,6 +150,14 @@ export default function RootNavigator() {
             name="Analytics"
             component={AnalyticsScreen}
             options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Legal"
+            component={LegalScreen}
+            options={({ route }) => ({
+              title: route.params?.doc === 'privacy' ? 'Privacy Policy' : 'Terms of Service',
+              headerBackTitle: 'Settings',
+            })}
           />
         </>
       )}
