@@ -20,7 +20,8 @@ function awardBadges(db, userId, habitId) {
   for (const badge of earned) {
     const exists = db.prepare('SELECT 1 FROM badges WHERE user_id = ? AND badge_type = ?').get(userId, badge.type);
     if (!exists) {
-      db.prepare('INSERT OR IGNORE INTO badges (id, user_id, badge_type, habit_id) VALUES (?, ?, ?, ?)').run(uuidv4(), userId, badge.type, habitId);
+      const badgeId = uuidv4();
+      db.prepare('INSERT OR IGNORE INTO badges (id, user_id, badge_type, habit_id) VALUES (?, ?, ?, ?)').run(badgeId, userId, badge.type, habitId);
 
       const msg = `You earned the "${badge.label}" badge!`;
       db.prepare(
@@ -32,6 +33,14 @@ function awardBadges(db, userId, habitId) {
         body: msg,
         data: { type: 'badge', badgeType: badge.type },
       }, 'badges');
+
+      // Auto-post to feed if habit is public or friends-only
+      if (habit.visibility_missed !== 'private') {
+        const postContent = `Just earned the "${badge.label}" badge on my ${habit.name} habit — ${badge.desc}.`;
+        db.prepare(
+          'INSERT INTO posts (id, user_id, content, habit_id, badge_id) VALUES (?, ?, ?, ?, ?)'
+        ).run(uuidv4(), userId, postContent, habitId, badgeId);
+      }
     }
   }
 }
