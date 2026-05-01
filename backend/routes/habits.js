@@ -67,7 +67,7 @@ router.get('/', authMiddleware, (req, res) => {
   res.json(enriched);
 });
 
-const FREE_HABIT_LIMIT = 5;
+const FREE_HABIT_LIMIT = 3;
 
 // POST /api/habits
 router.post('/', authMiddleware, (req, res) => {

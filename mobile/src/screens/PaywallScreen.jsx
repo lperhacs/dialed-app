@@ -12,7 +12,7 @@ import api from '../api/client';
 import { radius, spacing } from '../theme';
 
 const FEATURES = [
-  { icon: 'infinite-outline',      label: 'Unlimited habits',         sub: 'Free plan limited to 5' },
+  { icon: 'infinite-outline',      label: 'Unlimited habits',         sub: 'Free plan limited to 3' },
   { icon: 'snow-outline',          label: '3 streak freezes/month',   sub: 'Save a streak when life happens' },
   { icon: 'bar-chart-outline',     label: 'Full habit analytics',     sub: 'Trends, completion rates, insights' },
   { icon: 'people-outline',        label: 'Up to 3 accountability buddies', sub: 'Free plan limited to 1' },
