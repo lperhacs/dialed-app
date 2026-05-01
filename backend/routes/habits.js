@@ -215,21 +215,26 @@ router.post('/:id/log', authMiddleware, (req, res) => {
   let periodCount = 0;
   const id = uuidv4();
 
-  const insertLog = db.transaction(() => {
+  let inserted = false;
+  db.exec('BEGIN IMMEDIATE');
+  try {
     const recentLogs = db.prepare(
       `SELECT logged_at FROM habit_logs WHERE habit_id = ? AND logged_at >= date('now', '${lookback}')`
     ).all(habit.id);
     periodCount = recentLogs.filter(l => getPeriodKeyTz(l.logged_at, habit.frequency, tz) === today).length;
-    if (periodCount >= target) return false; // signal already logged
-    if (loggedAtOverride) {
-      db.prepare('INSERT INTO habit_logs (id, habit_id, user_id, note, logged_at) VALUES (?, ?, ?, ?, ?)').run(id, habit.id, req.user.id, note || '', loggedAtOverride);
-    } else {
-      db.prepare('INSERT INTO habit_logs (id, habit_id, user_id, note) VALUES (?, ?, ?, ?)').run(id, habit.id, req.user.id, note || '');
+    if (periodCount < target) {
+      if (loggedAtOverride) {
+        db.prepare('INSERT INTO habit_logs (id, habit_id, user_id, note, logged_at) VALUES (?, ?, ?, ?, ?)').run(id, habit.id, req.user.id, note || '', loggedAtOverride);
+      } else {
+        db.prepare('INSERT INTO habit_logs (id, habit_id, user_id, note) VALUES (?, ?, ?, ?)').run(id, habit.id, req.user.id, note || '');
+      }
+      inserted = true;
     }
-    return true;
-  });
-
-  const inserted = insertLog();
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
   if (!inserted) {
     return res.status(400).json({ error: target > 1 ? `Goal reached! You've already logged ${target}x this period.` : 'Already logged this period' });
   }
