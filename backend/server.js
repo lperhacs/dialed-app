@@ -91,14 +91,23 @@ app.listen(PORT, () => {
   const { runChallengeStartReminders } = require('./cron/challengeReminders');
   const { runDbBackup } = require('./cron/dbBackup');
 
-  // Daily evening reminder — 19:00 UTC (3pm ET / noon PT)
-  // Nudges users who haven't logged their daily or weekly habits yet
-  cron.schedule('0 19 * * *', () => {
-    runDailyHabitReminders().catch(err =>
-      console.error('[Cron] daily-habit-reminders failed:', err)
+  // Daily morning reminder — 09:00 UTC (5am ET / 2am PT)
+  // Motivating nudge at the start of the day for unlogged habits
+  cron.schedule('0 9 * * *', () => {
+    runDailyHabitReminders('morning').catch(err =>
+      console.error('[Cron] daily-habit-reminders (morning) failed:', err)
     );
   }, { timezone: 'UTC' });
-  console.log('[Cron] daily habit reminder scheduler started (19:00 UTC)');
+  console.log('[Cron] daily habit reminder scheduler started (09:00 UTC morning)');
+
+  // Daily evening reminder — 19:00 UTC (3pm ET / noon PT)
+  // Last-chance nudge for anyone who still hasn't logged
+  cron.schedule('0 19 * * *', () => {
+    runDailyHabitReminders('evening').catch(err =>
+      console.error('[Cron] daily-habit-reminders (evening) failed:', err)
+    );
+  }, { timezone: 'UTC' });
+  console.log('[Cron] daily habit reminder scheduler started (19:00 UTC evening)');
 
   // Challenge start reminder — 10:00 UTC, fires day before a challenge begins
   cron.schedule('0 10 * * *', () => {

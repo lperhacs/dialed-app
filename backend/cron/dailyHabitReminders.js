@@ -4,14 +4,20 @@ const { getPeriodKey, calculateStreak } = require('../utils/streaks');
 const { sendPush } = require('../utils/push');
 
 /**
- * Send evening push reminders to users who haven't logged their
- * daily (and weekly) habits yet for the current period.
+ * Send push reminders to users who haven't logged their daily (and weekly)
+ * habits yet for the current period.
  *
- * Deduped by habit_id (stored in reference_id) — one reminder per habit per day.
- * Called by the node-cron scheduler in server.js at 19:00 UTC.
+ * @param {'morning'|'evening'} window - Controls message tone and dedup key.
+ *   morning  → 09:00 UTC — motivating "start your day" nudge
+ *   evening  → 19:00 UTC — "don't break your streak" last-chance nudge
+ *
+ * Each window has its own notification type (reminder_morning / reminder_evening)
+ * so both can fire in the same day without blocking each other.
  */
-async function runDailyHabitReminders() {
+async function runDailyHabitReminders(window = 'evening') {
   const db = getDb();
+  const { v4: uuidv4 } = require('uuid');
+  const notifType = `reminder_${window}`;
   const now = new Date();
   const todayKey = getPeriodKey(now, 'daily');   // e.g. "2026-04-29"
 
@@ -57,14 +63,14 @@ async function runDailyHabitReminders() {
 
     if (periodCount >= target) continue; // already done
 
-    // Dedup: one reminder per habit per calendar day, keyed by habit_id in reference_id
+    // Dedup: one reminder per window per habit per calendar day
     const alreadySent = db.prepare(`
       SELECT 1 FROM notifications
       WHERE user_id = ?
-        AND type = 'reminder'
+        AND type = ?
         AND reference_id = ?
         AND created_at >= date('now', 'start of day')
-    `).get(habit.user_id, habit.id);
+    `).get(habit.user_id, notifType, habit.id);
 
     if (alreadySent) continue;
 
@@ -77,29 +83,37 @@ async function runDailyHabitReminders() {
     const streak = calculateStreak(recentLogs, habit.frequency, target);
 
     const streakLine = streak > 0
-      ? ` You're on a ${streak}-${habit.frequency === 'weekly' ? 'week' : 'day'} streak — don't break it.`
+      ? ` You're on a ${streak}-${habit.frequency === 'weekly' ? 'week' : 'day'} streak.`
       : '';
 
-    const body = habit.frequency === 'daily'
-      ? `Log "${habit.name}" before midnight.${streakLine}`
-      : `You haven't logged "${habit.name}" yet this week.${streakLine}`;
+    let title, body;
+    if (window === 'morning') {
+      title = 'Good morning';
+      body = habit.frequency === 'daily'
+        ? `Log "${habit.name}" today.${streakLine}`
+        : `Don't forget "${habit.name}" this week.${streakLine}`;
+    } else {
+      title = 'Stay Dialed';
+      body = habit.frequency === 'daily'
+        ? `Log "${habit.name}" before midnight.${streakLine} Don't break it.`
+        : `You haven't logged "${habit.name}" yet this week.${streakLine ? streakLine + ' Don\'t break it.' : ''}`;
+    }
 
     await sendPush(
       habit.user_id,
-      { title: 'Stay Dialed', body, data: { habitId: habit.id } },
+      { title, body, data: { habitId: habit.id } },
       'reminders'
     );
 
-    const { v4: uuidv4 } = require('uuid');
     db.prepare(`
       INSERT INTO notifications (id, user_id, type, reference_id, message)
-      VALUES (?, ?, 'reminder', ?, ?)
-    `).run(uuidv4(), habit.user_id, habit.id, body);
+      VALUES (?, ?, ?, ?, ?)
+    `).run(uuidv4(), habit.user_id, notifType, habit.id, body);
 
     sent++;
   }
 
-  console.log(`[Cron] daily-habit-reminders: sent ${sent} reminders`);
+  console.log(`[Cron] daily-habit-reminders (${window}): sent ${sent} reminders`);
   return sent;
 }
 
