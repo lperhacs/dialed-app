@@ -3,7 +3,7 @@ import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   Alert, ActivityIndicator, RefreshControl,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -39,10 +39,12 @@ function formatEventDateShort(d) {
 function EventFeedCard({ event, currentUser, onDelete, onRsvpToggle }) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
+  const navigation = useNavigation();
   const [going, setGoing] = useState(event.my_status === 'going');
   const [goingCount, setGoingCount] = useState(event.going_count);
   const [loading, setLoading] = useState(false);
   const [showForward, setShowForward] = useState(false);
+  const [showSharePrompt, setShowSharePrompt] = useState(false);
   const isOwner = event.creator_id === currentUser?.id;
   const dateInfo = formatEventDateShort(event.event_date);
 
@@ -54,6 +56,7 @@ function EventFeedCard({ event, currentUser, onDelete, onRsvpToggle }) {
       setGoing(nowGoing);
       setGoingCount(c => nowGoing ? c + 1 : Math.max(0, c - 1));
       onRsvpToggle?.(event.id, nowGoing);
+      if (nowGoing) setShowSharePrompt(true);
     } catch (err) {
       Alert.alert('Error', err.response?.data?.error || 'Failed');
     } finally {
@@ -187,6 +190,35 @@ function EventFeedCard({ event, currentUser, onDelete, onRsvpToggle }) {
           </TouchableOpacity>
         </View>
       </View>
+
+      {showSharePrompt && (
+        <View style={styles.sharePrompt}>
+          <Text style={styles.sharePromptText}>Share that you're going?</Text>
+          <View style={styles.sharePromptActions}>
+            <TouchableOpacity
+              onPress={() => setShowSharePrompt(false)}
+              activeOpacity={0.7}
+              style={styles.sharePromptSkip}
+            >
+              <Text style={styles.sharePromptSkipText}>Skip</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => {
+                setShowSharePrompt(false);
+                navigation.navigate('CreatePost', {
+                  draft: `I'm going to "${event.title}" on ${formatEventDate(event.event_date)}${event.location ? ` at ${event.location}` : ''}.`,
+                  event_id: event.id,
+                });
+              }}
+              activeOpacity={0.8}
+              style={styles.sharePromptBtn}
+            >
+              <Ionicons name="arrow-up-circle" size={15} color={colors.bg} style={{ marginRight: 5 }} />
+              <Text style={styles.sharePromptBtnText}>Share to feed</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       <ForwardModal
         visible={showForward}
@@ -517,6 +549,51 @@ function makeStyles(colors) {
       color: colors.accent,
     },
     rsvpBtnTextGoing: {
+      color: colors.bg,
+    },
+
+    /* Share prompt */
+    sharePrompt: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: spacing.md,
+      paddingVertical: 10,
+      borderTopWidth: 1,
+      borderTopColor: colors.borderSubtle,
+      backgroundColor: colors.bgHover,
+    },
+    sharePromptText: {
+      fontSize: 13,
+      color: colors.textMuted,
+      fontWeight: '500',
+      flex: 1,
+    },
+    sharePromptActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    sharePromptSkip: {
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+    },
+    sharePromptSkipText: {
+      fontSize: 13,
+      color: colors.textDim,
+      fontWeight: '500',
+    },
+    sharePromptBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.accent,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: radius.sm,
+    },
+    sharePromptBtnText: {
+      fontSize: 13,
+      fontWeight: '600',
       color: colors.bg,
     },
 
