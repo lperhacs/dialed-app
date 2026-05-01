@@ -5,22 +5,26 @@ const { authMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
 
+// EVENT_SELECT uses 3 positional ? params, all for userId (in order):
+//   1. my_status subquery
+//   2. friends_going_names follower_id
+//   3. friends_going_count follower_id
 const EVENT_SELECT = `
   SELECT e.*,
     u.username, u.display_name, u.avatar_url,
     c.name as club_name,
     (SELECT COUNT(*) FROM event_attendees WHERE event_id = e.id AND status = 'going') as going_count,
-    (SELECT status FROM event_attendees WHERE event_id = e.id AND user_id = :userId) as my_status,
+    (SELECT status FROM event_attendees WHERE event_id = e.id AND user_id = ?) as my_status,
     (SELECT GROUP_CONCAT(u2.display_name, '||')
      FROM event_attendees ea2
      JOIN users u2 ON u2.id = ea2.user_id
-     JOIN follows f ON f.following_id = ea2.user_id AND f.follower_id = :userId
+     JOIN follows f ON f.following_id = ea2.user_id AND f.follower_id = ?
      WHERE ea2.event_id = e.id AND ea2.status = 'going' AND u2.rsvp_private = 0
      LIMIT 3) as friends_going_names,
     (SELECT COUNT(*)
      FROM event_attendees ea2
      JOIN users u2 ON u2.id = ea2.user_id
-     JOIN follows f ON f.following_id = ea2.user_id AND f.follower_id = :userId
+     JOIN follows f ON f.following_id = ea2.user_id AND f.follower_id = ?
      WHERE ea2.event_id = e.id AND ea2.status = 'going' AND u2.rsvp_private = 0) as friends_going_count
   FROM events e
   JOIN users u ON u.id = e.creator_id
@@ -35,9 +39,9 @@ router.get('/search', authMiddleware, (req, res) => {
   const term = `%${q.trim()}%`;
   const rows = db.prepare(`
     ${EVENT_SELECT}
-    WHERE (e.title LIKE :term OR e.description LIKE :term OR e.location LIKE :term)
+    WHERE (e.title LIKE ? OR e.description LIKE ? OR e.location LIKE ?)
     ORDER BY e.event_date ASC LIMIT 20
-  `).all({ userId: req.user.id, term });
+  `).all(req.user.id, req.user.id, req.user.id, term, term, term);
   res.json(rows);
 });
 
@@ -45,7 +49,7 @@ router.get('/search', authMiddleware, (req, res) => {
 router.get('/', authMiddleware, (req, res) => {
   const db = getDb();
   const rows = db.prepare(`${EVENT_SELECT} WHERE e.event_date >= date('now') ORDER BY e.event_date ASC`)
-    .all({ userId: req.user.id });
+    .all(req.user.id, req.user.id, req.user.id);
   res.json(rows);
 });
 
@@ -56,7 +60,7 @@ router.get('/discover', authMiddleware, (req, res) => {
 
   // Get all upcoming events with base fields
   const events = db.prepare(`${EVENT_SELECT} WHERE e.event_date >= date('now') ORDER BY e.event_date ASC`)
-    .all({ userId });
+    .all(userId, userId, userId);
 
   // Habit keywords for this user
   const habits = db.prepare("SELECT name FROM habits WHERE user_id = ? AND is_active = 1").all(userId);
@@ -88,18 +92,18 @@ router.get('/discover', authMiddleware, (req, res) => {
 router.get('/mine', authMiddleware, (req, res) => {
   const db = getDb();
   const rows = db.prepare(`${EVENT_SELECT}
-    JOIN event_attendees ea ON ea.event_id = e.id AND ea.user_id = :userId AND ea.status = 'going'
+    JOIN event_attendees ea ON ea.event_id = e.id AND ea.user_id = ? AND ea.status = 'going'
     WHERE e.event_date >= date('now')
     ORDER BY e.event_date ASC`)
-    .all({ userId: req.user.id });
+    .all(req.user.id, req.user.id, req.user.id, req.user.id);
   res.json(rows);
 });
 
 // GET /api/events/club/:clubId — events for a specific club
 router.get('/club/:clubId', authMiddleware, (req, res) => {
   const db = getDb();
-  const rows = db.prepare(`${EVENT_SELECT} WHERE e.club_id = :clubId AND e.event_date >= date('now') ORDER BY e.event_date ASC`)
-    .all({ userId: req.user.id, clubId: req.params.clubId });
+  const rows = db.prepare(`${EVENT_SELECT} WHERE e.club_id = ? AND e.event_date >= date('now') ORDER BY e.event_date ASC`)
+    .all(req.user.id, req.user.id, req.user.id, req.params.clubId);
   res.json(rows);
 });
 
@@ -129,7 +133,7 @@ router.post('/', authMiddleware, (req, res) => {
   const recent = db.prepare(
     `SELECT id FROM events WHERE creator_id = ? AND title = ? AND event_date = ? AND created_at >= datetime('now', '-10 seconds')`
   ).get(req.user.id, title.trim(), event_date);
-  if (recent) return res.status(201).json(db.prepare(`${EVENT_SELECT} WHERE e.id = :id`).get({ userId: req.user.id, id: recent.id }));
+  if (recent) return res.status(201).json(db.prepare(`${EVENT_SELECT} WHERE e.id = ?`).get(req.user.id, req.user.id, req.user.id, recent.id));
 
   const id = uuidv4();
   db.prepare(`
@@ -155,7 +159,7 @@ router.post('/', authMiddleware, (req, res) => {
     }
   }
 
-  const event = db.prepare(`${EVENT_SELECT} WHERE e.id = :id`).get({ userId: req.user.id, id });
+  const event = db.prepare(`${EVENT_SELECT} WHERE e.id = ?`).get(req.user.id, req.user.id, req.user.id, id);
   res.status(201).json(event);
 });
 

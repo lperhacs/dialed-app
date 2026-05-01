@@ -222,7 +222,7 @@ router.get('/for-you', optionalAuth, (req, res) => {
   const myStreakByFreq = {};
   for (const habit of userHabits) {
     const logs = db.prepare('SELECT logged_at FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(habit.id);
-    const streak = calculateStreak(logs, habit.frequency);
+    const streak = calculateStreak(logs, habit.frequency, habit.target_count || 1);
     if (!myStreakByFreq[habit.frequency] || streak > myStreakByFreq[habit.frequency]) {
       myStreakByFreq[habit.frequency] = streak;
     }

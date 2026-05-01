@@ -135,7 +135,7 @@ function MessageBubble({ msg, isMe, showSender }) {
 export default function ConversationScreen({ route }) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
-  const { conversationId, other, groupName, isGroup, participantCount } = route.params;
+  const { conversationId, other, groupName, isGroup, participantCount } = route.params ?? {};
   const { user } = useAuth();
   const { refresh: refreshBadges } = useBadges();
   const insets = useSafeAreaInsets();

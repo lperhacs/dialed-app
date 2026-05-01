@@ -17,7 +17,7 @@ function authMiddleware(req, res, next) {
 
   const token = authHeader.split(' ')[1];
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
     // Verify account is not deactivated
     const db = getDb();
     const account = db.prepare('SELECT is_deactivated FROM users WHERE id = ?').get(decoded.id);
@@ -36,7 +36,7 @@ function optionalAuth(req, res, next) {
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.split(' ')[1];
     try {
-      const decoded = jwt.verify(token, JWT_SECRET);
+      const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
       const db = getDb();
       const account = db.prepare('SELECT is_deactivated FROM users WHERE id = ?').get(decoded.id);
       if (account && !account.is_deactivated) {
