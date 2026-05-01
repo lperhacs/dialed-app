@@ -242,7 +242,6 @@ router.post('/verify-otp', authMiddleware, (req, res) => {
 
   // Return a handful of suggested users to follow (contact-matched users would be filtered here
   // once phone numbers are stored on user profiles)
-  const db = getDb();
   const suggested = db.prepare(`
     SELECT id, username, display_name, avatar_url FROM users
     WHERE id != ?
