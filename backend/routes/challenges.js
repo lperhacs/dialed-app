@@ -13,13 +13,13 @@ router.get('/search', optionalAuth, (req, res) => {
   if (!q?.trim()) return res.json([]);
   if (q.trim().length > 100) return res.json([]);
   const db = getDb();
-  const term = `%${q.trim()}%`;
+  const term = `%${q.trim().replace(/[%_\\]/g, '\\$&')}%`;
   const userId = req.user?.id ?? null;
   const rows = db.prepare(
     `SELECT c.*, u.username, u.display_name,
        (SELECT COUNT(*) FROM challenge_members WHERE challenge_id = c.id AND status = 'active') as member_count
      FROM challenges c JOIN users u ON u.id = c.creator_id
-     WHERE (c.name LIKE ? OR c.description LIKE ?)
+     WHERE (c.name LIKE ? ESCAPE '\\' OR c.description LIKE ? ESCAPE '\\')
        AND (c.visibility = 'public'
             OR c.creator_id = ?
             OR EXISTS (SELECT 1 FROM challenge_members WHERE challenge_id = c.id AND user_id = ? AND status = 'active'))

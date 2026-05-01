@@ -5,19 +5,51 @@ const { calculateStreak } = require('../utils/streaks');
 
 const router = express.Router();
 
-function getUserStreakData(db, userId) {
-  const habits = db.prepare('SELECT * FROM habits WHERE user_id = ? AND is_active = 1').all(userId);
-  let maxStreak = 0;
-  let totalLogs = 0;
+/**
+ * Bulk-fetch streak data for a list of userIds.
+ * Uses 2 queries total instead of 2×N queries.
+ * Returns a Map: userId → { max_streak, total_logs, habit_count }
+ */
+function getBulkStreakData(db, userIds) {
+  if (!userIds.length) return new Map();
 
-  for (const h of habits) {
-    const logs = db.prepare('SELECT logged_at FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(h.id);
-    const streak = calculateStreak(logs, h.frequency);
-    if (streak > maxStreak) maxStreak = streak;
-    totalLogs += logs.length;
+  const placeholders = userIds.map(() => '?').join(',');
+
+  const habits = db.prepare(
+    `SELECT id, user_id, frequency, target_count FROM habits WHERE user_id IN (${placeholders}) AND is_active = 1`
+  ).all(...userIds);
+
+  if (!habits.length) {
+    return new Map(userIds.map(id => [id, { max_streak: 0, total_logs: 0, habit_count: 0 }]));
   }
 
-  return { max_streak: maxStreak, total_logs: totalLogs, habit_count: habits.length };
+  const habitIds = habits.map(h => h.id);
+  const habitPlaceholders = habitIds.map(() => '?').join(',');
+
+  const logs = db.prepare(
+    `SELECT habit_id, logged_at FROM habit_logs WHERE habit_id IN (${habitPlaceholders}) ORDER BY logged_at DESC`
+  ).all(...habitIds);
+
+  // Group logs by habit_id
+  const logsByHabit = new Map();
+  for (const log of logs) {
+    if (!logsByHabit.has(log.habit_id)) logsByHabit.set(log.habit_id, []);
+    logsByHabit.get(log.habit_id).push(log);
+  }
+
+  // Aggregate per user
+  const result = new Map(userIds.map(id => [id, { max_streak: 0, total_logs: 0, habit_count: 0 }]));
+
+  for (const habit of habits) {
+    const habitLogs = logsByHabit.get(habit.id) || [];
+    const streak = calculateStreak(habitLogs, habit.frequency, habit.target_count || 1);
+    const entry = result.get(habit.user_id);
+    if (streak > entry.max_streak) entry.max_streak = streak;
+    entry.total_logs += habitLogs.length;
+    entry.habit_count += 1;
+  }
+
+  return result;
 }
 
 // GET /api/leaderboard/global
@@ -27,8 +59,10 @@ router.get('/global', authMiddleware, (req, res) => {
     'SELECT id, username, display_name, avatar_url FROM users LIMIT 100'
   ).all();
 
+  const streakMap = getBulkStreakData(db, users.map(u => u.id));
+
   const ranked = users
-    .map(u => ({ ...u, ...getUserStreakData(db, u.id) }))
+    .map(u => ({ ...u, ...streakMap.get(u.id) }))
     .sort((a, b) => b.max_streak - a.max_streak || b.total_logs - a.total_logs)
     .slice(0, 50)
     .map((u, i) => ({ ...u, rank: i + 1 }));
@@ -45,12 +79,13 @@ router.get('/friends', authMiddleware, (req, res) => {
      WHERE f.follower_id = ?`
   ).all(req.user.id);
 
-  // Include self
   const self = db.prepare('SELECT id, username, display_name, avatar_url FROM users WHERE id = ?').get(req.user.id);
   const all = [self, ...friends];
 
+  const streakMap = getBulkStreakData(db, all.map(u => u.id));
+
   const ranked = all
-    .map(u => ({ ...u, ...getUserStreakData(db, u.id) }))
+    .map(u => ({ ...u, ...streakMap.get(u.id) }))
     .sort((a, b) => b.max_streak - a.max_streak || b.total_logs - a.total_logs)
     .map((u, i) => ({ ...u, rank: i + 1 }));
 
@@ -74,19 +109,36 @@ router.get('/challenges/:id', authMiddleware, (req, res) => {
      WHERE cm.challenge_id = ?`
   ).all(req.params.id);
 
+  if (!members.length) return res.json({ challenge, members: [] });
+
+  // Fetch all linked habits and logs in bulk
+  const memberIds = members.map(m => m.id);
+  const placeholders = memberIds.map(() => '?').join(',');
+  const links = db.prepare(
+    `SELECT user_id, habit_id FROM challenge_habit_links WHERE challenge_id = ? AND user_id IN (${placeholders})`
+  ).all(req.params.id, ...memberIds);
+
+  const linkMap = new Map(links.map(l => [l.user_id, l.habit_id]));
+  const habitIds = links.map(l => l.habit_id);
+
+  let logsByHabit = new Map();
+  if (habitIds.length) {
+    const habitPlaceholders = habitIds.map(() => '?').join(',');
+    const logs = db.prepare(
+      `SELECT habit_id, logged_at FROM habit_logs WHERE habit_id IN (${habitPlaceholders}) ORDER BY logged_at DESC`
+    ).all(...habitIds);
+    for (const log of logs) {
+      if (!logsByHabit.has(log.habit_id)) logsByHabit.set(log.habit_id, []);
+      logsByHabit.get(log.habit_id).push(log);
+    }
+  }
+
   const ranked = members
     .map(m => {
-      const link = db.prepare(
-        'SELECT habit_id FROM challenge_habit_links WHERE challenge_id = ? AND user_id = ?'
-      ).get(req.params.id, m.id);
-
-      let streak = 0, total_logs = 0;
-      if (link) {
-        const logs = db.prepare('SELECT logged_at FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(link.habit_id);
-        streak = calculateStreak(logs, challenge.frequency);
-        total_logs = logs.length;
-      }
-      return { ...m, streak, total_logs };
+      const habitId = linkMap.get(m.id);
+      const habitLogs = habitId ? (logsByHabit.get(habitId) || []) : [];
+      const streak = habitId ? calculateStreak(habitLogs, challenge.frequency) : 0;
+      return { ...m, streak, total_logs: habitLogs.length };
     })
     .sort((a, b) => b.streak - a.streak || b.total_logs - a.total_logs)
     .map((m, i) => ({ ...m, rank: i + 1 }));
@@ -97,7 +149,6 @@ router.get('/challenges/:id', authMiddleware, (req, res) => {
 // GET /api/leaderboard/challenges  — list all challenges with leaderboard summary
 router.get('/challenges', authMiddleware, (req, res) => {
   const db = getDb();
-  // Challenges the user is part of
   const challenges = db.prepare(
     `SELECT c.*, u.username, u.display_name,
        (SELECT COUNT(*) FROM challenge_members WHERE challenge_id = c.id) as member_count

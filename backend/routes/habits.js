@@ -93,6 +93,12 @@ router.post('/', authMiddleware, (req, res) => {
     return res.status(400).json({ error: 'Invalid visibility' });
   }
   const maxTarget = frequency === 'weekly' ? 7 : frequency === 'monthly' ? 28 : 1;
+  if (frequency !== 'daily' && target_count !== undefined) {
+    const parsed = parseInt(target_count);
+    if (isNaN(parsed) || parsed < 1 || parsed > maxTarget) {
+      return res.status(400).json({ error: `target_count must be between 1 and ${maxTarget} for ${frequency} habits` });
+    }
+  }
   const resolvedTarget = frequency === 'daily' ? 1 : Math.min(Math.max(parseInt(target_count) || 1, 1), maxTarget);
 
   const id = uuidv4();
@@ -137,6 +143,12 @@ router.put('/:id', authMiddleware, (req, res) => {
 
   const resolvedFreq = frequency || habit.frequency;
   const maxTarget = resolvedFreq === 'weekly' ? 7 : resolvedFreq === 'monthly' ? 28 : 1;
+  if (target_count !== undefined && resolvedFreq !== 'daily') {
+    const parsed = parseInt(target_count);
+    if (isNaN(parsed) || parsed < 1 || parsed > maxTarget) {
+      return res.status(400).json({ error: `target_count must be between 1 and ${maxTarget} for ${resolvedFreq} habits` });
+    }
+  }
   const resolvedTarget = target_count !== undefined
     ? (resolvedFreq === 'daily' ? 1 : Math.min(Math.max(parseInt(target_count) || 1, 1), maxTarget))
     : null;

@@ -72,7 +72,7 @@ export default function RegisterScreen({ navigation }) {
             { field: 'display_name', label: 'Display name', placeholder: 'Alex Rivera', auto: 'words' },
             { field: 'username',     label: 'Username',     placeholder: 'alex_rn',       auto: 'none' },
             { field: 'email',        label: 'Email',        placeholder: 'alex@example.com', auto: 'none', keyboard: 'email-address' },
-            { field: 'password',     label: 'Password',     placeholder: 'At least 6 characters', secure: true },
+            { field: 'password',     label: 'Password',     placeholder: 'At least 8 characters', secure: true },
           ].map(({ field, label, placeholder, auto, keyboard, secure }) => (
             <View key={field} style={styles.field}>
               <Text style={styles.label}>{label}</Text>

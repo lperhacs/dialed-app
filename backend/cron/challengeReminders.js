@@ -17,7 +17,7 @@ async function runChallengeStartReminders() {
 
   const challenges = db.prepare(`
     SELECT id, name FROM challenges
-    WHERE start_date = ? AND is_active = 1
+    WHERE start_date = ?
   `).all(tomorrowStr);
 
   let sent = 0;
