@@ -73,7 +73,6 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
   const [periodCount, setPeriodCount] = useState(habit.period_count ?? (habit.logged_this_period ? target : 0));
   const [calDays, setCalDays] = useState(defaultDays);
   const [milestone, setMilestone] = useState(null);
-  const [showPostPrompt, setShowPostPrompt] = useState(false);
   const [loggedDay, setLoggedDay] = useState(null);
 
   const goalMet = periodCount >= target;
@@ -135,6 +134,20 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
     );
   };
 
+  const isPublicHabit = !habit.visibility_missed || habit.visibility_missed !== 'private';
+
+  const navigateToPost = (day, ms) => {
+    navigation.navigate('CreatePost', {
+      draft: ms
+        ? `Day ${ms.day} of ${habit.name} - ${ms.label}!`
+        : day ? `Day ${day} of ${habit.name}.` : `Logged ${habit.name} today.`,
+      habit_id: habit.id,
+      habit_day: ms?.day ?? day,
+      habit_name: habit.name,
+      habit_color: habit.color,
+    });
+  };
+
   const handleLog = async () => {
     setLogging(true);
     setPeriodCount(c => c + 1); // optimistic
@@ -144,9 +157,14 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
       setPeriodCount(data.period_count ?? periodCount + 1);
       if (data.milestone) {
         setMilestone(data.milestone);
-      } else {
-        setLoggedDay(data.day != null ? Math.max(1, data.day) : null);
-        setShowPostPrompt(true);
+        // For private habits, show milestone but don't force a post
+        if (!isPublicHabit) {
+          setLoggedDay(data.milestone.day);
+        }
+      } else if (isPublicHabit) {
+        // Public / friends — go straight to CreatePost, no skip
+        const day = data.streak ?? null;
+        navigateToPost(day, null);
       }
     } catch (err) {
       setPeriodCount(c => Math.max(0, c - 1)); // revert
@@ -289,38 +307,6 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
         )
       )}
 
-      {/* Post-to-feed prompt */}
-      <Modal visible={showPostPrompt} transparent animationType="fade" onRequestClose={() => setShowPostPrompt(false)}>
-        <View style={styles.milestoneOverlay}>
-          <View style={styles.milestoneCard}>
-            <Text style={[styles.milestoneDay, { color: habit.color }]}>
-              {loggedDay ? `Day ${loggedDay}` : 'Logged'}
-            </Text>
-            <Text style={styles.milestoneTitle}>Share to your feed?</Text>
-            <Text style={styles.milestoneHabit}>{habit.name}</Text>
-            <TouchableOpacity
-              style={[styles.milestoneShareBtn, { backgroundColor: habit.color }]}
-              onPress={() => {
-                setShowPostPrompt(false);
-                navigation.navigate('CreatePost', {
-                  draft: loggedDay ? `Day ${loggedDay} of ${habit.name}.` : `Logged ${habit.name} today.`,
-                  habit_id: habit.id,
-                  habit_day: loggedDay,
-                  habit_name: habit.name,
-                  habit_color: habit.color,
-                });
-              }}
-              activeOpacity={0.85}
-            >
-              <Text style={[styles.milestoneBtnText, { color: colors.bg }]}>Share to Feed</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setShowPostPrompt(false)} style={{ marginTop: 12 }}>
-              <Text style={{ color: colors.textMuted, fontSize: 14 }}>Skip</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
       {/* Milestone celebration modal */}
       <Modal visible={!!milestone} transparent animationType="fade" onRequestClose={() => setMilestone(null)}>
         <View style={styles.milestoneOverlay}>
@@ -334,21 +320,15 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
             <TouchableOpacity
               style={[styles.milestoneShareBtn, { backgroundColor: habit.color }]}
               onPress={() => {
+                const ms = milestone;
                 setMilestone(null);
-                navigation.navigate('CreatePost', {
-                  draft: `Day ${milestone?.day} of ${habit.name} - ${milestone?.label}!`,
-                  habit_id: habit.id,
-                  habit_day: milestone?.day,
-                  habit_name: habit.name,
-                  habit_color: habit.color,
-                });
+                if (isPublicHabit) navigateToPost(ms?.day, ms);
               }}
               activeOpacity={0.85}
             >
-              <Text style={[styles.milestoneBtnText, { color: colors.bg }]}>Share to Feed</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setMilestone(null)} style={{ marginTop: 12 }}>
-              <Text style={{ color: colors.textMuted, fontSize: 14 }}>Maybe later</Text>
+              <Text style={[styles.milestoneBtnText, { color: colors.bg }]}>
+                {isPublicHabit ? 'Share to Feed' : 'Done'}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
