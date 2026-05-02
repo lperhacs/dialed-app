@@ -261,6 +261,28 @@ router.post('/:id/log', authMiddleware, (req, res) => {
   res.status(201).json({ logged: true, streak, at_risk, total_logs: logs.length, period_count: newPeriodCount, target_count: target, goal_met: goalJustMet, milestone });
 });
 
+// DELETE /api/habits/:id/log — undo the most recent log for the current period
+router.delete('/:id/log', authMiddleware, (req, res) => {
+  const db = getDb();
+  const habit = db.prepare('SELECT * FROM habits WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
+  if (!habit) return res.status(404).json({ error: 'Habit not found' });
+
+  const tz = db.prepare('SELECT timezone FROM users WHERE id = ?').get(req.user.id)?.timezone || 'UTC';
+  const currentPeriod = getPeriodKeyTz(new Date(), habit.frequency, tz);
+
+  // Find the most recent log in the current period
+  const lookback = habit.frequency === 'daily' ? '-2 days' : habit.frequency === 'weekly' ? '-8 days' : '-32 days';
+  const recentLogs = db.prepare(
+    `SELECT id, logged_at FROM habit_logs WHERE habit_id = ? AND logged_at >= datetime('now', ?) ORDER BY logged_at DESC`
+  ).all(habit.id, lookback);
+  const todayLog = recentLogs.find(l => getPeriodKeyTz(l.logged_at, habit.frequency, tz) === currentPeriod);
+
+  if (!todayLog) return res.status(404).json({ error: 'No log found for current period' });
+
+  db.prepare('DELETE FROM habit_logs WHERE id = ?').run(todayLog.id);
+  res.json({ deleted: true });
+});
+
 // GET /api/habits/:id/logs
 router.get('/:id/logs', authMiddleware, (req, res) => {
   const db = getDb();

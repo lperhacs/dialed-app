@@ -145,6 +145,7 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
       habit_day: ms?.day ?? day,
       habit_name: habit.name,
       habit_color: habit.color,
+      required: true,
     });
   };
 

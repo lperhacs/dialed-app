@@ -31,6 +31,7 @@ export default function CreatePostScreen() {
   const [showHabits, setShowHabits] = useState(false);
   const [showVideoInput, setShowVideoInput] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const required = !!route.params?.required;
 
   useEffect(() => {
     api.get('/habits').then(r => setHabits(r.data.filter(h => h.is_active))).catch(() => {});
@@ -94,8 +95,31 @@ export default function CreatePostScreen() {
     >
       {/* Modal header */}
       <View style={styles.modalHeader}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.cancelBtn}>
-          <Text style={styles.cancelText}>Cancel</Text>
+        <TouchableOpacity
+          onPress={() => {
+            if (required) {
+              Alert.alert(
+                'Undo your log?',
+                'Your habit log will be removed if you leave without posting.',
+                [
+                  { text: 'Keep editing', style: 'cancel' },
+                  {
+                    text: 'Undo log',
+                    style: 'destructive',
+                    onPress: async () => {
+                      try { await api.delete(`/habits/${route.params.habit_id}/log`); } catch {}
+                      navigation.goBack();
+                    },
+                  },
+                ]
+              );
+            } else {
+              navigation.goBack();
+            }
+          }}
+          style={styles.cancelBtn}
+        >
+          <Text style={styles.cancelText}>{required ? 'Undo Log' : 'Cancel'}</Text>
         </TouchableOpacity>
         <Text style={styles.modalTitle}>New Post</Text>
         <TouchableOpacity
