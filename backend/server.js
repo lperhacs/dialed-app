@@ -58,6 +58,14 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// Security headers
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  next();
+});
+
 // Initialize DB on startup
 require('./database/db').getDb();
 
@@ -82,10 +90,13 @@ app.use('/api/pro',           writeOnly(writeLimiter),  require('./routes/pro'))
 // Health check
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', app: 'Dialed' }));
 
-// Global error handler
+// Global error handler — never leak internal details in production
 app.use((err, _req, res, _next) => {
   console.error(err);
-  res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
+  const isProd = process.env.NODE_ENV === 'production';
+  res.status(err.status || 500).json({
+    error: isProd && !err.status ? 'Internal server error' : (err.message || 'Internal server error'),
+  });
 });
 
 app.listen(PORT, () => {

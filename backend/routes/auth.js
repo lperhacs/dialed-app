@@ -228,7 +228,7 @@ router.post('/verify-otp', authMiddleware, (req, res) => {
   }
 
   const newAttempts = record.attempts + 1;
-  if (newAttempts > OTP_MAX_ATTEMPTS) {
+  if (newAttempts >= OTP_MAX_ATTEMPTS) {
     db.prepare('DELETE FROM phone_otps WHERE phone = ?').run(cleaned);
     return res.status(429).json({ error: 'Too many attempts. Please request a new code.' });
   }

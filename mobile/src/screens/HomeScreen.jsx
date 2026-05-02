@@ -37,8 +37,8 @@ function BuddyCard({ buddyData, onNudge, onPress }) {
   const { buddy } = buddyData;
   if (!buddy) return null;
 
-  const totalHabits = buddy.habits.length;
-  const loggedCount = buddy.habits.filter(h => h.logged_today > 0).length;
+  const totalHabits = buddy.habits?.length ?? 0;
+  const loggedCount = buddy.habits?.filter(h => h.logged_today > 0).length ?? 0;
   const allLogged = loggedCount === totalHabits && totalHabits > 0;
 
   return (

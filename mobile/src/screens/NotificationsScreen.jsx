@@ -29,7 +29,7 @@ const TYPE_ICONS = {
 };
 
 function buildParts(n) {
-  const from = n.from_display_name || n.from_username;
+  const from = n.from_display_name || n.from_username || 'Someone';
   switch (n.type) {
     case 'follow':         return { name: from, action: 'started following you' };
     case 'like':           return { name: from, action: 'liked your post' };
@@ -47,7 +47,8 @@ function resolvePostImage(path) {
   return `${API_BASE_URL}${path}`;
 }
 
-function groupNotifications(notifications) {
+function groupNotifications(notifications = []) {
+  if (!Array.isArray(notifications)) return [];
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const weekStart = new Date(todayStart);

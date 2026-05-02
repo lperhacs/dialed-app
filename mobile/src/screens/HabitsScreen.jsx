@@ -20,7 +20,7 @@ import {
   syncAllHabitReminders,
 } from '../utils/notifications';
 
-const FREE_HABIT_LIMIT = 5;
+const FREE_HABIT_LIMIT = 3;
 
 // Returns { canRestore, lastStreak } by inspecting the calendar for a recently broken streak.
 // "Recent" = ≤3 missed periods from the last completed one.
@@ -82,12 +82,12 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
 
   const handleFreeze = async () => {
     if (freezing) return;
-    setFreezing(true);
+    setFreezing(true); // set before Alert to block double-tap
     Alert.alert(
       'Use a streak freeze?',
       `This will protect your ${habit.streak}-day streak on "${habit.name}". You have ${streakFreezes} freeze${streakFreezes === 1 ? '' : 's'} remaining.`,
       [
-        { text: 'Cancel', style: 'cancel', onPress: () => setFreezing(false) },
+        { text: 'Cancel', style: 'cancel', onPress: () => setFreezing(false) }, // reset on dismiss
         {
           text: 'Use freeze',
           onPress: async () => {

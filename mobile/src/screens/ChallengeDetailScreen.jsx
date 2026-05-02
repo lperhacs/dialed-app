@@ -19,7 +19,9 @@ import { useTheme } from '../context/ThemeContext';
 
 function formatDate(d) {
   if (!d) return '∞';
-  return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const parsed = new Date(d);
+  if (isNaN(parsed.getTime())) return '∞';
+  return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 function formatTime(iso) {
