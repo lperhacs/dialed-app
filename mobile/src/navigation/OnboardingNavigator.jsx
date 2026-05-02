@@ -5,6 +5,7 @@ import { useTheme } from '../context/ThemeContext';
 import OnboardingHook from '../screens/onboarding/OnboardingHook';
 import OnboardingDeclaration from '../screens/onboarding/OnboardingDeclaration';
 import OnboardingFindPeople from '../screens/onboarding/OnboardingFindPeople';
+import OnboardingFeatures from '../screens/onboarding/OnboardingFeatures';
 import OnboardingInvite from '../screens/onboarding/OnboardingInvite';
 import OnboardingWelcome from '../screens/onboarding/OnboardingWelcome';
 
@@ -25,6 +26,7 @@ export default function OnboardingNavigator({ onDone }) {
       </Stack.Screen>
       <Stack.Screen name="Declaration" component={OnboardingDeclaration} />
       <Stack.Screen name="FindPeople" component={OnboardingFindPeople} />
+      <Stack.Screen name="Features" component={OnboardingFeatures} />
       <Stack.Screen name="Invite" component={OnboardingInvite} />
       <Stack.Screen name="Welcome">
         {props => <OnboardingWelcome {...props} onDone={onDone} />}
