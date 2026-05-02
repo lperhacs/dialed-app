@@ -290,7 +290,7 @@ router.get('/:id/logs', authMiddleware, (req, res) => {
   if (!habit) return res.status(404).json({ error: 'Habit not found' });
 
   const logs = db.prepare('SELECT * FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC LIMIT 100').all(habit.id);
-  res.json(logs);
+  res.json({ logs, target_count: habit.target_count || 1 });
 });
 
 module.exports = router;

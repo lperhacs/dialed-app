@@ -26,7 +26,7 @@ function enrichUser(db, user, viewerId) {
     const habit = db.prepare('SELECT * FROM habits WHERE id = ? AND user_id = ? AND is_active = 1').get(user.featured_habit_id, user.id);
     if (habit) {
       const logs = db.prepare('SELECT logged_at FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(habit.id);
-      const streak = calculateStreak(logs, habit.frequency);
+      const streak = calculateStreak(logs, habit.frequency, habit.target_count || 1);
       featured_streak = { habit_id: habit.id, habit_name: habit.name, streak };
     }
   }
@@ -632,24 +632,31 @@ router.delete('/me', authMiddleware, (req, res) => {
 
   const id = req.user.id;
 
-  // Delete in dependency order
-  db.prepare('DELETE FROM likes WHERE user_id = ?').run(id);
-  db.prepare('DELETE FROM cheers WHERE user_id = ?').run(id);
-  db.prepare('DELETE FROM comment_likes WHERE user_id = ?').run(id);
-  db.prepare('DELETE FROM comments WHERE user_id = ?').run(id);
-  db.prepare('DELETE FROM habit_logs WHERE habit_id IN (SELECT id FROM habits WHERE user_id = ?)').run(id);
-  db.prepare('DELETE FROM habits WHERE user_id = ?').run(id);
-  db.prepare('DELETE FROM posts WHERE user_id = ?').run(id);
-  db.prepare('DELETE FROM follows WHERE follower_id = ? OR following_id = ?').run(id, id);
-  db.prepare('DELETE FROM badges WHERE user_id = ?').run(id);
-  db.prepare('DELETE FROM notifications WHERE user_id = ?').run(id);
-  db.prepare('DELETE FROM challenge_members WHERE user_id = ?').run(id);
-  db.prepare('DELETE FROM buddies WHERE requester_id = ? OR recipient_id = ?').run(id, id);
-  db.prepare('DELETE FROM event_attendees WHERE user_id = ?').run(id);
-  db.prepare('DELETE FROM analytics_events WHERE user_id = ?').run(id);
-  db.prepare('DELETE FROM direct_messages WHERE sender_id = ?').run(id);
-  db.prepare('DELETE FROM conversation_participants WHERE user_id = ?').run(id);
-  db.prepare('DELETE FROM users WHERE id = ?').run(id);
+  // Delete in dependency order — wrapped in transaction to prevent partial deletion
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    db.prepare('DELETE FROM likes WHERE user_id = ?').run(id);
+    db.prepare('DELETE FROM cheers WHERE user_id = ?').run(id);
+    db.prepare('DELETE FROM comment_likes WHERE user_id = ?').run(id);
+    db.prepare('DELETE FROM comments WHERE user_id = ?').run(id);
+    db.prepare('DELETE FROM habit_logs WHERE habit_id IN (SELECT id FROM habits WHERE user_id = ?)').run(id);
+    db.prepare('DELETE FROM habits WHERE user_id = ?').run(id);
+    db.prepare('DELETE FROM posts WHERE user_id = ?').run(id);
+    db.prepare('DELETE FROM follows WHERE follower_id = ? OR following_id = ?').run(id, id);
+    db.prepare('DELETE FROM badges WHERE user_id = ?').run(id);
+    db.prepare('DELETE FROM notifications WHERE user_id = ?').run(id);
+    db.prepare('DELETE FROM challenge_members WHERE user_id = ?').run(id);
+    db.prepare('DELETE FROM buddies WHERE requester_id = ? OR recipient_id = ?').run(id, id);
+    db.prepare('DELETE FROM event_attendees WHERE user_id = ?').run(id);
+    db.prepare('DELETE FROM analytics_events WHERE user_id = ?').run(id);
+    db.prepare('DELETE FROM direct_messages WHERE sender_id = ?').run(id);
+    db.prepare('DELETE FROM conversation_participants WHERE user_id = ?').run(id);
+    db.prepare('DELETE FROM users WHERE id = ?').run(id);
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
 
   res.json({ ok: true });
 });

@@ -176,6 +176,13 @@ router.post('/verify-email', authMiddleware, (req, res) => {
     return res.status(400).json({ error: 'Code expired. Please request a new one.' });
   }
 
+  const attempts = (record.attempts || 0) + 1;
+  if (attempts >= 5) {
+    db.prepare('DELETE FROM email_verifications WHERE user_id = ?').run(req.user.id);
+    return res.status(429).json({ error: 'Too many attempts. Please request a new code.' });
+  }
+  db.prepare('UPDATE email_verifications SET attempts = ? WHERE id = ?').run(attempts, record.id);
+
   if (record.code !== code.toString().trim()) {
     return res.status(400).json({ error: 'Incorrect code.' });
   }

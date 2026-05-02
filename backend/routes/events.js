@@ -118,11 +118,16 @@ router.post('/', authMiddleware, (req, res) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(event_date) || isNaN(new Date(event_date).getTime())) {
     return res.status(400).json({ error: 'Invalid event date format (YYYY-MM-DD required)' });
   }
+  if (event_time && !/^\d{2}:\d{2}(:\d{2})?$/.test(event_time)) {
+    return res.status(400).json({ error: 'Invalid event_time format (HH:MM or HH:MM:SS required)' });
+  }
 
   const db = getDb();
 
-  // Verify user is a member of the club if club_id provided
+  // Verify club exists and user is a member
   if (club_id) {
+    const club = db.prepare('SELECT id FROM challenges WHERE id = ?').get(club_id);
+    if (!club) return res.status(404).json({ error: 'Club not found' });
     const membership = db.prepare(
       "SELECT 1 FROM challenge_members WHERE challenge_id = ? AND user_id = ? AND status = 'active'"
     ).get(club_id, req.user.id);
