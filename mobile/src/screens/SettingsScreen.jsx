@@ -254,26 +254,61 @@ function ChangePasswordModal({ visible, onClose }) {
 
 // ── Change Email Modal ────────────────────────────────────────────────────────
 
-function ChangeEmailModal({ visible, onClose, currentEmail }) {
+function ChangeEmailModal({ visible, onClose, currentEmail, onEmailChanged }) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
+  const [step, setStep] = useState('enter'); // 'enter' → 'verify'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const save = async () => {
+  // Reset state every time the modal opens
+  useEffect(() => {
+    if (visible) {
+      setStep('enter');
+      setEmail('');
+      setPassword('');
+      setCode('');
+      setSaving(false);
+    }
+  }, [visible]);
+
+  const requestCode = async () => {
     if (!email || !password) { Alert.alert('Fill in all fields'); return; }
     setSaving(true);
     try {
       await api.patch('/users/me/email', { email: email.toLowerCase(), password });
-      Alert.alert('Email updated', 'Your email address has been changed.');
-      onClose();
+      setStep('verify');
     } catch (err) {
-      Alert.alert('Error', err.response?.data?.error || 'Could not update email.');
+      Alert.alert('Error', err.response?.data?.error || 'Could not send verification code.');
     } finally {
       setSaving(false);
     }
   };
+
+  const confirmCode = async () => {
+    if (!code || code.length < 6) { Alert.alert('Enter the 6-digit code'); return; }
+    setSaving(true);
+    try {
+      const r = await api.post('/users/me/email/confirm', { code: code.trim() });
+      // Backend bumps token_version on email change and returns a fresh JWT.
+      // We must store it — otherwise the next request 401s and the user is logged out.
+      if (r.data?.token) {
+        await AsyncStorage.setItem('dialed_token', r.data.token);
+      }
+      Alert.alert('Email updated', 'Your email address has been changed.');
+      if (onEmailChanged) onEmailChanged();
+      onClose();
+    } catch (err) {
+      Alert.alert('Error', err.response?.data?.error || 'Could not verify code.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const headerAction = step === 'enter' ? requestCode : confirmCode;
+  const headerActionLabel = step === 'enter' ? 'Send code' : 'Verify';
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -281,21 +316,39 @@ function ChangeEmailModal({ visible, onClose, currentEmail }) {
         <View style={styles.modalHeader}>
           <TouchableOpacity onPress={onClose}><Text style={{ color: colors.textMuted, fontSize: 15 }}>Cancel</Text></TouchableOpacity>
           <Text style={styles.modalTitle}>Change Email</Text>
-          <TouchableOpacity onPress={save} disabled={saving}>
-            {saving ? <ActivityIndicator color={colors.accent} size="small" /> : <Text style={{ color: colors.accent, fontSize: 15, fontWeight: '700' }}>Save</Text>}
+          <TouchableOpacity onPress={headerAction} disabled={saving}>
+            {saving ? <ActivityIndicator color={colors.accent} size="small" /> : <Text style={{ color: colors.accent, fontSize: 15, fontWeight: '700' }}>{headerActionLabel}</Text>}
           </TouchableOpacity>
         </View>
-        <View style={{ padding: spacing.lg, gap: 14 }}>
-          <Text style={styles.rowDetail}>Current: {currentEmail}</Text>
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel}>NEW EMAIL</Text>
-            <TextInput style={styles.input} value={email} onChangeText={setEmail} placeholder="new@example.com" placeholderTextColor={colors.textDim} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} />
+        {step === 'enter' ? (
+          <View style={{ padding: spacing.lg, gap: 14 }}>
+            <Text style={styles.rowDetail}>Current: {currentEmail}</Text>
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>NEW EMAIL</Text>
+              <TextInput style={styles.input} value={email} onChangeText={setEmail} placeholder="new@example.com" placeholderTextColor={colors.textDim} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} />
+            </View>
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>CONFIRM WITH PASSWORD</Text>
+              <TextInput style={styles.input} value={password} onChangeText={setPassword} placeholder="Your current password" placeholderTextColor={colors.textDim} secureTextEntry autoCapitalize="none" />
+            </View>
+            <Text style={[styles.rowDetail, { fontSize: 12 }]}>
+              We'll send a 6-digit code to your new email to confirm the change.
+            </Text>
           </View>
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel}>CONFIRM WITH PASSWORD</Text>
-            <TextInput style={styles.input} value={password} onChangeText={setPassword} placeholder="Your current password" placeholderTextColor={colors.textDim} secureTextEntry autoCapitalize="none" />
+        ) : (
+          <View style={{ padding: spacing.lg, gap: 14 }}>
+            <Text style={styles.rowDetail}>
+              Enter the 6-digit code we sent to <Text style={{ fontWeight: '700' }}>{email.toLowerCase()}</Text>. Code expires in 10 minutes.
+            </Text>
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>VERIFICATION CODE</Text>
+              <TextInput style={styles.input} value={code} onChangeText={setCode} placeholder="123456" placeholderTextColor={colors.textDim} keyboardType="number-pad" autoCapitalize="none" maxLength={6} />
+            </View>
+            <TouchableOpacity onPress={() => setStep('enter')} disabled={saving}>
+              <Text style={{ color: colors.textMuted, fontSize: 13 }}>← Use a different email</Text>
+            </TouchableOpacity>
           </View>
-        </View>
+        )}
       </View>
     </Modal>
   );
@@ -775,6 +828,7 @@ export default function SettingsScreen() {
         visible={showChangeEmail}
         onClose={() => setShowChangeEmail(false)}
         currentEmail={user?.email}
+        onEmailChanged={() => refresh()}
       />
     </View>
   );
