@@ -331,6 +331,7 @@ export default function SettingsScreen() {
   const [showChangeEmail, setShowChangeEmail] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteText, setDeleteText] = useState('');
+  const [deletePassword, setDeletePassword] = useState('');
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Load stored preferences
@@ -432,12 +433,17 @@ export default function SettingsScreen() {
       Alert.alert('Type DELETE to confirm');
       return;
     }
+    if (!deletePassword) {
+      Alert.alert('Password required', 'Enter your password to confirm account deletion.');
+      return;
+    }
     setDeleteLoading(true);
     try {
-      await api.delete('/users/me');
+      await api.delete('/users/me', { data: { password: deletePassword } });
       logout();
-    } catch {
-      Alert.alert('Error', 'Could not delete account.');
+    } catch (err) {
+      const msg = err?.response?.data?.error || 'Could not delete account.';
+      Alert.alert('Error', msg);
     } finally {
       setDeleteLoading(false);
     }
@@ -709,17 +715,27 @@ export default function SettingsScreen() {
               placeholderTextColor={colors.textDim}
               autoCapitalize="characters"
             />
+            <Text style={styles.deleteInstructions}>Enter your password:</Text>
+            <TextInput
+              style={[styles.input, { marginBottom: 10 }]}
+              value={deletePassword}
+              onChangeText={setDeletePassword}
+              placeholder="Password"
+              placeholderTextColor={colors.textDim}
+              secureTextEntry
+              autoCapitalize="none"
+            />
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <TouchableOpacity
                 style={styles.deleteCancelBtn}
-                onPress={() => { setShowDeleteConfirm(false); setDeleteText(''); }}
+                onPress={() => { setShowDeleteConfirm(false); setDeleteText(''); setDeletePassword(''); }}
               >
                 <Text style={{ color: colors.textMuted, fontWeight: '600', fontSize: 14 }}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.deleteConfirmBtn, (deleteText !== 'DELETE' || deleteLoading) && { opacity: 0.5 }]}
+                style={[styles.deleteConfirmBtn, (deleteText !== 'DELETE' || !deletePassword || deleteLoading) && { opacity: 0.5 }]}
                 onPress={handleDeleteAccount}
-                disabled={deleteText !== 'DELETE' || deleteLoading}
+                disabled={deleteText !== 'DELETE' || !deletePassword || deleteLoading}
               >
                 {deleteLoading
                   ? <ActivityIndicator color="white" size="small" />

@@ -174,6 +174,20 @@ router.post('/:id/rsvp', authMiddleware, (req, res) => {
   const event = db.prepare('SELECT * FROM events WHERE id = ?').get(req.params.id);
   if (!event) return res.status(404).json({ error: 'Event not found' });
 
+  // Authorization: private events require creator OR active club membership
+  if (!event.is_public) {
+    if (event.club_id) {
+      const isMember = db.prepare(
+        "SELECT 1 FROM challenge_members WHERE challenge_id = ? AND user_id = ? AND status = 'active'"
+      ).get(event.club_id, req.user.id);
+      if (!isMember && event.creator_id !== req.user.id) {
+        return res.status(403).json({ error: 'Members only' });
+      }
+    } else if (event.creator_id !== req.user.id) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+  }
+
   const existing = db.prepare('SELECT * FROM event_attendees WHERE event_id = ? AND user_id = ?').get(req.params.id, req.user.id);
   if (existing) {
     db.prepare('DELETE FROM event_attendees WHERE event_id = ? AND user_id = ?').run(req.params.id, req.user.id);

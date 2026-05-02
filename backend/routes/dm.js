@@ -108,12 +108,14 @@ router.post('/conversations', authMiddleware, (req, res) => {
   const target = db.prepare('SELECT id FROM users WHERE id = ?').get(user_id);
   if (!target) return res.status(404).json({ error: 'User not found' });
 
-  // Look for an existing conversation between the two users
+  // Look for an existing 1-on-1 conversation between the two users
+  // (must filter is_group = 0 — otherwise a shared group chat would be returned as a DM)
   const existing = db.prepare(
     `SELECT cp1.conversation_id
      FROM conversation_participants cp1
      JOIN conversation_participants cp2 ON cp1.conversation_id = cp2.conversation_id
-     WHERE cp1.user_id = ? AND cp2.user_id = ?
+     JOIN conversations c ON c.id = cp1.conversation_id
+     WHERE cp1.user_id = ? AND cp2.user_id = ? AND c.is_group = 0
      LIMIT 1`
   ).get(req.user.id, user_id);
 
