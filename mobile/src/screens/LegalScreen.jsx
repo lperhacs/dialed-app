@@ -20,7 +20,7 @@ You agree not to post illegal, abusive, threatening, or harassing content; imper
 You retain ownership of content you post. By posting, you grant Dialed a license to display it within the App. You are responsible for what you post.
 
 5. DIALED PRO SUBSCRIPTION
-Dialed Pro is an optional paid subscription ($3.99/month or $29.99/year) billed through the Apple App Store. Subscriptions auto-renew unless cancelled at least 24 hours before the end of the current period. Manage or cancel in your App Store account settings. No refunds for partial periods except where required by law.
+Dialed Pro is an optional paid subscription ($4.99/month or $47.88/year) billed through the Apple App Store. Subscriptions auto-renew unless cancelled at least 24 hours before the end of the current period. Manage or cancel in your App Store account settings. No refunds for partial periods except where required by law.
 
 6. PRIVACY & DATA
 By using the App, you acknowledge that we collect usage analytics and may share anonymized, aggregate data with partners. We do not sell your personal information. See our Privacy Policy for details.

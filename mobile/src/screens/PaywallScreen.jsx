@@ -128,10 +128,10 @@ export default function PaywallScreen({ route }) {
               Annual
             </Text>
             <Text style={[styles.planPrice, selectedPlan === 'annual' && { color: colors.text }]}>
-              $29.99
+              $47.88
             </Text>
             <Text style={styles.planPer}>per year</Text>
-            <Text style={styles.planSavings}>$2.50/mo — save 37%</Text>
+            <Text style={styles.planSavings}>$3.99/mo — save 20%</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -143,7 +143,7 @@ export default function PaywallScreen({ route }) {
               Monthly
             </Text>
             <Text style={[styles.planPrice, selectedPlan === 'monthly' && { color: colors.text }]}>
-              $3.99
+              $4.99
             </Text>
             <Text style={styles.planPer}>per month</Text>
           </TouchableOpacity>
@@ -159,7 +159,7 @@ export default function PaywallScreen({ route }) {
           {purchasing
             ? <ActivityIndicator color={colors.bg} size="small" />
             : <Text style={styles.subscribeBtnText}>
-                Subscribe {selectedPlan === 'annual' ? '· $29.99/yr' : '· $3.99/mo'}
+                Subscribe {selectedPlan === 'annual' ? '· $47.88/yr' : '· $4.99/mo'}
               </Text>
           }
         </TouchableOpacity>
