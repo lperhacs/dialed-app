@@ -1,6 +1,6 @@
 # Dialed Brain
 *Shared project context for Claude Code and Cowork — update after every session*
-*Last updated: April 29, 2026*
+*Last updated: May 2, 2026*
 
 ## What this app is
 Accountability-based social fitness app called Dialed.
@@ -24,9 +24,11 @@ Think Strava meets a gym buddy.
 
 ## Tech stack
 ### Backend
-- Node.js + Express — REST API
-- SQLite via better-sqlite3 — single file DB
+- Node.js 22+ + Express — REST API
+- SQLite via `node:sqlite` (Node built-in, `--experimental-sqlite`) — single file DB
+  - **No `db.transaction()`** — use `db.exec('BEGIN IMMEDIATE')` / `COMMIT` / `ROLLBACK`
 - Railway — hosting and deploys
+- helmet — security headers (added May 2, 2026)
 
 ### Mobile
 - React Native + Expo SDK 52
@@ -60,17 +62,35 @@ Think Strava meets a gym buddy.
 
 ## Current priorities
 1. Confirm SQLite persistent volume is configured on Railway
-2. Instrument and monitor tester retention and daily logging drop-off
-3. Identify where users fall off in onboarding
-4. Fix retention issues before expanding tester pool
+   (backup code now uses `VACUUM INTO` — correct, but useless if the volume is ephemeral)
+2. Email verification flow (still on the security TODO list — not yet built)
+3. Instrument and monitor tester retention and daily logging drop-off
+4. Identify where users fall off in onboarding
+5. Fix retention issues before expanding tester pool
 
 ## Do NOT do these without a strategy conversation first
 - Migrate to Postgres
 - Add new features
 - Change existing API contracts
 - Open to public or remove TestFlight gate
+- Change JWT signing format / payload shape (existing TestFlight tokens would break;
+  current tokens use `token_version` for selective invalidation on password change)
 
 ## Strategy session log
+### May 2, 2026 — Pre-launch security audit (Sprints 1–3)
+- Ran full audit; resolved 38 issues across 3 commits (cf24550, 2273ce0, bf6fd91)
+- Decided to introduce JWT `token_version` for selective invalidation on password
+  change (vs. force-logging-out all current testers). Missing version in old JWTs
+  treated as 0 so existing tokens stay valid.
+- Helmet added to backend (replaces hand-rolled headers)
+- DB backup rewritten to use `VACUUM INTO` (WAL-safe). Persistent-volume question
+  on Railway remains open and is now blocking real DR confidence.
+- Daily reminder cron switched from fixed UTC times to hourly + per-user-timezone
+  dispatch. Worth watching Railway resource use after deploy.
+- Caller behavior changes shipped (mobile must handle): `POST /auth/send-otp`
+  now requires Bearer auth; `PATCH /me/password` and `POST /me/email/confirm`
+  return a fresh `token` that mobile must replace.
+
 ### April 29, 2026 — Founding strategy session
 - Validated the app concept and core loop
 - Decided group challenges are acquisition, buddy pairing is retention
