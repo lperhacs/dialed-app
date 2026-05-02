@@ -669,9 +669,13 @@ export default function HabitsScreen() {
       {
         text: 'Delete', style: 'destructive',
         onPress: async () => {
-          await api.delete(`/habits/${id}`);
-          cancelHabitReminder(id);
-          setHabits(prev => prev.filter(h => h.id !== id));
+          try {
+            await api.delete(`/habits/${id}`);
+            cancelHabitReminder(id);
+            setHabits(prev => prev.filter(h => h.id !== id));
+          } catch (err) {
+            Alert.alert('Error', 'Could not delete habit.');
+          }
         },
       },
     ]);

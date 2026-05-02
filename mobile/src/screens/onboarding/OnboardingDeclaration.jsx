@@ -71,8 +71,8 @@ export default function OnboardingDeclaration({ navigation }) {
       setEmailError('Please enter a valid email address.');
       return;
     }
-    if (password.length < 6) {
-      Alert.alert('Password too short', 'Password must be at least 6 characters.');
+    if (password.length < 8) {
+      Alert.alert('Password too short', 'Password must be at least 8 characters.');
       return;
     }
     setLoading(true);

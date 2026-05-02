@@ -12,6 +12,7 @@ export function BadgeProvider({ children }) {
   const intervalRef = useRef(null);
 
   const inFlight = useRef(false);
+  const consecutive401s = useRef(0);
   const refresh = useCallback(async () => {
     if (!user || inFlight.current) return;
     inFlight.current = true;
@@ -19,7 +20,15 @@ export function BadgeProvider({ children }) {
       const { data } = await api.get('/notifications/counts');
       setNotifCount(data.notifications ?? 0);
       setMsgCount(data.messages ?? 0);
-    } catch (_) {} finally {
+      consecutive401s.current = 0;
+    } catch (err) {
+      if (err?.response?.status === 401) {
+        consecutive401s.current += 1;
+        if (consecutive401s.current >= 3) {
+          console.warn('BadgeContext: 3 consecutive 401s on /notifications/counts');
+        }
+      }
+    } finally {
       inFlight.current = false;
     }
   }, [user]);
@@ -28,10 +37,13 @@ export function BadgeProvider({ children }) {
     if (!user) {
       setNotifCount(0);
       setMsgCount(0);
+      consecutive401s.current = 0;
       return;
     }
     refresh();
-    intervalRef.current = setInterval(refresh, 5_000);
+    // TODO: api/client.js global 401 interceptor force-logs-out on transient 401s.
+    // Polling at 30s reduces blast radius until interceptor is made tolerant.
+    intervalRef.current = setInterval(refresh, 30_000);
     return () => clearInterval(intervalRef.current);
   }, [user, refresh]);
 

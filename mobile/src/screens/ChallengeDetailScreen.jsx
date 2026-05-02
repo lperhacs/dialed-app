@@ -460,6 +460,11 @@ export default function ChallengeDetailScreen({ route }) {
         setLinkedHabit(r.data.my_linked_habit || null);
         if (r.data.my_linked_habit) setSelectedHabit(r.data.my_linked_habit.id);
       })
+      .catch(err => {
+        console.warn(err);
+        Alert.alert('Error', 'Could not load club.');
+        navigation.goBack();
+      })
       .finally(() => setLoading(false));
     api.get('/habits').then(r => setHabits(r.data.filter(h => h.is_active))).catch(() => {});
   }, [id]);
@@ -486,6 +491,8 @@ export default function ChallengeDetailScreen({ route }) {
   };
 
   const toggleJoin = async () => {
+    const prevStatus = challenge.memberStatus;
+    const prevCount = challenge.member_count;
     setJoining(true);
     try {
       if (challenge.memberStatus === 'active') {
@@ -507,6 +514,10 @@ export default function ChallengeDetailScreen({ route }) {
           member_count: data.memberStatus === 'active' ? c.member_count + 1 : c.member_count,
         }));
       }
+    } catch (err) {
+      // Revert any optimistic state changes
+      setChallenge(c => ({ ...c, memberStatus: prevStatus, member_count: prevCount }));
+      Alert.alert('Error', err.response?.data?.error || 'Could not update membership.');
     } finally {
       setJoining(false);
     }

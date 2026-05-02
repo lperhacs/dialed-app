@@ -199,7 +199,7 @@ function ChangePasswordModal({ visible, onClose }) {
   const save = async () => {
     if (!form.current || !form.next || !form.confirm) { Alert.alert('Fill in all fields'); return; }
     if (form.next !== form.confirm) { Alert.alert('Passwords don\'t match'); return; }
-    if (form.next.length < 6) { Alert.alert('Too short', 'Password must be at least 6 characters.'); return; }
+    if (form.next.length < 8) { Alert.alert('Too short', 'Password must be at least 8 characters.'); return; }
     setSaving(true);
     try {
       await api.patch('/users/me/password', { current_password: form.current, new_password: form.next });

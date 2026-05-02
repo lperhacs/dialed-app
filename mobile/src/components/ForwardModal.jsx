@@ -64,7 +64,12 @@ export default function ForwardModal({ visible, onClose, type, item }) {
 
   React.useEffect(() => {
     if (visible) {
-      api.get('/dm/conversations').then(r => setRecentConvos(r.data.slice(0, 5))).catch(() => {});
+      api.get('/dm/inbox')
+        .then(r => {
+          const oneOnOne = (r.data || []).filter(c => !c.is_group && c.other);
+          setRecentConvos(oneOnOne.slice(0, 5));
+        })
+        .catch(() => {});
     }
   }, [visible]);
 
