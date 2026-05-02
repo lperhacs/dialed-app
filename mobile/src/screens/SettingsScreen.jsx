@@ -202,7 +202,12 @@ function ChangePasswordModal({ visible, onClose }) {
     if (form.next.length < 8) { Alert.alert('Too short', 'Password must be at least 8 characters.'); return; }
     setSaving(true);
     try {
-      await api.patch('/users/me/password', { current_password: form.current, new_password: form.next });
+      const r = await api.patch('/users/me/password', { current_password: form.current, new_password: form.next });
+      // Backend bumps token_version on password change and returns a fresh JWT.
+      // We must store it — otherwise the next request 401s and the user is logged out.
+      if (r.data?.token) {
+        await AsyncStorage.setItem('dialed_token', r.data.token);
+      }
       Alert.alert('Password changed', 'Your password has been updated.');
       onClose();
     } catch (err) {
