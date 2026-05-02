@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, FlatList, TouchableOpacity, Text, StyleSheet,
-  ActivityIndicator, RefreshControl, Image,
+  ActivityIndicator, RefreshControl, Image, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../api/client';
 import PostCard from '../components/PostCard';
 import EventsScreen from './EventsScreen';
-import { spacing } from '../theme';
+import { radius, spacing } from '../theme';
 import { useTheme } from '../context/ThemeContext';
 import { useBadges } from '../context/BadgeContext';
 
@@ -31,6 +31,44 @@ function EmptyFeed({ tab }) {
   );
 }
 
+function BuddyCard({ buddyData, onNudge, onPress }) {
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
+  const { buddy } = buddyData;
+  if (!buddy) return null;
+
+  const totalHabits = buddy.habits.length;
+  const loggedCount = buddy.habits.filter(h => h.logged_today > 0).length;
+  const allLogged = loggedCount === totalHabits && totalHabits > 0;
+
+  return (
+    <TouchableOpacity style={styles.buddyCard} onPress={onPress} activeOpacity={0.85}>
+      <View style={styles.buddyCardLeft}>
+        <View style={[styles.buddyDot, { backgroundColor: allLogged ? colors.accent : colors.textDim }]} />
+        <View>
+          <Text style={styles.buddyCardName}>{buddy.display_name}</Text>
+          <Text style={styles.buddyCardMeta}>
+            {totalHabits === 0
+              ? 'No habits yet'
+              : allLogged
+              ? 'All habits logged today'
+              : `${loggedCount}/${totalHabits} habits logged`}
+          </Text>
+        </View>
+      </View>
+      <TouchableOpacity
+        style={styles.nudgeBtn}
+        onPress={onNudge}
+        hitSlop={8}
+        activeOpacity={0.75}
+      >
+        <Ionicons name="notifications-outline" size={14} color={colors.accent} />
+        <Text style={styles.nudgeBtnText}>Nudge</Text>
+      </TouchableOpacity>
+    </TouchableOpacity>
+  );
+}
+
 export default function HomeScreen() {
   const { colors, isDark } = useTheme();
   const styles = makeStyles(colors);
@@ -44,6 +82,8 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [buddyData, setBuddyData] = useState(null);
+  const [nudging, setNudging] = useState(false);
 
   const fetchPosts = useCallback(async (p = 1, t = tab, reset = false) => {
     const endpoint = t === 'following' ? `/posts?page=${p}` : `/posts/explore?page=${p}`;
@@ -62,8 +102,22 @@ export default function HomeScreen() {
     useCallback(() => {
       setLoading(true);
       fetchPosts(1, tab, true).finally(() => setLoading(false));
+      api.get('/buddies').then(r => setBuddyData(r.data)).catch(() => {});
     }, [tab])
   );
+
+  const handleNudge = async () => {
+    if (nudging || !buddyData?.buddy) return;
+    setNudging(true);
+    try {
+      await api.post(`/buddies/${buddyData.buddy.id}/nudge`);
+      Alert.alert('Nudge sent', `${buddyData.buddy.display_name} has been notified.`);
+    } catch (err) {
+      Alert.alert('Nudge', err.response?.data?.error || 'Could not send nudge');
+    } finally {
+      setNudging(false);
+    }
+  };
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -146,6 +200,15 @@ export default function HomeScreen() {
         </View>
       </View>
 
+      {/* Buddy status card */}
+      {buddyData?.buddy && (
+        <BuddyCard
+          buddyData={buddyData}
+          onNudge={handleNudge}
+          onPress={() => navigation.navigate('UserProfile', { username: buddyData.buddy.username })}
+        />
+      )}
+
       {/* Normal feed */}
       {(
         <>
@@ -225,5 +288,31 @@ function makeStyles(colors) {
     paddingHorizontal: 3,
   },
   iconBadgeText: { color: '#fff', fontSize: 8, fontWeight: '700', lineHeight: 10 },
+  buddyCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSubtle,
+    backgroundColor: colors.bgCard,
+  },
+  buddyCardLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+  buddyDot: { width: 8, height: 8, borderRadius: 4 },
+  buddyCardName: { fontSize: 13, fontWeight: '600', color: colors.text },
+  buddyCardMeta: { fontSize: 12, color: colors.textMuted, marginTop: 1 },
+  nudgeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.accentDimBorder,
+    backgroundColor: colors.accentDim,
+  },
+  nudgeBtnText: { fontSize: 12, fontWeight: '600', color: colors.accent },
   });
 }

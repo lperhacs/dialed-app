@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS habits (
   name          TEXT NOT NULL,
   description   TEXT DEFAULT '',
   frequency     TEXT NOT NULL CHECK(frequency IN ('daily','weekly','monthly')),
-  visibility_missed TEXT NOT NULL DEFAULT 'public' CHECK(visibility_missed IN ('public','friends','private')),
+  visibility_missed TEXT NOT NULL DEFAULT 'public' CHECK(visibility_missed IN ('public','friends','private','buddy')),
   color         TEXT DEFAULT '#f97316',
   is_active     INTEGER DEFAULT 1,
   created_at    DATETIME DEFAULT CURRENT_TIMESTAMP

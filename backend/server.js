@@ -99,6 +99,7 @@ app.listen(PORT, () => {
   const { runDailyHabitReminders } = require('./cron/dailyHabitReminders');
   const { runChallengeStartReminders } = require('./cron/challengeReminders');
   const { runDbBackup } = require('./cron/dbBackup');
+  const { runBuddyAccountabilityReminders, runMissedHabitAutoPost } = require('./cron/buddyReminders');
 
   // Daily morning reminder — 09:00 UTC (5am ET / 2am PT)
   // Motivating nudge at the start of the day for unlogged habits
@@ -139,5 +140,21 @@ app.listen(PORT, () => {
   cron.schedule('0 3 * * *', () => {
     runDbBackup();
   }, { timezone: 'UTC' });
-  console.log('[Cron] daily DB backup scheduler started (03:00 UTC, 7-day rolling)\n');
+  console.log('[Cron] daily DB backup scheduler started (03:00 UTC, 7-day rolling)');
+
+  // Buddy accountability — runs every hour, fires for users where it's currently 5pm local time
+  cron.schedule('0 * * * *', () => {
+    runBuddyAccountabilityReminders().catch(err =>
+      console.error('[Cron] buddy-accountability-reminders failed:', err)
+    );
+  }, { timezone: 'UTC' });
+  console.log('[Cron] buddy accountability reminder scheduler started (hourly, fires at 5pm local)');
+
+  // Missed habit auto-posts — runs at 00:30 UTC for users who opted in
+  cron.schedule('30 0 * * *', () => {
+    runMissedHabitAutoPost().catch(err =>
+      console.error('[Cron] missed-habit-auto-post failed:', err)
+    );
+  }, { timezone: 'UTC' });
+  console.log('[Cron] missed-habit auto-post scheduler started (00:30 UTC)\n');
 });

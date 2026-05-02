@@ -34,8 +34,8 @@ function awardBadges(db, userId, habitId) {
         data: { type: 'badge', badgeType: badge.type },
       }, 'badges');
 
-      // Auto-post to feed if habit is public or friends-only
-      if (habit.visibility_missed !== 'private') {
+      // Auto-post to feed if habit is public or friends-only (not private or buddy-only)
+      if (habit.visibility_missed !== 'private' && habit.visibility_missed !== 'buddy') {
         const postContent = `Just earned the "${badge.label}" badge on my ${habit.name} habit — ${badge.desc}.`;
         db.prepare(
           'INSERT INTO posts (id, user_id, content, habit_id, badge_id) VALUES (?, ?, ?, ?, ?)'
@@ -89,7 +89,7 @@ router.post('/', authMiddleware, (req, res) => {
   }
   if (name.trim().length > 100) return res.status(400).json({ error: 'Habit name must be 100 characters or fewer' });
   if (description && description.length > 500) return res.status(400).json({ error: 'Description must be 500 characters or fewer' });
-  if (visibility_missed && !['public', 'friends', 'private'].includes(visibility_missed)) {
+  if (visibility_missed && !['public', 'friends', 'private', 'buddy'].includes(visibility_missed)) {
     return res.status(400).json({ error: 'Invalid visibility' });
   }
   const maxTarget = frequency === 'weekly' ? 7 : frequency === 'monthly' ? 28 : 1;
@@ -135,7 +135,7 @@ router.put('/:id', authMiddleware, (req, res) => {
   if (frequency && !['daily', 'weekly', 'monthly'].includes(frequency)) {
     return res.status(400).json({ error: 'Invalid frequency' });
   }
-  if (visibility_missed && !['public', 'friends', 'private'].includes(visibility_missed)) {
+  if (visibility_missed && !['public', 'friends', 'private', 'buddy'].includes(visibility_missed)) {
     return res.status(400).json({ error: 'Invalid visibility' });
   }
   if (name && name.trim().length > 100) return res.status(400).json({ error: 'Habit name must be 100 characters or fewer' });

@@ -46,11 +46,14 @@ router.get('/', authMiddleware, (req, res) => {
 
   if (!buddy) return res.json({ buddy: null, pending_requests: pending });
 
+  // Buddies can see all habits except explicitly private ones
   const buddyHabits = db.prepare(`
-    SELECT h.id, h.name, h.color, h.frequency,
+    SELECT h.id, h.name, h.color, h.frequency, h.visibility_missed,
       (SELECT COUNT(*) FROM habit_logs WHERE habit_id = h.id AND date(logged_at) = date('now')) as logged_today,
       (SELECT COUNT(*) FROM habit_logs WHERE habit_id = h.id) as total_logs
-    FROM habits h WHERE h.user_id = ? AND h.is_active = 1 ORDER BY h.created_at ASC
+    FROM habits h WHERE h.user_id = ? AND h.is_active = 1
+      AND h.visibility_missed != 'private'
+    ORDER BY h.created_at ASC
   `).all(buddy.buddy_user_id);
 
   const myHabits = db.prepare(`
@@ -59,6 +62,10 @@ router.get('/', authMiddleware, (req, res) => {
       (SELECT COUNT(*) FROM habit_logs WHERE habit_id = h.id) as total_logs
     FROM habits h WHERE h.user_id = ? AND h.is_active = 1 ORDER BY h.created_at ASC
   `).all(userId);
+
+  const myShowMissed = buddy.requester_id === userId
+    ? !!buddy.requester_show_missed
+    : !!buddy.recipient_show_missed;
 
   res.json({
     buddy: {
@@ -70,6 +77,7 @@ router.get('/', authMiddleware, (req, res) => {
       habits: buddyHabits,
     },
     my_habits: myHabits,
+    my_show_missed: myShowMissed,
     pending_requests: pending,
   });
 });
@@ -151,7 +159,10 @@ router.put('/:id/accept', authMiddleware, (req, res) => {
     .get(req.params.id, req.user.id);
   if (!buddy) return res.status(404).json({ error: 'Request not found' });
 
-  db.prepare("UPDATE buddies SET status = 'active' WHERE id = ?").run(req.params.id);
+  // recipient_show_missed: did the accepter opt in to showing misses to their buddy?
+  const recipientShowMissed = req.body.show_missed ? 1 : 0;
+  db.prepare("UPDATE buddies SET status = 'active', recipient_show_missed = ? WHERE id = ?")
+    .run(recipientShowMissed, req.params.id);
 
   db.prepare(
     "INSERT INTO notifications (id, user_id, type, from_user_id, message) VALUES (?, ?, 'buddy_accepted', ?, ?)"
@@ -166,6 +177,60 @@ router.put('/:id/accept', authMiddleware, (req, res) => {
 
   trackEvent(req.user.id, 'buddy_accepted', {}, metaFromReq(req));
   res.json({ accepted: true });
+});
+
+// POST /api/buddies/:id/nudge — one-tap accountability nudge to your buddy
+router.post('/:id/nudge', authMiddleware, (req, res) => {
+  const db = getDb();
+  const buddy = db.prepare(
+    "SELECT * FROM buddies WHERE id = ? AND (requester_id = ? OR recipient_id = ?) AND status = 'active'"
+  ).get(req.params.id, req.user.id, req.user.id);
+  if (!buddy) return res.status(404).json({ error: 'Buddy not found' });
+
+  const buddyUserId = buddy.requester_id === req.user.id ? buddy.recipient_id : buddy.requester_id;
+
+  // Rate limit: 1 nudge per 4 hours per sender
+  const recentNudge = db.prepare(`
+    SELECT 1 FROM notifications
+    WHERE user_id = ? AND type = 'buddy_nudge' AND from_user_id = ?
+      AND created_at >= datetime('now', '-4 hours')
+  `).get(buddyUserId, req.user.id);
+  if (recentNudge) return res.status(429).json({ error: 'You can only nudge once every 4 hours' });
+
+  const actor = db.prepare('SELECT display_name FROM users WHERE id = ?').get(req.user.id);
+
+  db.prepare(
+    "INSERT INTO notifications (id, user_id, type, from_user_id, message) VALUES (?, ?, 'buddy_nudge', ?, ?)"
+  ).run(uuidv4(), buddyUserId, req.user.id, 'nudged you to log your habits!');
+
+  sendPush(buddyUserId, {
+    title: `${actor?.display_name || 'Your buddy'} is watching`,
+    body: 'Your accountability partner sent you a nudge — go log your habits.',
+    data: { type: 'buddy_nudge', userId: req.user.id },
+  }, 'buddy');
+
+  trackEvent(req.user.id, 'buddy_nudge_sent', {}, metaFromReq(req));
+  res.json({ nudged: true });
+});
+
+// PATCH /api/buddies/:id/show-missed — toggle opt-in for missed habit auto-posts
+router.patch('/:id/show-missed', authMiddleware, (req, res) => {
+  const db = getDb();
+  const buddy = db.prepare(
+    "SELECT * FROM buddies WHERE id = ? AND (requester_id = ? OR recipient_id = ?) AND status = 'active'"
+  ).get(req.params.id, req.user.id, req.user.id);
+  if (!buddy) return res.status(404).json({ error: 'Buddy not found' });
+
+  const { show_missed } = req.body;
+  const val = show_missed ? 1 : 0;
+
+  if (buddy.requester_id === req.user.id) {
+    db.prepare('UPDATE buddies SET requester_show_missed = ? WHERE id = ?').run(val, req.params.id);
+  } else {
+    db.prepare('UPDATE buddies SET recipient_show_missed = ? WHERE id = ?').run(val, req.params.id);
+  }
+
+  res.json({ ok: true, show_missed: !!show_missed });
 });
 
 // DELETE /api/buddies/:id — remove or decline

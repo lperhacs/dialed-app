@@ -207,6 +207,53 @@ function getDb() {
       );
     `);
 
+    // Migrate habits.visibility_missed CHECK constraint to include 'buddy'
+    // SQLite can't ALTER constraints, so we rebuild the table if needed.
+    const habitCheckRow = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='habits'").get();
+    if (habitCheckRow && habitCheckRow.sql && !habitCheckRow.sql.includes("'buddy'")) {
+      db.exec('PRAGMA foreign_keys = OFF');
+      db.exec('DROP TABLE IF EXISTS habits_new');
+      db.exec(`
+        CREATE TABLE habits_new (
+          id            TEXT PRIMARY KEY,
+          user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          name          TEXT NOT NULL,
+          description   TEXT DEFAULT '',
+          frequency     TEXT NOT NULL CHECK(frequency IN ('daily','weekly','monthly')),
+          visibility_missed TEXT NOT NULL DEFAULT 'public' CHECK(visibility_missed IN ('public','friends','private','buddy')),
+          color         TEXT DEFAULT '#f97316',
+          is_active     INTEGER DEFAULT 1,
+          created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+          reminder_time TEXT DEFAULT NULL,
+          target_count  INTEGER NOT NULL DEFAULT 1
+        )
+      `);
+      db.exec('INSERT INTO habits_new SELECT id, user_id, name, description, frequency, visibility_missed, color, is_active, created_at, reminder_time, target_count FROM habits');
+      db.exec('DROP TABLE habits');
+      db.exec('ALTER TABLE habits_new RENAME TO habits');
+      db.exec('PRAGMA foreign_keys = ON');
+    }
+
+    // Add type column to posts for missed-habit auto-posts
+    const postColsFinal = db.prepare("PRAGMA table_info(posts)").all().map(c => c.name);
+    if (!postColsFinal.includes('type')) {
+      db.exec("ALTER TABLE posts ADD COLUMN type TEXT DEFAULT NULL");
+    }
+
+    // Buddy: opt-in missed-habit auto-posts + timezone for 5pm reminders
+    const buddyCols = db.prepare("PRAGMA table_info(buddies)").all().map(c => c.name);
+    if (!buddyCols.includes('requester_show_missed')) {
+      db.exec("ALTER TABLE buddies ADD COLUMN requester_show_missed INTEGER NOT NULL DEFAULT 0");
+    }
+    if (!buddyCols.includes('recipient_show_missed')) {
+      db.exec("ALTER TABLE buddies ADD COLUMN recipient_show_missed INTEGER NOT NULL DEFAULT 0");
+    }
+
+    const userFinalCols = db.prepare("PRAGMA table_info(users)").all().map(c => c.name);
+    if (!userFinalCols.includes('timezone')) {
+      db.exec("ALTER TABLE users ADD COLUMN timezone TEXT DEFAULT NULL");
+    }
+
     // Phone OTP storage (DB-backed so codes survive server restarts)
     db.exec(`
       CREATE TABLE IF NOT EXISTS phone_otps (

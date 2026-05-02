@@ -291,7 +291,18 @@ export default function ProfileScreen({ route, routeUsername, isOwn }) {
                   `${req.from_display_name} wants to be your accountability buddy.`,
                   [
                     { text: 'Decline', style: 'cancel', onPress: () => api.delete(`/buddies/${req.id}`).then(() => setBuddyData(d => ({ ...d, pending_requests: [] }))) },
-                    { text: 'Accept', onPress: () => api.put(`/buddies/${req.id}/accept`).then(() => api.get('/buddies').then(r => setBuddyData(r.data))) },
+                    {
+                      text: 'Accept', onPress: () => {
+                        Alert.alert(
+                          'Show your misses?',
+                          `If ${req.from_display_name} doesn't log, you'll see it. Do you want the same — let them see when you miss?`,
+                          [
+                            { text: 'Keep private', onPress: () => api.put(`/buddies/${req.id}/accept`, { show_missed: false }).then(() => api.get('/buddies').then(r => setBuddyData(r.data))) },
+                            { text: 'Yes, show them', onPress: () => api.put(`/buddies/${req.id}/accept`, { show_missed: true }).then(() => api.get('/buddies').then(r => setBuddyData(r.data))) },
+                          ]
+                        );
+                      },
+                    },
                   ]
                 );
               }}

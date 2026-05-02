@@ -403,6 +403,13 @@ router.get('/:username/habits', optionalAuth, (req, res) => {
   const isFollowing = !isOwner && req.user
     ? !!db.prepare('SELECT 1 FROM follows WHERE follower_id = ? AND following_id = ?').get(req.user.id, user.id)
     : false;
+  const isBuddy = !isOwner && req.user
+    ? !!db.prepare(`
+        SELECT 1 FROM buddies
+        WHERE ((requester_id = ? AND recipient_id = ?) OR (requester_id = ? AND recipient_id = ?))
+          AND status = 'active'
+      `).get(req.user.id, user.id, user.id, req.user.id)
+    : false;
 
   const allHabits = db.prepare(
     'SELECT * FROM habits WHERE user_id = ? AND is_active = 1 ORDER BY created_at DESC'
@@ -410,6 +417,7 @@ router.get('/:username/habits', optionalAuth, (req, res) => {
 
   const habits = isOwner ? allHabits : allHabits.filter(h => {
     if (h.visibility_missed === 'private') return false;
+    if (h.visibility_missed === 'buddy') return isBuddy;
     if (h.visibility_missed === 'friends' && !isFollowing) return false;
     return true;
   });
@@ -486,14 +494,18 @@ router.patch('/me/location', authMiddleware, (req, res) => {
 
 // PUT /api/users/me/push-token
 router.put('/me/push-token', authMiddleware, (req, res) => {
-  const { token } = req.body;
+  const { token, timezone } = req.body;
   if (!token || typeof token !== 'string') return res.status(400).json({ error: 'token required' });
   // Expo push tokens are always ExponentPushToken[...] or ExpoPushToken[...]
   if (!/^Expo(nent)?PushToken\[.{1,100}\]$/.test(token)) {
     return res.status(400).json({ error: 'Invalid push token format' });
   }
   const db = getDb();
-  db.prepare('UPDATE users SET push_token = ? WHERE id = ?').run(token, req.user.id);
+  if (timezone && typeof timezone === 'string' && timezone.length <= 100) {
+    db.prepare('UPDATE users SET push_token = ?, timezone = ? WHERE id = ?').run(token, timezone, req.user.id);
+  } else {
+    db.prepare('UPDATE users SET push_token = ? WHERE id = ?').run(token, req.user.id);
+  }
   res.json({ ok: true });
 });
 

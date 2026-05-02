@@ -21,8 +21,11 @@ const TYPE_ICONS = {
   reminder:         { icon: 'alarm',             bg: '#eab308' },
   challenge_join:   { icon: 'shield',            bg: '#8b5cf6' },
   challenge_invite: { icon: 'mail',              bg: '#8b5cf6' },
-  buddy_request:    { icon: 'people',            bg: '#14b8a6' },
-  buddy_accepted:   { icon: 'checkmark-circle',  bg: '#34d399' },
+  buddy_request:       { icon: 'people',            bg: '#14b8a6' },
+  buddy_accepted:      { icon: 'checkmark-circle',  bg: '#34d399' },
+  buddy_nudge:         { icon: 'notifications',     bg: '#34d399' },
+  buddy_5pm_reminder:  { icon: 'alarm',             bg: '#14b8a6' },
+  buddy_nudge_reminder:{ icon: 'notifications',     bg: '#14b8a6' },
 };
 
 function buildParts(n) {

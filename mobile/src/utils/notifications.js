@@ -35,7 +35,8 @@ export async function registerPushToken() {
 
     const projectId = Constants.expoConfig?.extra?.eas?.projectId;
     const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
-    await api.put('/users/me/push-token', { token });
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    await api.put('/users/me/push-token', { token, timezone });
   } catch {
     // Never crash the app over push registration
   }

@@ -134,7 +134,7 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
     );
   };
 
-  const isPublicHabit = !habit.visibility_missed || habit.visibility_missed !== 'private';
+  const isPublicHabit = !habit.visibility_missed || (habit.visibility_missed !== 'private' && habit.visibility_missed !== 'buddy');
 
   const navigateToPost = (day, ms) => {
     navigation.navigate('CreatePost', {
@@ -189,7 +189,10 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
             <Text style={styles.habitMetaText}>{habit.frequency}</Text>
             <Text style={styles.habitMetaText}>{habit.total_logs} logs</Text>
             <Text style={styles.habitMetaText}>
-              {habit.visibility_missed === 'friends' ? 'Friends Only' : habit.visibility_missed === 'private' ? 'Private' : 'Public'}
+              {habit.visibility_missed === 'friends' ? 'Friends only'
+                : habit.visibility_missed === 'private' ? 'Private'
+                : habit.visibility_missed === 'buddy' ? 'Buddy only'
+                : 'Public'}
             </Text>
             {!!habit.reminder_time && (
               <Text style={styles.habitMetaText}>· {formatTime(habit.reminder_time)}</Text>
@@ -550,14 +553,19 @@ function HabitFormModal({ habit, visible, onClose, onSave }) {
           <View style={styles.formField}>
             <Text style={styles.fieldLabel}>Missed days visibility</Text>
             <View style={styles.segmentRow}>
-              {['public', 'friends', 'private'].map(v => (
+              {[
+                { value: 'public', label: 'Public' },
+                { value: 'friends', label: 'Friends' },
+                { value: 'buddy', label: 'Buddy' },
+                { value: 'private', label: 'Private' },
+              ].map(({ value, label }) => (
                 <TouchableOpacity
-                  key={v}
-                  style={[styles.segment, form.visibility_missed === v && styles.segmentActive]}
-                  onPress={() => set('visibility_missed')(v)}
+                  key={value}
+                  style={[styles.segment, form.visibility_missed === value && styles.segmentActive]}
+                  onPress={() => set('visibility_missed')(value)}
                 >
-                  <Text style={[styles.segmentText, form.visibility_missed === v && styles.segmentTextActive]}>
-                    {v.charAt(0).toUpperCase() + v.slice(1)}
+                  <Text style={[styles.segmentText, form.visibility_missed === value && styles.segmentTextActive]}>
+                    {label}
                   </Text>
                 </TouchableOpacity>
               ))}
