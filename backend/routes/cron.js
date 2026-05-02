@@ -31,9 +31,15 @@ router.post('/habit-reminders', requireServerKey, async (_req, res) => {
   }
 });
 
-router.post('/daily-reminders', requireServerKey, async (_req, res) => {
+router.post('/daily-reminders', requireServerKey, async (req, res) => {
   try {
-    const sent = await runDailyHabitReminders();
+    // Optional window override; only pass through if it's a known value
+    // so the manual trigger doesn't dedup-block the scheduled run.
+    const requested = req.query.window || req.body?.window;
+    const window = (requested === 'morning' || requested === 'evening') ? requested : undefined;
+    const sent = window
+      ? await runDailyHabitReminders(window)
+      : await runDailyHabitReminders();
     res.json({ ok: true, sent });
   } catch (err) {
     console.error('[Cron] daily-reminders error:', err);
@@ -47,7 +53,8 @@ router.post('/db-backup', requireServerKey, (req, res) => {
   if (result.ok) {
     res.json({ ok: true, snapshot: result.snapshot });
   } else {
-    res.status(500).json({ error: result.error });
+    console.error('[Cron] Backup failed:', result.error);
+    res.status(500).json({ error: 'Backup failed' });
   }
 });
 

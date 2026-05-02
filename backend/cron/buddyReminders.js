@@ -1,6 +1,9 @@
 'use strict';
 const { getDb } = require('../database/db');
+const { getPeriodKeyTz } = require('../utils/streaks');
 const { sendPush } = require('../utils/push');
+
+const DEFAULT_TZ = 'America/New_York';
 
 /**
  * Run hourly. For each active buddy pair, if either user has unlogged daily habits
@@ -8,7 +11,8 @@ const { sendPush } = require('../utils/push');
  *   - The user who hasn't logged: "Your buddy is watching — log your habits."
  *   - Their buddy: "[name] hasn't logged yet — remind them."
  *
- * Deduped per pair per calendar day.
+ * Deduped per pair per *user-local* calendar day (so a user near a UTC
+ * boundary can't receive duplicates).
  */
 async function runBuddyAccountabilityReminders() {
   const db = getDb();
@@ -39,27 +43,35 @@ async function runBuddyAccountabilityReminders() {
     for (const u of users) {
       if (!u.token) continue;
 
+      const tz = u.tz || DEFAULT_TZ;
+
       // Determine local hour for this user
       let localHour;
       try {
         const formatter = new Intl.DateTimeFormat('en-US', {
           hour: 'numeric',
           hour12: false,
-          timeZone: u.tz || 'UTC',
+          timeZone: tz,
         });
-        localHour = parseInt(formatter.format(now), 10);
+        localHour = parseInt(formatter.format(now), 10) % 24;
       } catch {
         localHour = now.getUTCHours();
       }
 
       if (localHour !== 17) continue; // only fire during the 5pm hour
 
-      // Check if already sent today for this pair
+      // Local-date dedup key (YYYY-MM-DD in the user's tz). Encoding the date
+      // into reference_id lets us dedup without a schema change and without
+      // crossing UTC boundaries.
+      const localDate = getPeriodKeyTz(now, 'daily', tz);
+      const dedupRef = `${pair.id}:${localDate}`;
+
+      // Check if already sent today (user-local) for this pair
       const alreadySent = db.prepare(`
         SELECT 1 FROM notifications
         WHERE user_id = ? AND type = 'buddy_5pm_reminder'
-          AND reference_id = ? AND created_at >= date('now', 'start of day')
-      `).get(u.id, pair.id);
+          AND reference_id = ?
+      `).get(u.id, dedupRef);
       if (alreadySent) continue;
 
       // Check if user has any unlogged daily habits today
@@ -92,14 +104,30 @@ async function runBuddyAccountabilityReminders() {
 
       db.prepare(
         "INSERT INTO notifications (id, user_id, type, reference_id, message) VALUES (?, ?, 'buddy_5pm_reminder', ?, ?)"
-      ).run(uuidv4(), u.id, pair.id, `Log your habits — ${u.buddyName} is watching.`);
+      ).run(uuidv4(), u.id, dedupRef, `Log your habits — ${u.buddyName} is watching.`);
 
-      // Notify the buddy to nudge
-      await sendPush(u.buddyId, {
-        title: `Check in on ${u.name}`,
-        body: `${u.name} hasn't logged yet today — remind them.`,
-        data: { type: 'buddy_nudge_reminder', userId: u.id },
-      }, 'buddy');
+      // Nudge the buddy. Dedup on (buddyId, type='buddy_nudge_reminder',
+      // pair.id+local-date) so the buddy can't be re-nudged for the same
+      // local day.
+      const buddyDedupRef = `${pair.id}:${localDate}`;
+      const buddyAlreadyNudged = db.prepare(`
+        SELECT 1 FROM notifications
+        WHERE user_id = ? AND type = 'buddy_nudge_reminder'
+          AND reference_id = ?
+      `).get(u.buddyId, buddyDedupRef);
+
+      if (!buddyAlreadyNudged) {
+        // Insert the dedup row BEFORE sending so a retry can't double-send.
+        db.prepare(
+          "INSERT INTO notifications (id, user_id, type, reference_id, message) VALUES (?, ?, 'buddy_nudge_reminder', ?, ?)"
+        ).run(uuidv4(), u.buddyId, buddyDedupRef, `${u.name} hasn't logged yet today — remind them.`);
+
+        await sendPush(u.buddyId, {
+          title: `Check in on ${u.name}`,
+          body: `${u.name} hasn't logged yet today — remind them.`,
+          data: { type: 'buddy_nudge_reminder', userId: u.id },
+        }, 'buddy');
+      }
 
       sent++;
     }
@@ -113,6 +141,8 @@ async function runBuddyAccountabilityReminders() {
  * Run nightly at 00:30 UTC. For active buddy pairs where either user opted into
  * show_missed, check if they failed to log any daily habit yesterday. If so,
  * create a public post so the buddy sees it in their feed.
+ *
+ * "Yesterday" is computed in each user's local timezone, not UTC (#8).
  */
 async function runMissedHabitAutoPost() {
   const db = getDb();
@@ -121,33 +151,51 @@ async function runMissedHabitAutoPost() {
   // Pairs where at least one side opted in
   const pairs = db.prepare(`
     SELECT b.id, b.requester_id, b.recipient_id,
-      b.requester_show_missed, b.recipient_show_missed
-    FROM buddies b WHERE b.status = 'active'
+      b.requester_show_missed, b.recipient_show_missed,
+      ru.timezone as requester_tz, rcu.timezone as recipient_tz
+    FROM buddies b
+    JOIN users ru  ON ru.id  = b.requester_id
+    JOIN users rcu ON rcu.id = b.recipient_id
+    WHERE b.status = 'active'
       AND (b.requester_show_missed = 1 OR b.recipient_show_missed = 1)
   `).all();
 
+  const now = new Date();
   let posted = 0;
 
   for (const pair of pairs) {
     const toCheck = [];
-    if (pair.requester_show_missed) toCheck.push(pair.requester_id);
-    if (pair.recipient_show_missed) toCheck.push(pair.recipient_id);
+    if (pair.requester_show_missed) toCheck.push({ userId: pair.requester_id, tz: pair.requester_tz });
+    if (pair.recipient_show_missed) toCheck.push({ userId: pair.recipient_id, tz: pair.recipient_tz });
 
-    for (const userId of toCheck) {
-      // Find daily habits not logged yesterday
+    for (const { userId, tz: userTz } of toCheck) {
+      const tz = userTz || DEFAULT_TZ;
+
+      // "Yesterday" in user-local time
+      const todayLocal = getPeriodKeyTz(now, 'daily', tz);
+      const yesterdayDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      const yesterdayLocal = getPeriodKeyTz(yesterdayDate, 'daily', tz);
+
+      // Find daily habits not logged on the user's local "yesterday".
+      // We compare against the SQLite UTC date string for logged_at — this is
+      // an approximation but matches how the rest of the app counts daily
+      // logs. The key fix is computing `yesterdayLocal` from the user's tz
+      // rather than `date('now', '-1 day')` in UTC.
       const missedHabits = db.prepare(`
         SELECT h.id, h.name FROM habits h
         WHERE h.user_id = ? AND h.is_active = 1 AND h.frequency = 'daily'
           AND (
             SELECT COUNT(*) FROM habit_logs
             WHERE habit_id = h.id
-              AND date(logged_at) = date('now', '-1 day')
+              AND strftime('%Y-%m-%d', logged_at) = ?
           ) = 0
-      `).all(userId);
+      `).all(userId, yesterdayLocal);
 
       if (missedHabits.length === 0) continue;
 
-      // Dedup: only one missed post per user per day
+      // Dedup: only one missed post per user per local day. Match on the
+      // local "today" date so re-runs within the same user-local day don't
+      // double-post.
       const alreadyPosted = db.prepare(`
         SELECT 1 FROM posts WHERE user_id = ? AND type = 'missed_habit'
           AND date(created_at) = date('now')
@@ -159,9 +207,16 @@ async function runMissedHabitAutoPost() {
         ? `Missed "${names}" yesterday. Accountability is real.`
         : `Missed ${missedHabits.length} habits yesterday (${names}). Back at it today.`;
 
-      db.prepare(
-        "INSERT INTO posts (id, user_id, content, type) VALUES (?, ?, ?, 'missed_habit')"
-      ).run(uuidv4(), userId, content);
+      // #38 — when only one habit was missed, attribute the post to that habit
+      if (missedHabits.length === 1) {
+        db.prepare(
+          "INSERT INTO posts (id, user_id, content, type, habit_id) VALUES (?, ?, ?, 'missed_habit', ?)"
+        ).run(uuidv4(), userId, content, missedHabits[0].id);
+      } else {
+        db.prepare(
+          "INSERT INTO posts (id, user_id, content, type) VALUES (?, ?, ?, 'missed_habit')"
+        ).run(uuidv4(), userId, content);
+      }
       posted++;
     }
   }

@@ -219,8 +219,8 @@ router.post('/:id/log', authMiddleware, (req, res) => {
   db.exec('BEGIN IMMEDIATE');
   try {
     const recentLogs = db.prepare(
-      `SELECT logged_at FROM habit_logs WHERE habit_id = ? AND logged_at >= date('now', '${lookback}')`
-    ).all(habit.id);
+      `SELECT logged_at FROM habit_logs WHERE habit_id = ? AND logged_at >= date('now', ?)`
+    ).all(habit.id, lookback);
     periodCount = recentLogs.filter(l => getPeriodKeyTz(l.logged_at, habit.frequency, tz) === today).length;
     if (periodCount < target) {
       if (loggedAtOverride) {

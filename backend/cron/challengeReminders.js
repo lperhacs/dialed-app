@@ -32,7 +32,7 @@ async function runChallengeStartReminders() {
       // Dedup: skip if already sent for this challenge
       const alreadySent = db.prepare(`
         SELECT 1 FROM notifications
-        WHERE user_id = ? AND type = 'reminder' AND challenge_id = ?
+        WHERE user_id = ? AND type = 'challenge_start' AND challenge_id = ?
           AND created_at >= date('now', '-1 day')
       `).get(user_id, challenge.id);
       if (alreadySent) continue;
@@ -46,7 +46,7 @@ async function runChallengeStartReminders() {
       const { v4: uuidv4 } = require('uuid');
       db.prepare(`
         INSERT INTO notifications (id, user_id, type, challenge_id, message)
-        VALUES (?, ?, 'reminder', ?, ?)
+        VALUES (?, ?, 'challenge_start', ?, ?)
       `).run(uuidv4(), user_id, challenge.id, `"${challenge.name}" starts tomorrow`);
 
       sent++;

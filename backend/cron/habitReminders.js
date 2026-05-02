@@ -43,7 +43,7 @@ async function runMonthlyHabitReminders() {
     const alreadySent = db.prepare(`
       SELECT 1 FROM notifications
       WHERE user_id = ?
-        AND type = 'reminder'
+        AND type = 'monthly_reminder'
         AND reference_id = ?
         AND strftime('%Y-%m', created_at) = ?
     `).get(habit.user_id, habit.id, currentPeriod);
@@ -62,7 +62,7 @@ async function runMonthlyHabitReminders() {
     // In-app notification
     db.prepare(`
       INSERT INTO notifications (id, user_id, type, reference_id, message)
-      VALUES (?, ?, 'reminder', ?, ?)
+      VALUES (?, ?, 'monthly_reminder', ?, ?)
     `).run(uuidv4(), habit.user_id, habit.id, msg);
 
     sent++;

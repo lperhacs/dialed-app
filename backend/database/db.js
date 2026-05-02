@@ -253,6 +253,9 @@ function getDb() {
     if (!userFinalCols.includes('timezone')) {
       db.exec("ALTER TABLE users ADD COLUMN timezone TEXT DEFAULT NULL");
     }
+    if (!userFinalCols.includes('token_version')) {
+      db.exec("ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0");
+    }
 
     // Phone OTP storage (DB-backed so codes survive server restarts)
     db.exec(`
@@ -264,6 +267,14 @@ function getDb() {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
     `);
+    const phoneOtpCols = db.prepare("PRAGMA table_info(phone_otps)").all().map(c => c.name);
+    if (!phoneOtpCols.includes('user_id')) {
+      try {
+        db.exec("ALTER TABLE phone_otps ADD COLUMN user_id TEXT DEFAULT NULL");
+      } catch (err) {
+        // Column may already exist on some DBs — ignore.
+      }
+    }
 
     // Chat mutes (DM conversations and club chats)
     db.exec(`

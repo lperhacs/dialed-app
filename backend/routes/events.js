@@ -36,10 +36,11 @@ router.get('/search', authMiddleware, (req, res) => {
   const { q } = req.query;
   if (!q?.trim()) return res.json([]);
   const db = getDb();
-  const term = `%${q.trim()}%`;
+  // Escape LIKE wildcards (%, _, \) so user input can't trigger expensive full scans
+  const term = `%${q.trim().replace(/[%_\\]/g, '\\$&')}%`;
   const rows = db.prepare(`
     ${EVENT_SELECT}
-    WHERE (e.title LIKE ? OR e.description LIKE ? OR e.location LIKE ?)
+    WHERE (e.title LIKE ? ESCAPE '\\' OR e.description LIKE ? ESCAPE '\\' OR e.location LIKE ? ESCAPE '\\')
     ORDER BY e.event_date ASC LIMIT 20
   `).all(req.user.id, req.user.id, req.user.id, term, term, term);
   res.json(rows);
@@ -118,7 +119,7 @@ router.post('/', authMiddleware, (req, res) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(event_date) || isNaN(new Date(event_date).getTime())) {
     return res.status(400).json({ error: 'Invalid event date format (YYYY-MM-DD required)' });
   }
-  if (event_time && !/^\d{2}:\d{2}(:\d{2})?$/.test(event_time)) {
+  if (event_time && !/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(event_time)) {
     return res.status(400).json({ error: 'Invalid event_time format (HH:MM or HH:MM:SS required)' });
   }
 

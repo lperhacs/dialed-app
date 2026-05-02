@@ -80,6 +80,29 @@ router.post('/group', authMiddleware, (req, res) => {
     if (!exists) return res.status(404).json({ error: `User not found: ${uid}` });
   }
 
+  // Consent check: every invitee (other than the creator) must be a mutual —
+  // either follows the creator OR is followed by the creator. Prevents group-chat spam.
+  const notAllowed = [];
+  for (const uid of user_ids) {
+    if (uid === req.user.id) continue;
+    const isMutual = db.prepare(
+      `SELECT 1 FROM follows
+       WHERE (follower_id = ? AND following_id = ?)
+          OR (follower_id = ? AND following_id = ?)
+       LIMIT 1`
+    ).get(req.user.id, uid, uid, req.user.id);
+    if (!isMutual) {
+      const u = db.prepare('SELECT username FROM users WHERE id = ?').get(uid);
+      notAllowed.push(u?.username || uid);
+    }
+  }
+  if (notAllowed.length > 0) {
+    return res.status(400).json({
+      error: 'You can only add people you follow or who follow you',
+      not_allowed: notAllowed,
+    });
+  }
+
   const id = uuidv4();
   db.prepare('INSERT INTO conversations (id, name, is_group) VALUES (?, ?, 1)').run(id, name.trim());
   for (const uid of allIds) {

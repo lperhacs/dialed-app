@@ -1,7 +1,7 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../database/db');
-const { authMiddleware, optionalAuth } = require('../middleware/auth');
+const { authMiddleware, optionalAuth, generateToken } = require('../middleware/auth');
 const upload = require('../middleware/upload');
 const { calculateStreak, isStreakAtRisk, getEarnedBadges, BADGE_DEFS } = require('../utils/streaks');
 const { sendPush } = require('../utils/push');
@@ -438,8 +438,11 @@ router.get('/:username/habits', optionalAuth, (req, res) => {
 // PATCH /api/users/me/avatar — store avatar as base64 data URL (persists across deploys)
 router.patch('/me/avatar', authMiddleware, (req, res) => {
   const { avatar_data } = req.body;
-  if (!avatar_data) return res.status(400).json({ error: 'avatar_data required' });
-  if (!avatar_data.startsWith('data:image/')) return res.status(400).json({ error: 'Invalid image data' });
+  if (!avatar_data || typeof avatar_data !== 'string') return res.status(400).json({ error: 'avatar_data required' });
+  // Whitelist raster image MIME types only — block SVG (can contain <script>) and other formats.
+  if (!/^data:image\/(jpeg|jpg|png|webp|gif);base64,/.test(avatar_data)) {
+    return res.status(400).json({ error: 'Invalid image data' });
+  }
   if (avatar_data.length > 700000) return res.status(400).json({ error: 'Image too large. Choose a smaller photo.' });
 
   const db = getDb();
@@ -453,7 +456,7 @@ router.patch('/me', authMiddleware, (req, res) => {
   const db = getDb();
   const { display_name, username, bio } = req.body;
 
-  if (username) {
+  if (typeof username === 'string') {
     if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
       return res.status(400).json({ error: 'Username must be 3-20 alphanumeric characters or underscores' });
     }
@@ -461,18 +464,20 @@ router.patch('/me', authMiddleware, (req, res) => {
     if (taken) return res.status(409).json({ error: 'Username already taken' });
   }
 
-  if (display_name !== undefined && display_name.trim().length > 50) {
+  if (typeof display_name === 'string' && display_name.trim().length > 50) {
     return res.status(400).json({ error: 'Display name must be 50 characters or fewer' });
   }
-  if (bio !== undefined && bio.trim().length > 300) {
+  if (typeof bio === 'string' && bio.trim().length > 300) {
     return res.status(400).json({ error: 'Bio must be 300 characters or fewer' });
   }
 
   const updates = [];
   const values = [];
-  if (display_name !== undefined) { updates.push('display_name = ?'); values.push(display_name.trim()); }
-  if (username !== undefined)     { updates.push('username = ?');      values.push(username.toLowerCase()); }
-  if (bio !== undefined)          { updates.push('bio = ?');           values.push(bio.trim()); }
+  // Guard: only update text fields if a string was provided. null/other types are skipped
+  // to avoid `.trim()` crashes and to prevent clobbering existing values with junk.
+  if (typeof display_name === 'string') { updates.push('display_name = ?'); values.push(display_name.trim()); }
+  if (typeof username === 'string')     { updates.push('username = ?');      values.push(username.toLowerCase()); }
+  if (typeof bio === 'string')          { updates.push('bio = ?');           values.push(bio.trim()); }
 
   if (updates.length === 0) return res.status(400).json({ error: 'Nothing to update' });
 
@@ -510,9 +515,19 @@ router.put('/me/push-token', authMiddleware, (req, res) => {
 });
 
 // PATCH /api/users/me/notifications  — saves push notification preferences
+const NOTIFY_PREF_KEYS = [
+  'buddy', 'comment', 'like', 'cheer', 'follow', 'challenge',
+  'event', 'mention', 'reminder', 'dm', 'follows',
+];
 router.patch('/me/notifications', authMiddleware, (req, res) => {
-  const serialized = JSON.stringify(req.body);
-  if (serialized.length > 2000) return res.status(400).json({ error: 'Preferences payload too large' });
+  if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+    return res.status(400).json({ error: 'Invalid preferences payload' });
+  }
+  const sanitized = {};
+  for (const key of NOTIFY_PREF_KEYS) {
+    if (key in req.body) sanitized[key] = !!req.body[key];
+  }
+  const serialized = JSON.stringify(sanitized);
   const db = getDb();
   db.prepare('UPDATE users SET notify_prefs = ? WHERE id = ?').run(serialized, req.user.id);
   res.json({ ok: true });
@@ -549,8 +564,11 @@ router.patch('/me/password', authMiddleware, (req, res) => {
   }
 
   const newHash = bcrypt.hashSync(new_password, 10);
-  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(newHash, req.user.id);
-  res.json({ ok: true });
+  // Bump token_version to invalidate all existing tokens, then issue a fresh one for this client.
+  db.prepare('UPDATE users SET password_hash = ?, token_version = token_version + 1 WHERE id = ?').run(newHash, req.user.id);
+  const updated = db.prepare('SELECT id, username, display_name, token_version FROM users WHERE id = ?').get(req.user.id);
+  const token = generateToken(updated);
+  res.json({ ok: true, token });
 });
 
 // PATCH /api/users/me/email — step 1: verify password + send code to new email
@@ -576,7 +594,8 @@ router.patch('/me/email', authMiddleware, async (req, res) => {
   if (taken) return res.status(409).json({ error: 'Email already in use' });
 
   // Send a verification code to the *new* email before committing the change
-  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const { randomInt } = require('crypto');
+  const code = randomInt(100000, 1000000).toString();
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
   db.prepare('DELETE FROM email_verifications WHERE user_id = ?').run(req.user.id);
   db.prepare('INSERT INTO email_verifications (id, user_id, code, expires_at, pending_email) VALUES (?, ?, ?, ?, ?)')
@@ -606,14 +625,28 @@ router.post('/me/email/confirm', authMiddleware, (req, res) => {
   }
   if (record.code !== code.toString()) return res.status(400).json({ error: 'Invalid code' });
 
-  db.prepare('UPDATE users SET email = ?, email_verified = 1 WHERE id = ?').run(record.pending_email, req.user.id);
+  // Bump token_version to invalidate older tokens after the email change, then issue a fresh one
+  // for this client so it doesn't get logged out immediately.
+  db.prepare('UPDATE users SET email = ?, email_verified = 1, token_version = token_version + 1 WHERE id = ?')
+    .run(record.pending_email, req.user.id);
   db.prepare('DELETE FROM email_verifications WHERE user_id = ?').run(req.user.id);
-  res.json({ ok: true });
+  const updated = db.prepare('SELECT id, username, display_name, token_version FROM users WHERE id = ?').get(req.user.id);
+  const token = generateToken(updated);
+  res.json({ ok: true, token });
 });
 
 // POST /api/users/me/deactivate
 router.post('/me/deactivate', authMiddleware, (req, res) => {
+  const { password } = req.body;
+  if (!password) return res.status(400).json({ error: 'Password required to deactivate account' });
+
+  const bcrypt = require('bcryptjs');
   const db = getDb();
+  const account = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.id);
+  if (!account || !bcrypt.compareSync(password, account.password_hash)) {
+    return res.status(401).json({ error: 'Password is incorrect' });
+  }
+
   db.prepare('UPDATE users SET is_deactivated = 1 WHERE id = ?').run(req.user.id);
   res.json({ ok: true });
 });

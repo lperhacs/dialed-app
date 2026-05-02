@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
   bio         TEXT DEFAULT '',
   avatar_url  TEXT DEFAULT '',
   featured_habit_id TEXT DEFAULT NULL,
+  token_version INTEGER NOT NULL DEFAULT 0,
   created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -183,6 +184,16 @@ CREATE TABLE IF NOT EXISTS chat_mutes (
   muted_until  DATETIME,      -- NULL = muted forever
   created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (user_id, context_type, context_id)
+);
+
+-- Phone OTPs
+CREATE TABLE IF NOT EXISTS phone_otps (
+  phone       TEXT PRIMARY KEY,
+  otp         TEXT NOT NULL,
+  expires_at  DATETIME NOT NULL,
+  attempts    INTEGER NOT NULL DEFAULT 0,
+  user_id     TEXT REFERENCES users(id) ON DELETE CASCADE,
+  created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Indexes

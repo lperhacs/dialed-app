@@ -110,11 +110,11 @@ router.post('/request', authMiddleware, (req, res) => {
   const target = db.prepare('SELECT id FROM users WHERE id = ?').get(user_id);
   if (!target) return res.status(404).json({ error: 'User not found' });
 
-  // Pro plan gating
+  // Pro plan gating — pre-check for fast-fail with a clear error/pro_gate.
   const requester = db.prepare('SELECT is_pro FROM users WHERE id = ?').get(req.user.id);
   const myLimit = requester?.is_pro ? PRO_BUDDY_LIMIT : FREE_BUDDY_LIMIT;
-  const myCount = getActiveBuddyCount(db, req.user.id);
-  if (myCount >= myLimit) {
+  const myCountPre = getActiveBuddyCount(db, req.user.id);
+  if (myCountPre >= myLimit) {
     return res.status(403).json({
       error: myLimit === FREE_BUDDY_LIMIT
         ? 'Free plan allows 1 buddy. Upgrade to Dialed Pro for up to 3 buddies.'
@@ -124,8 +124,8 @@ router.post('/request', authMiddleware, (req, res) => {
   }
   const recipient = db.prepare('SELECT is_pro FROM users WHERE id = ?').get(user_id);
   const theirLimit = recipient?.is_pro ? PRO_BUDDY_LIMIT : FREE_BUDDY_LIMIT;
-  const theirCount = getActiveBuddyCount(db, user_id);
-  if (theirCount >= theirLimit) return res.status(400).json({ error: 'This user has reached their buddy limit' });
+  const theirCountPre = getActiveBuddyCount(db, user_id);
+  if (theirCountPre >= theirLimit) return res.status(400).json({ error: 'This user has reached their buddy limit' });
 
   const existing = db.prepare(
     'SELECT * FROM buddies WHERE (requester_id = ? AND recipient_id = ?) OR (requester_id = ? AND recipient_id = ?)'
@@ -133,9 +133,33 @@ router.post('/request', authMiddleware, (req, res) => {
 
   if (existing?.status === 'pending') return res.status(400).json({ error: 'Request already sent' });
 
+  // Re-check counts INSIDE a transaction to close the race window where two
+  // concurrent requests both passed the pre-check and would each insert.
   const id = uuidv4();
-  db.prepare("INSERT OR REPLACE INTO buddies (id, requester_id, recipient_id, status) VALUES (?, ?, ?, 'pending')")
-    .run(id, req.user.id, user_id);
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    const myCount = getActiveBuddyCount(db, req.user.id);
+    if (myCount >= myLimit) {
+      db.exec('ROLLBACK');
+      return res.status(403).json({
+        error: myLimit === FREE_BUDDY_LIMIT
+          ? 'Free plan allows 1 buddy. Upgrade to Dialed Pro for up to 3 buddies.'
+          : 'You have reached the maximum of 3 active buddies.',
+        pro_gate: !requester?.is_pro,
+      });
+    }
+    const theirCount = getActiveBuddyCount(db, user_id);
+    if (theirCount >= theirLimit) {
+      db.exec('ROLLBACK');
+      return res.status(400).json({ error: 'This user has reached their buddy limit' });
+    }
+    db.prepare("INSERT OR REPLACE INTO buddies (id, requester_id, recipient_id, status) VALUES (?, ?, ?, 'pending')")
+      .run(id, req.user.id, user_id);
+    db.exec('COMMIT');
+  } catch (e) {
+    try { db.exec('ROLLBACK'); } catch { /* already rolled back */ }
+    throw e;
+  }
 
   db.prepare(
     "INSERT INTO notifications (id, user_id, type, from_user_id, message) VALUES (?, ?, 'buddy_request', ?, ?)"

@@ -51,6 +51,9 @@ router.post('/register', (req, res) => {
   if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
     return res.status(400).json({ error: 'Username must be 3-20 alphanumeric characters or underscores' });
   }
+  if (email.length > 254) {
+    return res.status(400).json({ error: 'Email too long' });
+  }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return res.status(400).json({ error: 'Invalid email format' });
   }
@@ -71,9 +74,9 @@ router.post('/register', (req, res) => {
   const password_hash = bcrypt.hashSync(password, 10);
   db.prepare(
     'INSERT INTO users (id, username, email, password_hash, display_name) VALUES (?, ?, ?, ?, ?)'
-  ).run(id, username.toLowerCase(), email.toLowerCase(), password_hash, display_name);
+  ).run(id, username.toLowerCase(), email.toLowerCase(), password_hash, display_name.trim());
 
-  const user = db.prepare('SELECT id, username, email, display_name, bio, avatar_url, created_at FROM users WHERE id = ?').get(id);
+  const user = db.prepare('SELECT id, username, email, display_name, bio, avatar_url, token_version, created_at FROM users WHERE id = ?').get(id);
   const token = generateToken(user);
   trackEvent(id, 'user_registered', {}, metaFromReq(req));
 
@@ -196,8 +199,9 @@ router.post('/verify-email', authMiddleware, (req, res) => {
 // ── OTP (SMS verification placeholder — swap Twilio in for production) ────────
 const OTP_MAX_ATTEMPTS = 5;
 
-// POST /api/auth/send-otp
-router.post('/send-otp', (req, res) => {
+// POST /api/auth/send-otp  (requires auth — phone is bound to the authenticated user
+// to prevent verifying someone else's number. Behavior change: previously unauthenticated.)
+router.post('/send-otp', authMiddleware, (req, res) => {
   const { phone } = req.body;
   if (!phone || phone.replace(/\D/g, '').length < 10) {
     return res.status(400).json({ error: 'Valid phone number required' });
@@ -207,12 +211,12 @@ router.post('/send-otp', (req, res) => {
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
   const db = getDb();
-  // Upsert — replaces any existing code for this phone
+  // Upsert — replaces any existing code for this phone, binding it to the requesting user
   db.prepare(`
-    INSERT INTO phone_otps (phone, otp, expires_at, attempts)
-    VALUES (?, ?, ?, 0)
-    ON CONFLICT(phone) DO UPDATE SET otp = excluded.otp, expires_at = excluded.expires_at, attempts = 0
-  `).run(cleaned, otp, expiresAt);
+    INSERT INTO phone_otps (phone, otp, expires_at, attempts, user_id)
+    VALUES (?, ?, ?, 0, ?)
+    ON CONFLICT(phone) DO UPDATE SET otp = excluded.otp, expires_at = excluded.expires_at, attempts = 0, user_id = excluded.user_id
+  `).run(cleaned, otp, expiresAt, req.user.id);
 
   // TODO: replace with Twilio SMS — `twilio.messages.create({ to: cleaned, from: TWILIO_FROM, body: ... })`
 
@@ -231,6 +235,11 @@ router.post('/verify-otp', authMiddleware, (req, res) => {
   if (!record || new Date(record.expires_at) < new Date()) {
     if (record) db.prepare('DELETE FROM phone_otps WHERE phone = ?').run(cleaned);
     return res.status(400).json({ error: 'Invalid or expired code' });
+  }
+
+  // Phone OTPs are bound to the user that requested them — block cross-user verification
+  if (record.user_id && record.user_id !== req.user.id) {
+    return res.status(403).json({ error: 'This code was not requested by you' });
   }
 
   if (record.otp !== otp.toString()) {

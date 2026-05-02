@@ -193,7 +193,7 @@ router.get('/', optionalAuth, (req, res) => {
 router.post('/', authMiddleware, (req, res) => {
   const db = getDb();
   const { name, description, frequency, start_date, end_date, visibility } = req.body;
-  if (!name || !frequency || !start_date) {
+  if (!name?.trim() || !frequency || !start_date) {
     return res.status(400).json({ error: 'name, frequency, and start_date are required' });
   }
   if (!['daily', 'weekly', 'monthly'].includes(frequency)) {
@@ -213,7 +213,7 @@ router.post('/', authMiddleware, (req, res) => {
   const vis = visibility === 'private' ? 'private' : 'public';
   db.prepare(
     'INSERT INTO challenges (id, creator_id, name, description, frequency, visibility, start_date, end_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(id, req.user.id, name, description || '', frequency, vis, start_date, end_date || null);
+  ).run(id, req.user.id, name.trim(), description || '', frequency, vis, start_date, end_date || null);
 
   // Auto-join creator as active
   db.prepare('INSERT INTO challenge_members (challenge_id, user_id, status) VALUES (?, ?, ?)').run(id, req.user.id, 'active');

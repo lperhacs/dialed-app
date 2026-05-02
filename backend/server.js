@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const path = require('path');
 
 const app = express();
@@ -58,13 +59,10 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Security headers
-app.use((_req, res, next) => {
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('X-XSS-Protection', '1; mode=block');
-  next();
-});
+// Security headers — helmet sets sensible defaults (X-Content-Type-Options,
+// X-Frame-Options, HSTS, Referrer-Policy, etc.). CSP disabled because this is
+// an API server consumed by a native mobile client, not a browser.
+app.use(helmet({ contentSecurityPolicy: false }));
 
 // Initialize DB on startup
 require('./database/db').getDb();
@@ -112,23 +110,17 @@ app.listen(PORT, () => {
   const { runDbBackup } = require('./cron/dbBackup');
   const { runBuddyAccountabilityReminders, runMissedHabitAutoPost } = require('./cron/buddyReminders');
 
-  // Daily morning reminder — 09:00 UTC (5am ET / 2am PT)
-  // Motivating nudge at the start of the day for unlogged habits
-  cron.schedule('0 9 * * *', () => {
-    runDailyHabitReminders('morning').catch(err =>
-      console.error('[Cron] daily-habit-reminders (morning) failed:', err)
+  // Daily habit reminders — runs hourly. The reminder logic itself decides
+  // per-user whether to send a "morning" (9am local) or "evening" (7pm local)
+  // push based on each user's `users.timezone`. This replaces the previous
+  // fixed 09:00/19:00 UTC schedule that fired in the middle of the night for
+  // Pacific users.
+  cron.schedule('0 * * * *', () => {
+    runDailyHabitReminders().catch(err =>
+      console.error('[Cron] daily-habit-reminders failed:', err)
     );
   }, { timezone: 'UTC' });
-  console.log('[Cron] daily habit reminder scheduler started (09:00 UTC morning)');
-
-  // Daily evening reminder — 19:00 UTC (3pm ET / noon PT)
-  // Last-chance nudge for anyone who still hasn't logged
-  cron.schedule('0 19 * * *', () => {
-    runDailyHabitReminders('evening').catch(err =>
-      console.error('[Cron] daily-habit-reminders (evening) failed:', err)
-    );
-  }, { timezone: 'UTC' });
-  console.log('[Cron] daily habit reminder scheduler started (19:00 UTC evening)');
+  console.log('[Cron] daily habit reminder scheduler started (hourly, fires at 9am/7pm local per user)');
 
   // Challenge start reminder — 10:00 UTC, fires day before a challenge begins
   cron.schedule('0 10 * * *', () => {
