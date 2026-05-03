@@ -275,9 +275,20 @@ function getDb() {
     }
     if (!buddyCols.includes('freeze_used_dates')) {
       db.exec("ALTER TABLE buddies ADD COLUMN freeze_used_dates TEXT DEFAULT NULL");
-      // One-shot backfill from the older single-date column so any pair that
-      // already used a freeze in the past few minutes doesn't lose it.
-      db.exec("UPDATE buddies SET freeze_used_dates = json_array(last_freeze_used_at) WHERE last_freeze_used_at IS NOT NULL AND freeze_used_dates IS NULL");
+      // One-shot backfill from the older single-date column. Build the JSON
+      // string in JS to avoid depending on json_array() — node:sqlite *should*
+      // ship with JSON1, but we don't want a missing extension to crash boot.
+      try {
+        const rows = db.prepare(
+          "SELECT id, last_freeze_used_at FROM buddies WHERE last_freeze_used_at IS NOT NULL AND freeze_used_dates IS NULL"
+        ).all();
+        const upd = db.prepare("UPDATE buddies SET freeze_used_dates = ? WHERE id = ?");
+        for (const r of rows) {
+          upd.run(JSON.stringify([r.last_freeze_used_at]), r.id);
+        }
+      } catch (err) {
+        console.warn('[db] freeze_used_dates backfill failed (non-fatal):', err.message);
+      }
     }
 
     const userFinalCols = db.prepare("PRAGMA table_info(users)").all().map(c => c.name);

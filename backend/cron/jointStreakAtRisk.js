@@ -37,18 +37,32 @@ async function runJointStreakAtRisk() {
   let sent = 0;
 
   for (const pair of pairs) {
-    // computeJointStreak() may consume a freeze and persist `last_freeze_used_at`.
-    // We pass the row as-is; it will return updated state.
-    const joint = computeJointStreak(db, pair, pair.requester_id, pair.recipient_id);
-
-    // No streak to lose, or already a joint day today → nothing to warn about.
-    if (joint.streak < MIN_STREAK_TO_WARN) continue;
-    if (joint.alive_today) continue;
-
     const sides = [
       { id: pair.requester_id, name: pair.requester_name, token: pair.requester_token, prefs: pair.requester_prefs, tz: pair.requester_tz, buddyName: pair.recipient_name },
       { id: pair.recipient_id, name: pair.recipient_name, token: pair.recipient_token, prefs: pair.recipient_prefs, tz: pair.recipient_tz, buddyName: pair.requester_name },
     ];
+
+    // Cheap pre-filter: skip pairs where neither side is currently in the fire
+    // hour. computeJointStreak() has a side effect (writes `freeze_used_dates`),
+    // so we MUST avoid calling it 24×/day per pair when only ~1 hour matters.
+    const anyInFireHour = sides.some(u => {
+      if (!u.token) return false;
+      try {
+        const formatter = new Intl.DateTimeFormat('en-US', {
+          hour: 'numeric', hour12: false, timeZone: u.tz || DEFAULT_TZ,
+        });
+        return (parseInt(formatter.format(now), 10) % 24) === FIRE_HOUR;
+      } catch {
+        return now.getUTCHours() === FIRE_HOUR;
+      }
+    });
+    if (!anyInFireHour) continue;
+
+    // Now safe to compute joint state (and consume freezes if applicable).
+    const joint = computeJointStreak(db, pair, pair.requester_id, pair.recipient_id);
+
+    if (joint.streak < MIN_STREAK_TO_WARN) continue;
+    if (joint.alive_today) continue;
 
     for (const u of sides) {
       if (!u.token) continue;
@@ -78,26 +92,32 @@ async function runJointStreakAtRisk() {
       const localDate = getPeriodKeyTz(now, 'daily', tz);
       const dedupRef = `${pair.id}:${localDate}`;
 
-      const already = db.prepare(`
-        SELECT 1 FROM notifications
-        WHERE user_id = ? AND type = 'joint_streak_at_risk' AND reference_id = ?
-      `).get(u.id, dedupRef);
-      if (already) continue;
+      try {
+        const already = db.prepare(`
+          SELECT 1 FROM notifications
+          WHERE user_id = ? AND type = 'joint_streak_at_risk' AND reference_id = ?
+        `).get(u.id, dedupRef);
+        if (already) continue;
 
-      const body = `${u.buddyName} hasn't logged today — your ${joint.streak}-day streak ends at midnight.`;
+        const body = `${u.buddyName} hasn't logged today — your ${joint.streak}-day streak ends at midnight.`;
 
-      // Insert dedup row BEFORE the push so a push failure still records the send.
-      db.prepare(
-        "INSERT INTO notifications (id, user_id, type, reference_id, message) VALUES (?, ?, 'joint_streak_at_risk', ?, ?)"
-      ).run(uuidv4(), u.id, dedupRef, body);
+        // Insert dedup row BEFORE the push so a push failure still records the send.
+        db.prepare(
+          "INSERT INTO notifications (id, user_id, type, reference_id, message) VALUES (?, ?, 'joint_streak_at_risk', ?, ?)"
+        ).run(uuidv4(), u.id, dedupRef, body);
 
-      await sendPush(u.id, {
-        title: 'Your streak is at risk',
-        body,
-        data: { type: 'joint_streak_at_risk', buddyName: u.buddyName, streak: joint.streak },
-      }, 'buddy');
+        await sendPush(u.id, {
+          title: 'Your streak is at risk',
+          body,
+          data: { type: 'joint_streak_at_risk', buddyName: u.buddyName, streak: joint.streak },
+        }, 'buddy');
 
-      sent++;
+        sent++;
+      } catch (err) {
+        // FK race (user/pair deleted mid-iteration), DB lock, etc. — log
+        // and keep going so the rest of the batch still gets pushed.
+        console.warn('[joint-streak-at-risk] pair', pair.id, 'user', u.id, 'failed:', err.message);
+      }
     }
   }
 

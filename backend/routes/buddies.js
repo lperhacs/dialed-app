@@ -75,7 +75,17 @@ function computeJointStreak(db, pair, userIdA, userIdB) {
   }
 
   const dayBefore = (d) => new Date(new Date(d).getTime() - 86400000).toISOString().split('T')[0];
-  const isWithin14 = (a, b) => Math.abs(new Date(a) - new Date(b)) <= 14 * 86400000;
+  // "Used in the 13 days strictly before this gap" — a strictly-prior, exclusive
+  // 14-day window. Two gaps 14+ days apart can each consume their own freeze;
+  // gaps inside the same 14-day stretch share the quota. This matches the
+  // user-facing "X freezes per 14 days" documentation.
+  const usedInLast14 = (used, gap) => {
+    const gapMs = new Date(gap).getTime();
+    return used.filter(d => {
+      const dMs = new Date(d).getTime();
+      return dMs < gapMs && (gapMs - dMs) < 14 * 86400000;
+    }).length;
+  };
 
   // Parse stored freeze history (JSON array of YYYY-MM-DD).
   let usedDates = [];
@@ -89,6 +99,13 @@ function computeJointStreak(db, pair, userIdA, userIdB) {
     usedDates = [pair.last_freeze_used_at];
   }
   const usedSet = new Set(usedDates);
+  // Refund: if a date marked as "freeze used" is actually a joint day now
+  // (both buddies retro-logged for it), the freeze never needed to be spent.
+  // Drop those entries so they don't pollute the rolling-window quota.
+  let refunded = false;
+  for (const d of [...usedSet]) {
+    if (jointSet.has(d)) { usedSet.delete(d); refunded = true; }
+  }
   const newlyUsed = []; // freezes consumed during this read
   let freezeUsedRecently = false;
 
@@ -112,9 +129,9 @@ function computeJointStreak(db, pair, userIdA, userIdB) {
       continue;
     }
 
-    // Try to consume a fresh freeze. Quota is rolling-14-days centered on the
-    // gap date: count freezes already used inside ±14 days of the gap.
-    const usedNearby = [...usedSet].filter(d => isWithin14(d, expected)).length;
+    // Try to consume a fresh freeze. Quota is rolling-14-days strictly before
+    // the gap: count freezes already used inside [gap - 13 days, gap).
+    const usedNearby = usedInLast14([...usedSet], expected);
     if (usedNearby < freezeQuota) {
       usedSet.add(expected);
       newlyUsed.push(expected);
@@ -125,12 +142,12 @@ function computeJointStreak(db, pair, userIdA, userIdB) {
     break;
   }
 
-  // Persist updated freeze history. Prune anything older than 30 days from
-  // today so the JSON column doesn't grow unboundedly — anything older can't
-  // affect a 14-day window from any current decision.
-  if (newlyUsed.length > 0 && pair?.id) {
+  // Persist updated freeze history when something changed (consumed a fresh
+  // freeze, or refunded one that became a joint day). Prune anything older
+  // than 30 days from today so the JSON column doesn't grow unboundedly.
+  if ((newlyUsed.length > 0 || refunded) && pair?.id) {
     const cutoff = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
-    const next = [...usedSet].filter(d => d >= cutoff).sort();
+    const next = [...usedSet].filter(d => typeof d === 'string' && d >= cutoff).sort();
     try {
       db.prepare('UPDATE buddies SET freeze_used_dates = ?, last_freeze_used_at = ? WHERE id = ?')
         .run(JSON.stringify(next), next[next.length - 1] || null, pair.id);

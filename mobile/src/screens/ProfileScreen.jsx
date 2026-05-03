@@ -364,10 +364,10 @@ export default function ProfileScreen({ route, routeUsername, isOwn }) {
                   <View style={{
                     flexDirection: 'row', alignItems: 'center', gap: 3,
                     paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10,
-                    backgroundColor: 'rgba(96,165,250,0.15)',
+                    backgroundColor: colors.accentDim,
                   }}>
-                    <Ionicons name="snow-outline" size={11} color="#60a5fa" />
-                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#60a5fa' }}>
+                    <Ionicons name="snow-outline" size={11} color={colors.accent} />
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: colors.accent }}>
                       freeze used
                     </Text>
                   </View>
