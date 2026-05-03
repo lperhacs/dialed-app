@@ -19,10 +19,15 @@ export function ThemeProvider({ children }) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    AsyncStorage.getItem(THEME_KEY).then(v => {
-      if (v) setThemeModeState(v);
-      setReady(true);
-    });
+    AsyncStorage.getItem(THEME_KEY)
+      .then(v => {
+        if (v) setThemeModeState(v);
+        setReady(true);
+      })
+      .catch(() => {
+        // Corrupted storage / unavailable — fall back to default 'system' mode
+        setReady(true);
+      });
   }, []);
 
   const setThemeMode = async (mode) => {

@@ -155,7 +155,9 @@ router.post('/', authMiddleware, (req, res) => {
     ).all(club_id, req.user.id);
 
     const creator = db.prepare('SELECT display_name FROM users WHERE id = ?').get(req.user.id);
-    const message = `${creator.display_name} posted an event in ${club.name}: "${title.trim()}" on ${new Date(event_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+    const creatorName = (creator && creator.display_name) || 'Someone';
+    const clubName = (club && club.name) || 'your club';
+    const message = `${creatorName} posted an event in ${clubName}: "${title.trim()}" on ${new Date(event_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
 
     const insert = db.prepare(
       "INSERT INTO notifications (id, user_id, from_user_id, type, message, reference_id) VALUES (?, ?, ?, 'club_event', ?, ?)"

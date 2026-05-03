@@ -32,9 +32,14 @@ export default function RootNavigator() {
   const [onboardingDone, setOnboardingDone] = useState(null); // null = still checking
 
   useEffect(() => {
-    AsyncStorage.getItem('dialed_onboarding_done').then(val => {
-      setOnboardingDone(!!val);
-    });
+    AsyncStorage.getItem('dialed_onboarding_done')
+      .then(val => {
+        setOnboardingDone(!!val);
+      })
+      .catch(() => {
+        // Storage failure — assume onboarding not done so user sees the flow
+        setOnboardingDone(false);
+      });
   }, []);
 
   const finishOnboarding = useCallback(async () => {

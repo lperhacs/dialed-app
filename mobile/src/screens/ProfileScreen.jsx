@@ -362,7 +362,7 @@ export default function ProfileScreen({ route, routeUsername, isOwn }) {
                 )}
               </View>
               <Text style={styles.buddyMeta}>
-                {buddyData.buddy.habits.filter(h => h.logged_today > 0).length}/{buddyData.buddy.habits.length} habits logged today
+                {(buddyData.buddy.habits ?? []).filter(h => h.logged_today > 0).length}/{(buddyData.buddy.habits ?? []).length} habits logged today
               </Text>
             </View>
           ) : (

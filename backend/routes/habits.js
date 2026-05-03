@@ -120,7 +120,7 @@ router.get('/:id', authMiddleware, (req, res) => {
   const logs = db.prepare('SELECT * FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(habit.id);
   const streak = calculateStreak(logs, habit.frequency, habit.target_count || 1);
   const at_risk = isStreakAtRisk(logs, habit.frequency, habit.target_count || 1);
-  const calendar = buildStreakCalendar(logs, habit.frequency, 365);
+  const calendar = buildStreakCalendar(logs, habit.frequency, habit.target_count || 1, 365);
 
   res.json({ ...habit, streak, at_risk, total_logs: logs.length, calendar, recent_logs: logs.slice(0, 10) });
 });

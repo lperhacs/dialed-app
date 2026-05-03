@@ -202,7 +202,7 @@ export default function CommentsScreen({ route }) {
           {renderMentions(postParam.content, colors, navigation)}
         </Text>
       )}
-      {!!postParam.image_url && (
+      {typeof postParam.image_url === 'string' && !!postParam.image_url && (
         <Image
           source={{ uri: postParam.image_url.startsWith('http') ? postParam.image_url : `${API_BASE_URL}${postParam.image_url}` }}
           style={styles.postImage}

@@ -3,15 +3,27 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import api from '../api/client';
 
-// Show notification banners when the app is in the foreground too
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+// Show notification banners when the app is in the foreground too.
+//
+// IMPORTANT: this runs at module-load time. A native exception thrown here
+// would propagate across the JS-to-native bridge BEFORE React's Error
+// Boundary is set up, producing the exact RCTNativeModule rethrow signature
+// we saw in TestFlight build 23 crashes on iOS 26.1. Wrapping defensively
+// so the app can still launch even if the notifications module is in a
+// fragile state (e.g. just after install, low memory, or system service
+// race). Worst case: foreground banners don't appear; the app still works.
+try {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    }),
+  });
+} catch (err) {
+  console.warn('[notifications] setNotificationHandler failed at startup:', err && err.message);
+}
 
 export async function requestNotificationPermission() {
   const { status } = await Notifications.requestPermissionsAsync();
@@ -53,7 +65,7 @@ export async function scheduleHabitReminder(habit) {
   // Always cancel the previous notification for this habit first
   await cancelHabitReminder(habit.id);
 
-  if (!habit.reminder_time) return;
+  if (!habit.reminder_time || typeof habit.reminder_time !== 'string' || !habit.reminder_time.includes(':')) return;
 
   const [hourStr, minuteStr] = habit.reminder_time.split(':');
   const hour   = parseInt(hourStr,   10);

@@ -344,9 +344,20 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
 function TimePicker({ value, onChange }) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
-  // value: "HH:MM" string or null
-  const [hour, setHour] = useState(value ? Number(value.split(':')[0]) : 8);
-  const [minute, setMinute] = useState(value ? Number(value.split(':')[1]) : 0);
+  // value: "HH:MM" string or null. Defensive parse — bad data must not throw.
+  const parseTime = (v) => {
+    if (typeof v !== 'string' || !v.includes(':')) return { h: 8, m: 0 };
+    const [hStr, mStr] = v.split(':');
+    const h = Number(hStr);
+    const m = Number(mStr);
+    return {
+      h: Number.isFinite(h) ? Math.min(23, Math.max(0, h)) : 8,
+      m: Number.isFinite(m) ? Math.min(59, Math.max(0, m)) : 0,
+    };
+  };
+  const initial = parseTime(value);
+  const [hour, setHour] = useState(initial.h);
+  const [minute, setMinute] = useState(initial.m);
   const [enabled, setEnabled] = useState(!!value);
 
   const update = (h, m, on) => {
