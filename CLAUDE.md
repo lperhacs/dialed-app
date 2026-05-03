@@ -1,6 +1,16 @@
 # Dialed Brain
 *Shared project context for Claude Code and Cowork — update after every session*
-*Last updated: May 2, 2026*
+*Last updated: May 2, 2026 (later)*
+
+## Core retention values
+*The behaviors and feelings that, if present, predict a user sticks. Every feature decision should serve at least one.*
+1. **Daily log habit formed** — user opens the app and logs at the same time each day without a push prompt (the app becomes a routine, not a reminder)
+2. **Active buddy partnership** — at least one accepted, mutually-logging buddy. The single strongest predictor of D30 retention. A user with no buddy is on a path to churn.
+3. **Visible consequence to missing** — buddy/follower will see the miss. Without social stake, the streak is just a number to abandon.
+4. **First-week streak ≥ 3 days** — early momentum predicts long-term adherence. If a user breaks before day 3, retention drops sharply.
+5. **One identity moment per week** — earning a badge, hitting a streak milestone, getting a buddy nudge, being celebrated in the feed. Without this, the app feels like a chore tracker.
+6. **A reason to come back same-day** — buddy logged, friend posted, RSVP got a comment, nudge received. Pull, not just push.
+
 
 ## What this app is
 Accountability-based social fitness app called Dialed.
@@ -61,12 +71,18 @@ Think Strava meets a gym buddy.
   are stickier than stranger matching.
 
 ## Current priorities
-1. Confirm SQLite persistent volume is configured on Railway
-   (backup code now uses `VACUUM INTO` — correct, but useless if the volume is ephemeral)
+1. ~~Confirm SQLite persistent volume is configured on Railway~~ ✅ Done May 2 —
+   500MB volume mounted at `/data`, `DB_PATH=/data/dialed.db`, backup cron writes
+   to `/data/backups` (default of `path.dirname(DB_PATH)/backups`). Service migrated
+   from EU West (Amsterdam) to US East (Virginia) for better US-tester latency.
 2. Email verification flow (still on the security TODO list — not yet built)
 3. Instrument and monitor tester retention and daily logging drop-off
 4. Identify where users fall off in onboarding
 5. Fix retention issues before expanding tester pool
+
+## Post-retention-validation backlog
+*Do not build until daily-logging retention is validated. These ideas are parked here so they aren't lost.*
+- **Joint buddy streak** — both buddies log ≥1 habit on the same calendar day (each in their own tz). One number both partners own. Include 1 freeze per 14 days, push when at-risk ("Joe hasn't logged today, your 23-day streak ends at midnight"). Reinforces shared-accountability thesis and is natively shareable. Risk if shipped now: muddies the retention signal — won't know if loop sticks because of buddies-as-they-are or because of streaks.
 
 ## Do NOT do these without a strategy conversation first
 - Migrate to Postgres
@@ -77,6 +93,26 @@ Think Strava meets a gym buddy.
   current tokens use `token_version` for selective invalidation on password change)
 
 ## Strategy session log
+### May 2, 2026 (later) — Persistence + region + bug pass
+- Confirmed Railway persistent volume: 500MB at `/data`, `DB_PATH=/data/dialed.db`,
+  backups go to `/data/backups` automatically. SQLite + base64 avatars now durable
+  across deploys. CLAUDE.md priority #1 closed.
+- Migrated service+volume from EU West to US East (Virginia). Railway auto-migrated
+  volume contents — no data loss, brief downtime. Latency for US testers should drop
+  from ~150ms to ~30–60ms.
+- Mobile bug fixes:
+  - **Pin button on Profile** wasn't reflecting state — `setFeaturedHabit` updated
+    backend but didn't `invalidateCache` the cached `/users/:username` profile, so
+    the reload returned stale data. Fixed.
+  - **Profile photos invisible** — mobile uploaded avatars via `PUT /users/profile`
+    (multipart → file written to `/uploads/*` on disk). Pre-volume those files were
+    wiped each deploy. Switched mobile to `PATCH /users/me/avatar` which stores
+    base64 inside the DB row (already existed, was unused). Old `/uploads/*` avatars
+    are gone for good — testers will see initial-letter placeholder until re-upload.
+  - **Buddy button** was disabled when active — no in-app way to unpair. Made it
+    tappable for both pending (cancel request) and active (remove buddy) with a
+    confirm dialog to prevent accidents.
+
 ### May 2, 2026 — Pre-launch security audit (Sprints 1–3)
 - Ran full audit; resolved 38 issues across 3 commits (cf24550, 2273ce0, bf6fd91)
 - Decided to introduce JWT `token_version` for selective invalidation on password

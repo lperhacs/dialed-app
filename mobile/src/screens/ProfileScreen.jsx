@@ -45,6 +45,7 @@ export default function ProfileScreen({ route, routeUsername, isOwn }) {
   const [pinning, setPinning] = useState(null);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [buddyStatus, setBuddyStatus] = useState('none'); // 'none' | 'pending' | 'active'
+  const [buddyId, setBuddyId] = useState(null); // buddy row id when pending/active
   const [buddyData, setBuddyData] = useState(null); // for own profile
   const [buddyLoading, setBuddyLoading] = useState(false);
 
@@ -68,7 +69,7 @@ export default function ProfileScreen({ route, routeUsername, isOwn }) {
       api.get('/buddies').then(r => setBuddyData(r.data)).catch(() => {});
     } else {
       api.get(`/buddies/status/${p.data.id}`)
-        .then(r => setBuddyStatus(r.data.status))
+        .then(r => { setBuddyStatus(r.data.status); setBuddyId(r.data.id || null); })
         .catch(() => {});
     }
   }, [username]);
@@ -112,7 +113,11 @@ export default function ProfileScreen({ route, routeUsername, isOwn }) {
     setFeaturingHabitId(habitId);
     try {
       await api.patch('/users/profile/featured-habit', { habit_id: isAlreadyFeatured ? null : habitId });
+      invalidateCache(`/users/${username}`);
+      invalidateCache(`/users/${username}/habits`);
       await load();
+    } catch (err) {
+      Alert.alert('Pin', err.response?.data?.error || 'Could not update pinned habit');
     } finally {
       setFeaturingHabitId(null);
     }
@@ -238,19 +243,79 @@ export default function ProfileScreen({ route, routeUsername, isOwn }) {
                 buddyStatus === 'active'
                   ? { backgroundColor: colors.accentDim, borderWidth: 1, borderColor: colors.accent }
                   : { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.border },
-                buddyStatus === 'pending' && { opacity: 0.6 },
+                buddyStatus === 'pending' && { opacity: 0.85 },
               ]}
-              disabled={buddyLoading || buddyStatus === 'pending' || buddyStatus === 'active'}
-              onPress={async () => {
-                setBuddyLoading(true);
-                try {
-                  await api.post('/buddies/request', { user_id: profile.id });
-                  setBuddyStatus('pending');
-                } catch (err) {
-                  Alert.alert('Buddy', err.response?.data?.error || 'Could not send request');
-                } finally {
-                  setBuddyLoading(false);
+              disabled={buddyLoading}
+              onPress={() => {
+                if (buddyStatus === 'active') {
+                  Alert.alert(
+                    'Remove buddy?',
+                    `End your buddy partnership with ${profile.display_name}? Your shared accountability will stop and either of you can request again later.`,
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: 'Remove buddy', style: 'destructive', onPress: async () => {
+                          setBuddyLoading(true);
+                          try {
+                            await api.delete(`/buddies/${buddyId}`);
+                            setBuddyStatus('none');
+                            setBuddyId(null);
+                          } catch (err) {
+                            Alert.alert('Buddy', err.response?.data?.error || 'Could not remove buddy');
+                          } finally {
+                            setBuddyLoading(false);
+                          }
+                        },
+                      },
+                    ]
+                  );
+                  return;
                 }
+                if (buddyStatus === 'pending') {
+                  Alert.alert(
+                    'Cancel request?',
+                    `Withdraw your buddy request to ${profile.display_name}?`,
+                    [
+                      { text: 'Keep request', style: 'cancel' },
+                      {
+                        text: 'Cancel request', style: 'destructive', onPress: async () => {
+                          setBuddyLoading(true);
+                          try {
+                            await api.delete(`/buddies/${buddyId}`);
+                            setBuddyStatus('none');
+                            setBuddyId(null);
+                          } catch (err) {
+                            Alert.alert('Buddy', err.response?.data?.error || 'Could not cancel request');
+                          } finally {
+                            setBuddyLoading(false);
+                          }
+                        },
+                      },
+                    ]
+                  );
+                  return;
+                }
+                Alert.alert(
+                  'Send buddy request?',
+                  `Buddy up with ${profile.display_name}? You'll keep each other accountable on daily habits.`,
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Send request', onPress: async () => {
+                        setBuddyLoading(true);
+                        try {
+                          const r = await api.post('/buddies/request', { user_id: profile.id });
+                          setBuddyStatus('pending');
+                          setBuddyId(r.data.id || null);
+                        } catch (err) {
+                          Alert.alert('Buddy', err.response?.data?.error || 'Could not send request');
+                        } finally {
+                          setBuddyLoading(false);
+                        }
+                      },
+                    },
+                  ]
+                );
               }}
               activeOpacity={0.85}
             >

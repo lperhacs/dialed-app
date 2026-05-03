@@ -70,11 +70,13 @@ function EditProfileModal({ visible, onClose, user, onSaved }) {
   const [form, setForm] = useState({ display_name: '', username: '', bio: '' });
   const [saving, setSaving] = useState(false);
   const [avatarUri, setAvatarUri] = useState(null);
+  const [avatarBase64, setAvatarBase64] = useState(null);
 
   useEffect(() => {
     if (visible && user) {
       setForm({ display_name: user.display_name || '', username: user.username || '', bio: user.bio || '' });
       setAvatarUri(null);
+      setAvatarBase64(null);
     }
   }, [visible, user]);
 
@@ -88,9 +90,14 @@ function EditProfileModal({ visible, onClose, user, onSaved }) {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
-      quality: 0.8,
+      quality: 0.6,
+      base64: true,
     });
-    if (!result.canceled) setAvatarUri(result.assets[0].uri);
+    if (!result.canceled) {
+      const asset = result.assets[0];
+      setAvatarUri(asset.uri);
+      setAvatarBase64(asset.base64 || null);
+    }
   };
 
   const save = async () => {
@@ -98,17 +105,20 @@ function EditProfileModal({ visible, onClose, user, onSaved }) {
     if (form.bio.length > 160) { Alert.alert('Bio too long', 'Max 160 characters.'); return; }
     setSaving(true);
     try {
-      const formData = new FormData();
-      formData.append('display_name', form.display_name.trim());
-      formData.append('username', form.username.trim().toLowerCase());
-      formData.append('bio', form.bio.trim());
-      if (avatarUri) {
-        formData.append('avatar', { uri: avatarUri, type: 'image/jpeg', name: 'avatar.jpg' });
+      // Save avatar separately as base64 (persists across Railway redeploys, unlike /uploads files)
+      let latestUser = null;
+      if (avatarBase64) {
+        const dataUrl = `data:image/jpeg;base64,${avatarBase64}`;
+        const r = await api.patch('/users/me/avatar', { avatar_data: dataUrl });
+        latestUser = r.data;
       }
-      const { data } = await api.put('/users/profile', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+      // Save text fields as JSON (no multipart)
+      const { data } = await api.put('/users/profile', {
+        display_name: form.display_name.trim(),
+        username: form.username.trim().toLowerCase(),
+        bio: form.bio.trim(),
       });
-      onSaved(data);
+      onSaved({ ...data, avatar_url: latestUser?.avatar_url ?? data.avatar_url });
       onClose();
     } catch (err) {
       Alert.alert('Error', err.response?.data?.error || 'Could not save changes.');
