@@ -13,7 +13,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.loganperhacs.dialed",
-      "buildNumber": "24",
+      "buildNumber": "25",
       "entitlements": {
         "aps-environment": "production"
       },
