@@ -266,10 +266,18 @@ function getDb() {
     if (!buddyCols.includes('recipient_show_missed')) {
       db.exec("ALTER TABLE buddies ADD COLUMN recipient_show_missed INTEGER NOT NULL DEFAULT 0");
     }
-    // Joint streak freeze — at most 1 freeze per rolling 14 days per pair.
-    // Stores YYYY-MM-DD of the missed-joint-day that was frozen.
+    // Joint streak freeze — Pro-gated rolling-14-day quota per pair.
+    //   0 Pro buddies = 0 freezes; 1 = 1 per 14 days; 2 = 2 per 14 days.
+    // `freeze_used_dates` stores a JSON array of YYYY-MM-DD dates that have
+    // been "spent". Older entries are pruned at write time to keep growth bounded.
     if (!buddyCols.includes('last_freeze_used_at')) {
       db.exec("ALTER TABLE buddies ADD COLUMN last_freeze_used_at TEXT DEFAULT NULL");
+    }
+    if (!buddyCols.includes('freeze_used_dates')) {
+      db.exec("ALTER TABLE buddies ADD COLUMN freeze_used_dates TEXT DEFAULT NULL");
+      // One-shot backfill from the older single-date column so any pair that
+      // already used a freeze in the past few minutes doesn't lose it.
+      db.exec("UPDATE buddies SET freeze_used_dates = json_array(last_freeze_used_at) WHERE last_freeze_used_at IS NOT NULL AND freeze_used_dates IS NULL");
     }
 
     const userFinalCols = db.prepare("PRAGMA table_info(users)").all().map(c => c.name);

@@ -31,24 +31,27 @@ function getActiveBuddyCount(db, userId) {
 }
 
 // Joint buddy streak: count consecutive UTC days where BOTH buddies logged ≥1 habit.
-// Pair gets 1 freeze per rolling 14 days — but ONLY when BOTH users are Pro.
-// If either buddy is on the free plan, a single missed joint day breaks the
-// streak (no freeze applied). When eligible, the freeze is consumed lazily on
-// read; we persist `last_freeze_used_at` so the same freeze can't be replayed.
+// Pro-gated rolling-14-day freeze quota:
+//   0 Pro buddies → 0 freezes (any miss breaks the streak)
+//   1 Pro buddy   → 1 freeze per rolling 14 days
+//   2 Pro buddies → 2 freezes per rolling 14 days
+// Freezes are consumed lazily on read; we persist the spent date in
+// `freeze_used_dates` (JSON array) so the same freeze can't be replayed and so
+// the rolling-window quota can be enforced.
 //
-// Returns { streak, alive_today, at_risk, freeze_used_recently, freeze_eligible }.
+// Returns { streak, alive_today, at_risk, freeze_used_recently, freeze_quota }.
 //   alive_today=true means most recent joint day is today.
 //   at_risk=true means streak is "alive" via yesterday's joint day but neither today,
 //     or only one of the two has logged today (so a partner can still save it).
-//   freeze_used_recently=true if the freeze that's keeping the streak alive falls
-//     inside the current streak window — surface this in the UI so users know.
-//   freeze_eligible=true when both buddies are Pro — used to drive upsell UI on Free.
+//   freeze_used_recently=true if a freeze inside the current streak window is
+//     keeping the streak alive — surface this in the UI so users know.
+//   freeze_quota: 0|1|2 — drives Pro upsell UI on Free pairs.
 function computeJointStreak(db, pair, userIdA, userIdB) {
-  // Pro gate for freezes — both buddies must be Pro for the freeze to apply.
+  // Pro gate for freezes — quota scales with how many sides have Pro.
   const proRow = db.prepare(
     'SELECT (SELECT is_pro FROM users WHERE id = ?) as a_pro, (SELECT is_pro FROM users WHERE id = ?) as b_pro'
   ).get(userIdA, userIdB);
-  const freezeEligible = !!(proRow?.a_pro && proRow?.b_pro);
+  const freezeQuota = (proRow?.a_pro ? 1 : 0) + (proRow?.b_pro ? 1 : 0);
   const aDays = db.prepare(
     "SELECT DISTINCT date(logged_at) as d FROM habit_logs WHERE user_id = ?"
   ).all(userIdA).map(r => r.d);
@@ -58,7 +61,7 @@ function computeJointStreak(db, pair, userIdA, userIdB) {
 
   const jointSet = new Set(aDays.filter(d => bDaysSet.has(d)));
   if (jointSet.size === 0) {
-    return { streak: 0, alive_today: false, at_risk: false, freeze_used_recently: false, freeze_eligible: freezeEligible };
+    return { streak: 0, alive_today: false, at_risk: false, freeze_used_recently: false, freeze_quota: freezeQuota };
   }
 
   const today = new Date().toISOString().split('T')[0];
@@ -68,15 +71,26 @@ function computeJointStreak(db, pair, userIdA, userIdB) {
   const sortedDesc = [...jointSet].sort().reverse();
   const anchor = sortedDesc[0];
   if (anchor !== today && anchor !== yesterday) {
-    return { streak: 0, alive_today: false, at_risk: false, freeze_used_recently: false, freeze_eligible: freezeEligible };
+    return { streak: 0, alive_today: false, at_risk: false, freeze_used_recently: false, freeze_quota: freezeQuota };
   }
 
   const dayBefore = (d) => new Date(new Date(d).getTime() - 86400000).toISOString().split('T')[0];
   const isWithin14 = (a, b) => Math.abs(new Date(a) - new Date(b)) <= 14 * 86400000;
 
-  let lastFreezeUsedAt = pair?.last_freeze_used_at || null;
+  // Parse stored freeze history (JSON array of YYYY-MM-DD).
+  let usedDates = [];
+  if (pair?.freeze_used_dates) {
+    try {
+      const parsed = JSON.parse(pair.freeze_used_dates);
+      if (Array.isArray(parsed)) usedDates = parsed.filter(d => typeof d === 'string');
+    } catch (_) { /* malformed — start fresh */ }
+  } else if (pair?.last_freeze_used_at) {
+    // Back-compat with the prior single-date column from the earlier migration.
+    usedDates = [pair.last_freeze_used_at];
+  }
+  const usedSet = new Set(usedDates);
+  const newlyUsed = []; // freezes consumed during this read
   let freezeUsedRecently = false;
-  let pendingFreezeWrite = null; // YYYY-MM-DD if we consumed a freeze this read
 
   let streak = 1;
   let cursor = anchor;
@@ -88,21 +102,22 @@ function computeJointStreak(db, pair, userIdA, userIdB) {
       cursor = expected;
       continue;
     }
-    // Gap. Try to apply a freeze.
-    // Free plan: no freezes ever — gap breaks the streak immediately.
-    if (!freezeEligible) break;
+    // No quota → gap breaks the streak.
+    if (freezeQuota === 0) break;
 
-    // Already-spent freeze landing exactly on this gap → already paid for, walk past it.
-    if (lastFreezeUsedAt === expected) {
+    // Already-spent freeze landing exactly on this gap → walk past it for free.
+    if (usedSet.has(expected)) {
       freezeUsedRecently = true;
       cursor = expected;
       continue;
     }
-    // Eligible to consume a fresh freeze: never used, OR last use is >14 days from this gap.
-    const eligible = !lastFreezeUsedAt || !isWithin14(lastFreezeUsedAt, expected);
-    if (eligible) {
-      pendingFreezeWrite = expected;
-      lastFreezeUsedAt = expected;
+
+    // Try to consume a fresh freeze. Quota is rolling-14-days centered on the
+    // gap date: count freezes already used inside ±14 days of the gap.
+    const usedNearby = [...usedSet].filter(d => isWithin14(d, expected)).length;
+    if (usedNearby < freezeQuota) {
+      usedSet.add(expected);
+      newlyUsed.push(expected);
       freezeUsedRecently = true;
       cursor = expected;
       continue;
@@ -110,11 +125,15 @@ function computeJointStreak(db, pair, userIdA, userIdB) {
     break;
   }
 
-  // Persist the freeze consumption (if any) so it can't be replayed on next read.
-  if (pendingFreezeWrite && pair?.id) {
+  // Persist updated freeze history. Prune anything older than 30 days from
+  // today so the JSON column doesn't grow unboundedly — anything older can't
+  // affect a 14-day window from any current decision.
+  if (newlyUsed.length > 0 && pair?.id) {
+    const cutoff = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
+    const next = [...usedSet].filter(d => d >= cutoff).sort();
     try {
-      db.prepare('UPDATE buddies SET last_freeze_used_at = ? WHERE id = ?')
-        .run(pendingFreezeWrite, pair.id);
+      db.prepare('UPDATE buddies SET freeze_used_dates = ?, last_freeze_used_at = ? WHERE id = ?')
+        .run(JSON.stringify(next), next[next.length - 1] || null, pair.id);
     } catch (_) { /* best-effort — never fail a read over a freeze write */ }
   }
 
@@ -128,7 +147,7 @@ function computeJointStreak(db, pair, userIdA, userIdB) {
     alive_today: anchor === today,
     at_risk,
     freeze_used_recently: freezeUsedRecently,
-    freeze_eligible: freezeEligible,
+    freeze_quota: freezeQuota,
   };
 }
 
@@ -186,7 +205,7 @@ router.get('/', authMiddleware, (req, res) => {
     joint_streak_alive_today: joint.alive_today,
     joint_streak_at_risk: joint.at_risk,
     joint_streak_freeze_used_recently: joint.freeze_used_recently,
-    joint_streak_freeze_eligible: joint.freeze_eligible,
+    joint_streak_freeze_quota: joint.freeze_quota,
     pending_requests: pending,
   });
 });
