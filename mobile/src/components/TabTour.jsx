@@ -62,9 +62,14 @@ function FeedIllustration({ colors }) {
           <Text style={[il.body, { color: colors.textMuted }]}>{p.text}</Text>
           {i === 0 && (
             <View style={{ flexDirection: 'row', gap: 16, marginTop: 9 }}>
-              <Animated.Text style={{ fontSize: 19, transform: [{ scale: heartScale }], color: heartColor }}>
-                ♥
-              </Animated.Text>
+              {/* Decouple native (scale) and JS (color) drivers onto separate
+                  animated nodes — putting both on one Animated.Text crashes
+                  with "moved to native earlier" on iOS 26.1. */}
+              <Animated.View style={{ transform: [{ scale: heartScale }] }}>
+                <Animated.Text style={{ fontSize: 19, color: heartColor }}>
+                  ♥
+                </Animated.Text>
+              </Animated.View>
               <Text style={{ fontSize: 17, color: colors.textDim }}>○</Text>
             </View>
           )}
