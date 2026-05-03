@@ -110,6 +110,7 @@ app.listen(PORT, () => {
   const { runDbBackup } = require('./cron/dbBackup');
   const { runBuddyAccountabilityReminders, runMissedHabitAutoPost } = require('./cron/buddyReminders');
   const { runWeeklyRecap } = require('./cron/weeklyRecap');
+  const { runJointStreakAtRisk } = require('./cron/jointStreakAtRisk');
 
   // Daily habit reminders — runs hourly. The reminder logic itself decides
   // per-user whether to send a "morning" (9am local) or "evening" (7pm local)
@@ -169,5 +170,14 @@ app.listen(PORT, () => {
       console.error('[Cron] weekly-recap failed:', err)
     );
   }, { timezone: 'UTC' });
-  console.log('[Cron] weekly recap scheduler started (hourly, fires at 9am Sunday local)\n');
+  console.log('[Cron] weekly recap scheduler started (hourly, fires at 9am Sunday local)');
+
+  // Joint streak at-risk — hourly, fires at 8pm local for users whose joint
+  // streak is alive but today isn't yet a joint day.
+  cron.schedule('0 * * * *', () => {
+    runJointStreakAtRisk().catch(err =>
+      console.error('[Cron] joint-streak-at-risk failed:', err)
+    );
+  }, { timezone: 'UTC' });
+  console.log('[Cron] joint streak at-risk scheduler started (hourly, fires at 8pm local)\n');
 });

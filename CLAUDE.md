@@ -1,6 +1,6 @@
 # Dialed Brain
 *Shared project context for Claude Code and Cowork — update after every session*
-*Last updated: May 3, 2026*
+*Last updated: May 3, 2026 (later)*
 
 ## Core retention values
 *The behaviors and feelings that, if present, predict a user sticks. Every feature decision should serve at least one.*
@@ -82,7 +82,7 @@ Think Strava meets a gym buddy.
 
 ## Post-retention-validation backlog
 *Do not build until daily-logging retention is validated. These ideas are parked here so they aren't lost.*
-- **Joint buddy streak** — both buddies log ≥1 habit on the same calendar day (each in their own tz). One number both partners own. Include 1 freeze per 14 days, push when at-risk ("Joe hasn't logged today, your 23-day streak ends at midnight"). Reinforces shared-accountability thesis (retention values #2, #3, #5) and is natively shareable. Risk if shipped now: muddies the retention signal — won't know if loop sticks because of buddies-as-they-are or because of streaks.
+- ~~**Joint buddy streak**~~ — Shipped May 3, 2026 (build 26). See strategy log below.
 - **Sunday weekly recap push** — `/api/recap/weekly` and `WeeklyRecapScreen.jsx` already exist but are hidden behind a button most testers never tap. Convert from pull → push: hourly cron fires when it's ~9am Sunday in user's local tz, writes a `weekly_recap` notification row + sends push, deep-linking to the recap screen. Persists in inbox so users can revisit. Hits retention values #5 (identity moment per week) and #6 (reason to come back). Implementation reuses `dailyHabitReminders.js` timezone pattern; recap endpoint needs to accept `?week=YYYY-Www` so taps on past recaps render the right week. Skip first-week users (no data) and zero-log weeks (sending a 0-stat recap to a churned user backfires). Risk if shipped now: same as above — adds a new re-engagement vector that contaminates the baseline retention signal we're trying to measure.
 
 ## Do NOT do these without a strategy conversation first
@@ -94,6 +94,39 @@ Think Strava meets a gym buddy.
   current tokens use `token_version` for selective invalidation on password change)
 
 ## Strategy session log
+### May 3, 2026 (later) — Joint buddy streak shipped (override of "no new features" rule)
+- Decided to ship joint buddy streak now (was in post-retention-validation backlog).
+  Acknowledged contamination risk to retention signal; user's call was to ship anyway.
+- Implementation: `last_freeze_used_at TEXT` column on buddies; `computeJointStreak`
+  in routes/buddies.js now lazily applies a freeze on a single missed joint day,
+  enforces 1-per-rolling-14-days, and persists the freeze date so it can't be
+  re-used. New cron `cron/jointStreakAtRisk.js` runs hourly, fires at 8pm local
+  in each user's tz when streak ≥ 2 and today isn't yet a joint day. Mobile shows
+  blue "freeze used" badge on Profile buddy card when relevant.
+- Trade-off: now harder to attribute D7/D30 retention shifts purely to the daily
+  loop. Mitigation: keep watching `/api/analytics/funnel` and the new
+  `joint_streak_at_risk` notifications counts to see if the streak is actually
+  driving log-back behavior.
+
+### May 3, 2026 — Build 25 (crash + function audit)
+- Build-23 testers crashing on app open. Crash signature `RCTNativeModule.mm:234`
+  + `objc_exception_rethrow` indicates a JS-to-native bridge rethrow — runs
+  before the React ErrorBoundary mounts. Prime suspect identified:
+  `Notifications.setNotificationHandler` in `mobile/src/utils/notifications.js`
+  ran at module-load time. Wrapped in try/catch so a fragile-state notifications
+  module can't brick app launch.
+- Wired global JS error reporter via `ErrorUtils.setGlobalHandler` → POSTs to
+  new `/api/analytics/jserror` (no-auth, rate-limited). Captures any post-launch
+  crash with full stack. Admin view at `/api/analytics/jserrors` (x-analytics-key).
+- Fixed theme system: `userInterfaceStyle: "automatic"` in app.json (was "dark")
+  so `useColorScheme()` actually reflects iOS Dark/Light/Auto.
+- Removed weekly recap button from HomeScreen header — recap is push-only on
+  Sundays per CLAUDE.md backlog.
+- 8 defensive bug fixes from full crash audit (4 parallel agents): null/typeof
+  guards in mobile (ThemeContext, RootNavigator, HabitsScreen TimePicker,
+  CommentsScreen, ProfileScreen, notifications.js) + backend (events.js
+  display_name fallback, habits.js buildStreakCalendar wrong-arg fix).
+
 ### May 2, 2026 (later) — Persistence + region + bug pass
 - Confirmed Railway persistent volume: 500MB at `/data`, `DB_PATH=/data/dialed.db`,
   backups go to `/data/backups` automatically. SQLite + base64 avatars now durable

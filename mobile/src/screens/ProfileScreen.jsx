@@ -360,6 +360,18 @@ export default function ProfileScreen({ route, routeUsername, isOwn }) {
                     </Text>
                   </View>
                 )}
+                {buddyData.joint_streak_freeze_used_recently && (
+                  <View style={{
+                    flexDirection: 'row', alignItems: 'center', gap: 3,
+                    paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10,
+                    backgroundColor: 'rgba(96,165,250,0.15)',
+                  }}>
+                    <Ionicons name="snow-outline" size={11} color="#60a5fa" />
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#60a5fa' }}>
+                      freeze used
+                    </Text>
+                  </View>
+                )}
               </View>
               <Text style={styles.buddyMeta}>
                 {(buddyData.buddy.habits ?? []).filter(h => h.logged_today > 0).length}/{(buddyData.buddy.habits ?? []).length} habits logged today

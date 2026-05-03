@@ -31,11 +31,17 @@ function getActiveBuddyCount(db, userId) {
 }
 
 // Joint buddy streak: count consecutive UTC days where BOTH buddies logged ≥1 habit.
-// Returns { streak, alive_today, at_risk }.
+// Pair gets 1 freeze per rolling 14 days — when a single missed joint day
+// would otherwise break the streak, we silently consume the freeze and persist
+// `last_freeze_used_at` so the same freeze can't be re-applied later.
+//
+// Returns { streak, alive_today, at_risk, freeze_used_recently, last_freeze_used_at }.
 //   alive_today=true means most recent joint day is today.
 //   at_risk=true means streak is "alive" via yesterday's joint day but neither today,
 //     or only one of the two has logged today (so a partner can still save it).
-function computeJointStreak(db, userIdA, userIdB) {
+//   freeze_used_recently=true if the freeze that's keeping the streak alive falls
+//     inside the current streak window — surface this in the UI so users know.
+function computeJointStreak(db, pair, userIdA, userIdB) {
   const aDays = db.prepare(
     "SELECT DISTINCT date(logged_at) as d FROM habit_logs WHERE user_id = ?"
   ).all(userIdA).map(r => r.d);
@@ -43,33 +49,77 @@ function computeJointStreak(db, userIdA, userIdB) {
     "SELECT DISTINCT date(logged_at) as d FROM habit_logs WHERE user_id = ?"
   ).all(userIdB).map(r => r.d));
 
-  const jointDays = aDays.filter(d => bDaysSet.has(d)).sort().reverse();
-  if (jointDays.length === 0) return { streak: 0, alive_today: false, at_risk: false };
+  const jointSet = new Set(aDays.filter(d => bDaysSet.has(d)));
+  if (jointSet.size === 0) {
+    return { streak: 0, alive_today: false, at_risk: false, freeze_used_recently: false, last_freeze_used_at: pair?.last_freeze_used_at || null };
+  }
 
   const today = new Date().toISOString().split('T')[0];
   const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
 
-  // Streak broken if most recent joint day is older than yesterday.
-  if (jointDays[0] !== today && jointDays[0] !== yesterday) {
-    return { streak: 0, alive_today: false, at_risk: false };
+  // Anchor — most recent joint day must be today or yesterday for the streak to be alive.
+  const sortedDesc = [...jointSet].sort().reverse();
+  const anchor = sortedDesc[0];
+  if (anchor !== today && anchor !== yesterday) {
+    return { streak: 0, alive_today: false, at_risk: false, freeze_used_recently: false, last_freeze_used_at: pair?.last_freeze_used_at || null };
   }
 
-  // Walk back day-by-day; stop on first gap.
+  const dayBefore = (d) => new Date(new Date(d).getTime() - 86400000).toISOString().split('T')[0];
+  const isWithin14 = (a, b) => Math.abs(new Date(a) - new Date(b)) <= 14 * 86400000;
+
+  let lastFreezeUsedAt = pair?.last_freeze_used_at || null;
+  let freezeUsedRecently = false;
+  let pendingFreezeWrite = null; // YYYY-MM-DD if we consumed a freeze this read
+
   let streak = 1;
-  let cursor = jointDays[0];
-  for (let i = 1; i < jointDays.length; i++) {
-    const expected = new Date(new Date(cursor).getTime() - 86400000).toISOString().split('T')[0];
-    if (jointDays[i] !== expected) break;
-    streak++;
-    cursor = jointDays[i];
+  let cursor = anchor;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const expected = dayBefore(cursor);
+    if (jointSet.has(expected)) {
+      streak++;
+      cursor = expected;
+      continue;
+    }
+    // Gap. Try to apply a freeze.
+    // Already-spent freeze landing exactly on this gap → already paid for, walk past it.
+    if (lastFreezeUsedAt === expected) {
+      freezeUsedRecently = true;
+      cursor = expected;
+      continue;
+    }
+    // Eligible to consume a fresh freeze: never used, OR last use is >14 days from this gap.
+    const eligible = !lastFreezeUsedAt || !isWithin14(lastFreezeUsedAt, expected);
+    if (eligible) {
+      pendingFreezeWrite = expected;
+      lastFreezeUsedAt = expected;
+      freezeUsedRecently = true;
+      cursor = expected;
+      continue;
+    }
+    break;
+  }
+
+  // Persist the freeze consumption (if any) so it can't be replayed on next read.
+  if (pendingFreezeWrite && pair?.id) {
+    try {
+      db.prepare('UPDATE buddies SET last_freeze_used_at = ? WHERE id = ?')
+        .run(pendingFreezeWrite, pair.id);
+    } catch (_) { /* best-effort — never fail a read over a freeze write */ }
   }
 
   // At-risk: alive via yesterday only — one or both haven't logged today.
   const aLoggedToday = aDays.includes(today);
   const bLoggedToday = bDaysSet.has(today);
-  const at_risk = jointDays[0] === yesterday || !aLoggedToday || !bLoggedToday;
+  const at_risk = anchor === yesterday || !aLoggedToday || !bLoggedToday;
 
-  return { streak, alive_today: jointDays[0] === today, at_risk };
+  return {
+    streak,
+    alive_today: anchor === today,
+    at_risk,
+    freeze_used_recently: freezeUsedRecently,
+    last_freeze_used_at: lastFreezeUsedAt,
+  };
 }
 
 // GET /api/buddies — current buddy pair + habit status
@@ -109,7 +159,7 @@ router.get('/', authMiddleware, (req, res) => {
     ? !!buddy.requester_show_missed
     : !!buddy.recipient_show_missed;
 
-  const joint = computeJointStreak(db, userId, buddy.buddy_user_id);
+  const joint = computeJointStreak(db, buddy, userId, buddy.buddy_user_id);
 
   res.json({
     buddy: {
@@ -125,6 +175,7 @@ router.get('/', authMiddleware, (req, res) => {
     joint_streak: joint.streak,
     joint_streak_alive_today: joint.alive_today,
     joint_streak_at_risk: joint.at_risk,
+    joint_streak_freeze_used_recently: joint.freeze_used_recently,
     pending_requests: pending,
   });
 });
@@ -317,3 +368,4 @@ router.delete('/:id', authMiddleware, (req, res) => {
 });
 
 module.exports = router;
+module.exports.computeJointStreak = computeJointStreak;

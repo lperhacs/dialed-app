@@ -266,6 +266,11 @@ function getDb() {
     if (!buddyCols.includes('recipient_show_missed')) {
       db.exec("ALTER TABLE buddies ADD COLUMN recipient_show_missed INTEGER NOT NULL DEFAULT 0");
     }
+    // Joint streak freeze — at most 1 freeze per rolling 14 days per pair.
+    // Stores YYYY-MM-DD of the missed-joint-day that was frozen.
+    if (!buddyCols.includes('last_freeze_used_at')) {
+      db.exec("ALTER TABLE buddies ADD COLUMN last_freeze_used_at TEXT DEFAULT NULL");
+    }
 
     const userFinalCols = db.prepare("PRAGMA table_info(users)").all().map(c => c.name);
     if (!userFinalCols.includes('timezone')) {
