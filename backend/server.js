@@ -109,6 +109,7 @@ app.listen(PORT, () => {
   const { runChallengeStartReminders } = require('./cron/challengeReminders');
   const { runDbBackup } = require('./cron/dbBackup');
   const { runBuddyAccountabilityReminders, runMissedHabitAutoPost } = require('./cron/buddyReminders');
+  const { runWeeklyRecap } = require('./cron/weeklyRecap');
 
   // Daily habit reminders — runs hourly. The reminder logic itself decides
   // per-user whether to send a "morning" (9am local) or "evening" (7pm local)
@@ -159,5 +160,14 @@ app.listen(PORT, () => {
       console.error('[Cron] missed-habit-auto-post failed:', err)
     );
   }, { timezone: 'UTC' });
-  console.log('[Cron] missed-habit auto-post scheduler started (00:30 UTC)\n');
+  console.log('[Cron] missed-habit auto-post scheduler started (00:30 UTC)');
+
+  // Weekly recap — runs hourly, fires for users where it's currently Sunday
+  // 9am local. Per-user dedup via reference_id = ISO week token.
+  cron.schedule('0 * * * *', () => {
+    runWeeklyRecap().catch(err =>
+      console.error('[Cron] weekly-recap failed:', err)
+    );
+  }, { timezone: 'UTC' });
+  console.log('[Cron] weekly recap scheduler started (hourly, fires at 9am Sunday local)\n');
 });

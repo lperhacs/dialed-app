@@ -603,8 +603,9 @@ export default function SettingsScreen() {
             { key: 'cheers',    label: 'Cheers on your posts' },
             { key: 'comments',  label: 'Comments on your posts' },
             { key: 'messages',  label: 'Direct messages' },
-            { key: 'buddy',     label: 'Buddy requests' },
-            { key: 'streaks',   label: 'Streak reminders' },
+            { key: 'buddy',         label: 'Buddy requests' },
+            { key: 'streaks',       label: 'Streak reminders' },
+            { key: 'weekly_recap',  label: 'Weekly recap (Sundays)' },
           ].map(({ key, label }) => (
             <SettingsRow
               key={key}

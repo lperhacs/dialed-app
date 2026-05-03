@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import api from '../api/client';
 import { radius, spacing } from '../theme';
 import { useTheme } from '../context/ThemeContext';
@@ -18,14 +18,17 @@ export default function WeeklyRecapScreen() {
   const styles = makeStyles(colors);
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const route = useRoute();
+  const week = route.params?.week; // optional ISO week token (YYYY-Www); falls back to current week
   const [recap, setRecap] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.get('/recap/weekly')
+    const url = week ? `/recap/weekly?week=${encodeURIComponent(week)}` : '/recap/weekly';
+    api.get(url)
       .then(r => setRecap(r.data))
       .finally(() => setLoading(false));
-  }, []);
+  }, [week]);
 
   if (loading) {
     return (

@@ -1,6 +1,6 @@
 # Dialed Brain
 *Shared project context for Claude Code and Cowork — update after every session*
-*Last updated: May 2, 2026 (later)*
+*Last updated: May 3, 2026*
 
 ## Core retention values
 *The behaviors and feelings that, if present, predict a user sticks. Every feature decision should serve at least one.*
@@ -82,7 +82,8 @@ Think Strava meets a gym buddy.
 
 ## Post-retention-validation backlog
 *Do not build until daily-logging retention is validated. These ideas are parked here so they aren't lost.*
-- **Joint buddy streak** — both buddies log ≥1 habit on the same calendar day (each in their own tz). One number both partners own. Include 1 freeze per 14 days, push when at-risk ("Joe hasn't logged today, your 23-day streak ends at midnight"). Reinforces shared-accountability thesis and is natively shareable. Risk if shipped now: muddies the retention signal — won't know if loop sticks because of buddies-as-they-are or because of streaks.
+- **Joint buddy streak** — both buddies log ≥1 habit on the same calendar day (each in their own tz). One number both partners own. Include 1 freeze per 14 days, push when at-risk ("Joe hasn't logged today, your 23-day streak ends at midnight"). Reinforces shared-accountability thesis (retention values #2, #3, #5) and is natively shareable. Risk if shipped now: muddies the retention signal — won't know if loop sticks because of buddies-as-they-are or because of streaks.
+- **Sunday weekly recap push** — `/api/recap/weekly` and `WeeklyRecapScreen.jsx` already exist but are hidden behind a button most testers never tap. Convert from pull → push: hourly cron fires when it's ~9am Sunday in user's local tz, writes a `weekly_recap` notification row + sends push, deep-linking to the recap screen. Persists in inbox so users can revisit. Hits retention values #5 (identity moment per week) and #6 (reason to come back). Implementation reuses `dailyHabitReminders.js` timezone pattern; recap endpoint needs to accept `?week=YYYY-Www` so taps on past recaps render the right week. Skip first-week users (no data) and zero-log weeks (sending a 0-stat recap to a churned user backfires). Risk if shipped now: same as above — adds a new re-engagement vector that contaminates the baseline retention signal we're trying to measure.
 
 ## Do NOT do these without a strategy conversation first
 - Migrate to Postgres

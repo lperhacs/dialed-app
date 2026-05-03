@@ -517,7 +517,7 @@ router.put('/me/push-token', authMiddleware, (req, res) => {
 // PATCH /api/users/me/notifications  — saves push notification preferences
 const NOTIFY_PREF_KEYS = [
   'buddy', 'comment', 'like', 'cheer', 'follow', 'challenge',
-  'event', 'mention', 'reminder', 'dm', 'follows',
+  'event', 'mention', 'reminder', 'dm', 'follows', 'weekly_recap',
 ];
 router.patch('/me/notifications', authMiddleware, (req, res) => {
   if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {

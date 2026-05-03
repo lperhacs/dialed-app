@@ -30,6 +30,48 @@ function getActiveBuddyCount(db, userId) {
   ).get(userId, userId).c;
 }
 
+// Joint buddy streak: count consecutive UTC days where BOTH buddies logged ≥1 habit.
+// Returns { streak, alive_today, at_risk }.
+//   alive_today=true means most recent joint day is today.
+//   at_risk=true means streak is "alive" via yesterday's joint day but neither today,
+//     or only one of the two has logged today (so a partner can still save it).
+function computeJointStreak(db, userIdA, userIdB) {
+  const aDays = db.prepare(
+    "SELECT DISTINCT date(logged_at) as d FROM habit_logs WHERE user_id = ?"
+  ).all(userIdA).map(r => r.d);
+  const bDaysSet = new Set(db.prepare(
+    "SELECT DISTINCT date(logged_at) as d FROM habit_logs WHERE user_id = ?"
+  ).all(userIdB).map(r => r.d));
+
+  const jointDays = aDays.filter(d => bDaysSet.has(d)).sort().reverse();
+  if (jointDays.length === 0) return { streak: 0, alive_today: false, at_risk: false };
+
+  const today = new Date().toISOString().split('T')[0];
+  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+
+  // Streak broken if most recent joint day is older than yesterday.
+  if (jointDays[0] !== today && jointDays[0] !== yesterday) {
+    return { streak: 0, alive_today: false, at_risk: false };
+  }
+
+  // Walk back day-by-day; stop on first gap.
+  let streak = 1;
+  let cursor = jointDays[0];
+  for (let i = 1; i < jointDays.length; i++) {
+    const expected = new Date(new Date(cursor).getTime() - 86400000).toISOString().split('T')[0];
+    if (jointDays[i] !== expected) break;
+    streak++;
+    cursor = jointDays[i];
+  }
+
+  // At-risk: alive via yesterday only — one or both haven't logged today.
+  const aLoggedToday = aDays.includes(today);
+  const bLoggedToday = bDaysSet.has(today);
+  const at_risk = jointDays[0] === yesterday || !aLoggedToday || !bLoggedToday;
+
+  return { streak, alive_today: jointDays[0] === today, at_risk };
+}
+
 // GET /api/buddies — current buddy pair + habit status
 router.get('/', authMiddleware, (req, res) => {
   const db = getDb();
@@ -67,6 +109,8 @@ router.get('/', authMiddleware, (req, res) => {
     ? !!buddy.requester_show_missed
     : !!buddy.recipient_show_missed;
 
+  const joint = computeJointStreak(db, userId, buddy.buddy_user_id);
+
   res.json({
     buddy: {
       id: buddy.id,
@@ -78,6 +122,9 @@ router.get('/', authMiddleware, (req, res) => {
     },
     my_habits: myHabits,
     my_show_missed: myShowMissed,
+    joint_streak: joint.streak,
+    joint_streak_alive_today: joint.alive_today,
+    joint_streak_at_risk: joint.at_risk,
     pending_requests: pending,
   });
 });

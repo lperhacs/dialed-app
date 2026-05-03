@@ -40,13 +40,29 @@ function BuddyCard({ buddyData, onNudge, onPress }) {
   const totalHabits = buddy.habits?.length ?? 0;
   const loggedCount = buddy.habits?.filter(h => h.logged_today > 0).length ?? 0;
   const allLogged = loggedCount === totalHabits && totalHabits > 0;
+  const jointStreak = buddyData.joint_streak || 0;
+  const streakAtRisk = !!buddyData.joint_streak_at_risk;
 
   return (
     <TouchableOpacity style={styles.buddyCard} onPress={onPress} activeOpacity={0.85}>
       <View style={styles.buddyCardLeft}>
         <View style={[styles.buddyDot, { backgroundColor: allLogged ? colors.accent : colors.textDim }]} />
-        <View>
-          <Text style={styles.buddyCardName}>{buddy.display_name}</Text>
+        <View style={{ flex: 1 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={styles.buddyCardName}>{buddy.display_name}</Text>
+            {jointStreak > 0 && (
+              <View style={[styles.streakChip, streakAtRisk && styles.streakChipAtRisk]}>
+                <Ionicons
+                  name="flame"
+                  size={11}
+                  color={streakAtRisk ? colors.warn || '#f59e0b' : colors.accent}
+                />
+                <Text style={[styles.streakChipText, streakAtRisk && { color: colors.warn || '#f59e0b' }]}>
+                  {jointStreak}
+                </Text>
+              </View>
+            )}
+          </View>
           <Text style={styles.buddyCardMeta}>
             {totalHabits === 0
               ? 'No habits yet'
@@ -302,6 +318,17 @@ function makeStyles(colors) {
   buddyDot: { width: 8, height: 8, borderRadius: 4 },
   buddyCardName: { fontSize: 13, fontWeight: '600', color: colors.text },
   buddyCardMeta: { fontSize: 12, color: colors.textMuted, marginTop: 1 },
+  streakChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    backgroundColor: colors.accentDim,
+    borderRadius: 10,
+  },
+  streakChipAtRisk: { backgroundColor: 'rgba(245,158,11,0.15)' },
+  streakChipText: { fontSize: 11, fontWeight: '700', color: colors.accent },
   nudgeBtn: {
     flexDirection: 'row',
     alignItems: 'center',
