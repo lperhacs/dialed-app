@@ -182,9 +182,6 @@ export default function HomeScreen() {
           <TouchableOpacity onPress={() => navigation.navigate('Search')} hitSlop={10}>
             <Ionicons name="search-outline" size={24} color={colors.textMuted} />
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('WeeklyRecap')} hitSlop={10}>
-            <Ionicons name="bar-chart-outline" size={24} color={colors.textMuted} />
-          </TouchableOpacity>
           <TouchableOpacity onPress={() => navigation.navigate('Inbox')} hitSlop={10}>
             <View>
               <Ionicons

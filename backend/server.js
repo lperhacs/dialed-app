@@ -37,7 +37,7 @@ app.use(cors({
 
 // ── Rate limiting ─────────────────────────────────────────────────────────────
 const { rateLimit } = require('express-rate-limit');
-const { writeLimiter, dmLimiter, analyticsLimiter, registerLimiter, writeOnly } = require('./middleware/rateLimits');
+const { writeLimiter, dmLimiter, registerLimiter, writeOnly } = require('./middleware/rateLimits');
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -82,7 +82,7 @@ app.use('/api/events',        writeOnly(writeLimiter),  require('./routes/events
 app.use('/api/buddies',       writeOnly(writeLimiter),  require('./routes/buddies'));
 app.use('/api/recap',                                   require('./routes/recap'));
 app.use('/api/cron',                                    require('./routes/cron'));
-app.use('/api/analytics',     analyticsLimiter,         require('./routes/analytics'));
+app.use('/api/analytics',                               require('./routes/analytics'));
 app.use('/api/pro',           writeOnly(writeLimiter),  require('./routes/pro'));
 
 // Health check

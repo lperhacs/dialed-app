@@ -36,6 +36,16 @@ const analyticsLimiter = rateLimit({
   message: { error: 'Too many requests.' },
 });
 
+// JS error reporter — looser since a crashing client may submit several errors
+// quickly. Per-IP cap protects against abuse but lets real crash bursts through.
+const jsErrorLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 min
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many error reports.' },
+});
+
 // Wrapper: only applies rate limit to non-GET methods so browsing is unaffected
 function writeOnly(limiter) {
   return (req, res, next) => {
@@ -46,4 +56,4 @@ function writeOnly(limiter) {
   };
 }
 
-module.exports = { writeLimiter, dmLimiter, analyticsLimiter, registerLimiter, writeOnly };
+module.exports = { writeLimiter, dmLimiter, analyticsLimiter, jsErrorLimiter, registerLimiter, writeOnly };

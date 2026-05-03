@@ -1,8 +1,40 @@
 const express = require('express');
+const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../database/db');
 const { authMiddleware } = require('../middleware/auth');
+const { analyticsLimiter, jsErrorLimiter } = require('../middleware/rateLimits');
 
 const router = express.Router();
+
+// POST /api/analytics/jserror — capture JS errors from the mobile app's
+// global error handler. NO auth: the app may crash before/without a session,
+// and we want every error captured. Heavily input-bounded to avoid abuse.
+router.post('/jserror', jsErrorLimiter, (req, res) => {
+  try {
+    const { message, stack, is_fatal, platform, app_version, os_version, user_id } = req.body || {};
+    if (!message || typeof message !== 'string') {
+      return res.status(400).json({ error: 'message required' });
+    }
+    const db = getDb();
+    db.prepare(`
+      INSERT INTO js_errors (id, user_id, message, stack, is_fatal, platform, app_version, os_version)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      uuidv4(),
+      typeof user_id === 'string' ? user_id.slice(0, 64) : null,
+      String(message).slice(0, 1000),
+      typeof stack === 'string' ? stack.slice(0, 8000) : '',
+      is_fatal ? 1 : 0,
+      typeof platform === 'string' ? platform.slice(0, 32) : null,
+      typeof app_version === 'string' ? app_version.slice(0, 32) : null,
+      typeof os_version === 'string' ? os_version.slice(0, 32) : null,
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[jserror] insert failed:', err);
+    res.status(500).json({ error: 'logging failed' });
+  }
+});
 
 // Simple admin key guard — set ANALYTICS_KEY in Railway env vars
 function adminOnly(req, res, next) {
@@ -16,7 +48,7 @@ function adminOnly(req, res, next) {
 
 // GET /api/analytics/summary
 // Returns aggregate counts + breakdowns. No raw PII ever returned.
-router.get('/summary', adminOnly, (req, res) => {
+router.get('/summary', analyticsLimiter, adminOnly, (req, res) => {
   const db = getDb();
   const days = parseInt(req.query.days) || 30;
   const since = new Date(Date.now() - days * 86400000).toISOString();
@@ -108,7 +140,7 @@ router.get('/summary', adminOnly, (req, res) => {
 });
 
 // GET /api/analytics/funnel  — registration → first habit → first log → first post
-router.get('/funnel', adminOnly, (req, res) => {
+router.get('/funnel', analyticsLimiter, adminOnly, (req, res) => {
   const db = getDb();
 
   const registered = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
@@ -138,6 +170,19 @@ router.get('/funnel', adminOnly, (req, res) => {
       { step: 'Followed someone', count: followedSomeone },
     ],
   });
+});
+
+// GET /api/analytics/jserrors — admin view of recent JS errors
+router.get('/jserrors', analyticsLimiter, adminOnly, (req, res) => {
+  const db = getDb();
+  const limit = Math.min(parseInt(req.query.limit) || 100, 500);
+  const errors = db.prepare(`
+    SELECT id, user_id, message, stack, is_fatal, platform, app_version, os_version, created_at
+    FROM js_errors
+    ORDER BY created_at DESC
+    LIMIT ?
+  `).all(limit);
+  res.json({ errors });
 });
 
 module.exports = router;

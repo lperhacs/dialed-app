@@ -178,6 +178,24 @@ function getDb() {
       CREATE INDEX IF NOT EXISTS idx_analytics_user_id ON analytics_events(user_id);
     `);
 
+    // JS error log — populated by mobile app's global error handler.
+    // Lets us see what crashed when TestFlight crash reports only show the
+    // native abort, not the JS error message.
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS js_errors (
+        id TEXT PRIMARY KEY,
+        user_id TEXT DEFAULT NULL,
+        message TEXT NOT NULL,
+        stack TEXT DEFAULT '',
+        is_fatal INTEGER DEFAULT 0,
+        platform TEXT DEFAULT NULL,
+        app_version TEXT DEFAULT NULL,
+        os_version TEXT DEFAULT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_js_errors_created_at ON js_errors(created_at);
+    `);
+
     // Message read tracking
     const cpCols = db.prepare("PRAGMA table_info(conversation_participants)").all().map(c => c.name);
     if (!cpCols.includes('last_read_at')) {

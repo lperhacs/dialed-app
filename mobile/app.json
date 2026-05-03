@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "backgroundColor": "#09090b",
     "splash": {
       "backgroundColor": "#09090b"
@@ -13,7 +13,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.loganperhacs.dialed",
-      "buildNumber": "22",
+      "buildNumber": "23",
       "entitlements": {
         "aps-environment": "production"
       },
