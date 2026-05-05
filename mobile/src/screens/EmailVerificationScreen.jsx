@@ -11,10 +11,17 @@ import { radius, spacing } from '../theme';
 
 export default function EmailVerificationScreen({ navigation, route }) {
   const { colors } = useTheme();
-  const { updateUser } = useAuth();
+  const { user, updateUser } = useAuth();
   const styles = makeStyles(colors);
 
-  const email = route?.params?.email || '';
+  // Email comes from registration nav params, but when reached from the Home
+  // banner (already authenticated) fall back to the logged-in user's email.
+  const email = route?.params?.email || user?.email || '';
+
+  const goBackOrHome = () => {
+    if (navigation.canGoBack()) navigation.goBack();
+    else navigation.replace('MainTabs');
+  };
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
@@ -43,7 +50,7 @@ export default function EmailVerificationScreen({ navigation, route }) {
     try {
       const { data } = await api.post('/auth/verify-email', { code });
       await updateUser({ email_verified: true });
-      navigation.replace('MainTabs');
+      goBackOrHome();
     } catch (err) {
       Alert.alert('Incorrect code', err.response?.data?.error || 'Please try again.');
       setCode('');
@@ -80,7 +87,7 @@ export default function EmailVerificationScreen({ navigation, route }) {
     try {
       await api.post('/auth/verify-email', { code: c });
       await updateUser({ email_verified: true });
-      navigation.replace('MainTabs');
+      goBackOrHome();
     } catch (err) {
       Alert.alert('Incorrect code', err.response?.data?.error || 'Please try again.');
       setCode('');
@@ -160,7 +167,7 @@ export default function EmailVerificationScreen({ navigation, route }) {
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={() => navigation.replace('MainTabs')}
+          onPress={goBackOrHome}
           activeOpacity={0.7}
           style={styles.skipRow}
         >

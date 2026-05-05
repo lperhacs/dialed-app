@@ -267,7 +267,13 @@ router.delete('/:id/log', authMiddleware, (req, res) => {
   const habit = db.prepare('SELECT * FROM habits WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
   if (!habit) return res.status(404).json({ error: 'Habit not found' });
 
-  const tz = db.prepare('SELECT timezone FROM users WHERE id = ?').get(req.user.id)?.timezone || 'UTC';
+  // Match POST /:id/log's tz source so the period key for the just-inserted
+  // log matches "current period" here. Header first (live device tz),
+  // then stored user.timezone, then UTC.
+  const tz =
+    req.headers['x-client-timezone'] ||
+    db.prepare('SELECT timezone FROM users WHERE id = ?').get(req.user.id)?.timezone ||
+    null;
   const currentPeriod = getPeriodKeyTz(new Date(), habit.frequency, tz);
 
   // Find the most recent log in the current period

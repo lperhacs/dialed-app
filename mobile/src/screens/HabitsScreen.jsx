@@ -80,6 +80,14 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
   // Sync if the parent's default changes (e.g. user changes setting and refreshes)
   useEffect(() => { setCalDays(defaultDays); }, [defaultDays]);
 
+  // Sync local periodCount when the parent re-fetches /habits (e.g. after an
+  // undo). FlatList re-uses the same component instance per habit id, so
+  // useState's initializer doesn't re-run on prop change — without this the
+  // bumped optimistic count would persist after the server says it's gone.
+  useEffect(() => {
+    setPeriodCount(habit.period_count ?? (habit.logged_this_period ? target : 0));
+  }, [habit.period_count, habit.logged_this_period, target]);
+
   const handleFreeze = async () => {
     if (freezing) return;
     setFreezing(true); // set before Alert to block double-tap

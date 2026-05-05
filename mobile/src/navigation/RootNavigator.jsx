@@ -20,6 +20,8 @@ import ConversationScreen from '../screens/ConversationScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import FollowListScreen from '../screens/FollowListScreen';
 import EmailVerificationScreen from '../screens/EmailVerificationScreen';
+import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
+import ResetPasswordScreen from '../screens/ResetPasswordScreen';
 import PaywallScreen from '../screens/PaywallScreen';
 import AnalyticsScreen from '../screens/AnalyticsScreen';
 import LegalScreen from '../screens/LegalScreen';
@@ -76,6 +78,8 @@ export default function RootNavigator() {
           <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
           <Stack.Screen name="Register" component={RegisterScreen} options={{ headerShown: false }} />
           <Stack.Screen name="VerifyEmail" component={EmailVerificationScreen} options={{ headerShown: false }} />
+          <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} options={{ headerShown: false }} />
+          <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} options={{ headerShown: false }} />
         </>
       ) : (
         // ─── Authenticated app ───────────────────────────────────────────
@@ -113,6 +117,11 @@ export default function RootNavigator() {
             name="Settings"
             component={SettingsScreen}
             options={{ title: 'Settings', headerBackTitle: 'Profile' }}
+          />
+          <Stack.Screen
+            name="VerifyEmail"
+            component={EmailVerificationScreen}
+            options={{ headerShown: false }}
           />
           <Stack.Screen
             name="FollowList"

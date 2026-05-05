@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, Image, Alert, KeyboardAvoidingView, Platform,
-  ActivityIndicator,
+  ActivityIndicator, Keyboard, TouchableWithoutFeedback,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import api from '../api/client';
+import api, { invalidateCache } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
 import MentionSuggestions from '../components/MentionSuggestions';
@@ -92,6 +92,7 @@ export default function CreatePostScreen() {
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
     >
       {/* Modal header */}
       <View style={styles.modalHeader}>
@@ -107,8 +108,22 @@ export default function CreatePostScreen() {
                     text: 'Undo log',
                     style: 'destructive',
                     onPress: async () => {
-                      try { await api.delete(`/habits/${route.params.habit_id}/log`); } catch {}
-                      navigation.goBack();
+                      try {
+                        await api.delete(`/habits/${route.params.habit_id}/log`);
+                        // Bust cached /habits so HabitsScreen re-fetches the
+                        // fresh period_count/streak instead of the stale
+                        // optimistic-bumped version.
+                        invalidateCache('/habits');
+                        navigation.goBack();
+                      } catch (err) {
+                        Alert.alert(
+                          'Could not undo',
+                          err.response?.data?.error ||
+                            'Your log may still be saved. Pull to refresh on Habits.'
+                        );
+                        invalidateCache('/habits');
+                        navigation.goBack();
+                      }
                     },
                   },
                 ]
@@ -253,6 +268,7 @@ export default function CreatePostScreen() {
       {/* Toolbar */}
       <View style={styles.toolbar}>
         <TouchableOpacity onPress={pickImage} style={styles.toolBtn} activeOpacity={0.7}>
+          <Ionicons name="image-outline" size={18} color={colors.textMuted} />
           <Text style={styles.toolLabel}>Photo</Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -260,7 +276,18 @@ export default function CreatePostScreen() {
           style={[styles.toolBtn, showVideoInput && styles.toolBtnActive]}
           activeOpacity={0.7}
         >
+          <Ionicons name="videocam-outline" size={18} color={showVideoInput ? colors.accent : colors.textMuted} />
           <Text style={[styles.toolLabel, showVideoInput && { color: colors.accent }]}>Video</Text>
+        </TouchableOpacity>
+        <View style={{ flex: 1 }} />
+        <TouchableOpacity
+          onPress={() => Keyboard.dismiss()}
+          style={styles.toolBtn}
+          activeOpacity={0.7}
+          hitSlop={8}
+        >
+          <Ionicons name="chevron-down" size={18} color={colors.textMuted} />
+          <Text style={styles.toolLabel}>Done</Text>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>

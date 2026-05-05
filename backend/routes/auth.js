@@ -5,7 +5,7 @@ const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../database/db');
 const { generateToken, authMiddleware } = require('../middleware/auth');
 const { trackEvent, metaFromReq } = require('../utils/analytics');
-const { sendVerificationEmail } = require('../utils/email');
+const { sendVerificationEmail, sendPasswordResetEmail } = require('../utils/email');
 
 // Monthly email budget — hard stop before hitting Resend free tier limit
 const MONTHLY_EMAIL_CAP = 50000;
@@ -194,6 +194,108 @@ router.post('/verify-email', authMiddleware, (req, res) => {
 
   const user = db.prepare('SELECT id, username, email, display_name, bio, avatar_url, email_verified, created_at FROM users WHERE id = ?').get(req.user.id);
   res.json({ verified: true, user });
+});
+
+// POST /api/auth/forgot-password — request a reset code by email.
+// Always returns 200 (regardless of whether the email exists) to avoid
+// account enumeration. The actual email send only happens if the address
+// is registered.
+router.post('/forgot-password', async (req, res) => {
+  const { email } = req.body || {};
+  if (!email || typeof email !== 'string') {
+    return res.status(400).json({ error: 'Email required' });
+  }
+  const normalized = email.trim().toLowerCase();
+  if (normalized.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
+    return res.status(400).json({ error: 'Invalid email' });
+  }
+
+  const db = getDb();
+  const user = db.prepare('SELECT id, email FROM users WHERE email = ?').get(normalized);
+
+  // Generic success response — same shape regardless of user existence.
+  const okResponse = { sent: true };
+
+  if (!user) return res.json(okResponse);
+
+  // Rate limit: max 1 reset email per 60s per user
+  const recent = db.prepare(
+    'SELECT created_at FROM password_resets WHERE user_id = ? ORDER BY created_at DESC LIMIT 1'
+  ).get(user.id);
+  if (recent && new Date() - new Date(recent.created_at) < 60000) {
+    // Still return 200 — don't leak whether the email exists.
+    return res.json(okResponse);
+  }
+
+  if (monthlyEmailBudgetExceeded(db)) {
+    console.warn('[Email] Monthly cap reached — skipping reset email for', normalized);
+    return res.json(okResponse);
+  }
+
+  const code = randomInt(100000, 1000000).toString();
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+  db.prepare('DELETE FROM password_resets WHERE user_id = ?').run(user.id);
+  db.prepare('INSERT INTO password_resets (id, user_id, code, expires_at) VALUES (?, ?, ?, ?)')
+    .run(uuidv4(), user.id, code, expiresAt);
+
+  try {
+    await sendPasswordResetEmail(user.email, code);
+  } catch (err) {
+    console.error('[Email] password reset send failed:', err);
+    // Still return generic success to avoid enumeration.
+  }
+
+  trackEvent(user.id, 'password_reset_requested', {}, metaFromReq(req));
+  res.json(okResponse);
+});
+
+// POST /api/auth/reset-password — consume a reset code and set a new password.
+router.post('/reset-password', (req, res) => {
+  const { email, code, new_password } = req.body || {};
+  if (!email || !code || !new_password) {
+    return res.status(400).json({ error: 'Email, code, and new password are required' });
+  }
+  if (typeof new_password !== 'string' || new_password.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  }
+  const normalized = String(email).trim().toLowerCase();
+
+  const db = getDb();
+  const user = db.prepare('SELECT id, email FROM users WHERE email = ?').get(normalized);
+
+  // Generic invalid-code response so we don't reveal whether the email exists.
+  const genericInvalid = () => res.status(400).json({ error: 'Invalid or expired code' });
+
+  if (!user) return genericInvalid();
+
+  const record = db.prepare(
+    'SELECT * FROM password_resets WHERE user_id = ? ORDER BY created_at DESC LIMIT 1'
+  ).get(user.id);
+
+  if (!record || new Date() > new Date(record.expires_at)) {
+    db.prepare('DELETE FROM password_resets WHERE user_id = ?').run(user.id);
+    return genericInvalid();
+  }
+
+  if (record.code !== String(code).trim()) {
+    const attempts = (record.attempts || 0) + 1;
+    if (attempts >= 5) {
+      db.prepare('DELETE FROM password_resets WHERE user_id = ?').run(user.id);
+      return res.status(429).json({ error: 'Too many attempts. Please request a new code.' });
+    }
+    db.prepare('UPDATE password_resets SET attempts = ? WHERE id = ?').run(attempts, record.id);
+    return genericInvalid();
+  }
+
+  // Hash + persist + invalidate any existing JWTs for this user.
+  const password_hash = bcrypt.hashSync(new_password, 10);
+  db.prepare(
+    'UPDATE users SET password_hash = ?, token_version = token_version + 1 WHERE id = ?'
+  ).run(password_hash, user.id);
+  db.prepare('DELETE FROM password_resets WHERE user_id = ?').run(user.id);
+
+  trackEvent(user.id, 'password_reset_completed', {}, metaFromReq(req));
+  res.json({ reset: true });
 });
 
 // ── OTP (SMS verification placeholder — swap Twilio in for production) ────────

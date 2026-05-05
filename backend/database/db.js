@@ -162,6 +162,21 @@ function getDb() {
       db.exec("ALTER TABLE email_verifications ADD COLUMN pending_email TEXT DEFAULT NULL");
     }
 
+    // Password reset codes — separate table from email_verifications because
+    // resets are pre-auth (looked up by email, not user_id from JWT) and the
+    // lifecycle is independent of email-verified state.
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS password_resets (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        code TEXT NOT NULL,
+        expires_at DATETIME NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_resets(user_id);
+    `);
+
     // Analytics event stream
     db.exec(`
       CREATE TABLE IF NOT EXISTS analytics_events (

@@ -89,6 +89,14 @@ export default function LoginScreen({ navigation }) {
           >
             <Text style={styles.btnText}>{loading ? 'Signing in…' : 'Sign in'}</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => navigation.navigate('ForgotPassword')}
+            style={styles.forgotRow}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.forgotText}>Forgot password?</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.switchRow}>
@@ -155,5 +163,7 @@ function makeStyles(colors) {
 
     switchRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 20 },
     switchText: { fontSize: 14, color: colors.textMuted },
+    forgotRow: { alignItems: 'center', marginTop: 14 },
+    forgotText: { fontSize: 14, color: colors.textMuted, fontWeight: '500' },
   });
 }

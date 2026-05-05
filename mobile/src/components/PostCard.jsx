@@ -6,6 +6,7 @@ import { API_BASE_URL, radius, spacing } from '../theme';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import Avatar from './Avatar';
+import MediaViewer from './MediaViewer';
 import api from '../api/client';
 
 import { timeAgo } from '../utils/timeAgo';
@@ -228,6 +229,7 @@ export default function PostCard({ post, onDelete }) {
   const [cheered, setCheered] = useState(!!post.cheered_by_me);
   const [cheerCount, setCheerCount] = useState(post.cheer_count || 0);
   const [showShare, setShowShare] = useState(false);
+  const [showMedia, setShowMedia] = useState(false);
 
   const toggleCheer = async () => {
     const was = cheered;
@@ -309,21 +311,41 @@ export default function PostCard({ post, onDelete }) {
         </View>
       )}
 
-      {/* Content + Image - tappable to open post detail */}
-      <TouchableOpacity onPress={goToComments} activeOpacity={0.85}>
-        {!!post.content && (
+      {/* Content - tappable to open post detail */}
+      {!!post.content && (
+        <TouchableOpacity onPress={goToComments} activeOpacity={0.85}>
           <Text style={styles.content}>
             {renderMentions(post.content, colors, navigation)}
           </Text>
-        )}
-        {imageUrl ? (
+        </TouchableOpacity>
+      )}
+
+      {/* Image - tappable to open fullscreen viewer */}
+      {imageUrl ? (
+        <TouchableOpacity onPress={() => setShowMedia(true)} activeOpacity={0.9}>
           <Image
             source={{ uri: imageUrl }}
             style={styles.image}
             resizeMode="cover"
           />
-        ) : null}
-      </TouchableOpacity>
+        </TouchableOpacity>
+      ) : null}
+
+      {/* Video link - tappable to open player */}
+      {!imageUrl && post.video_url ? (
+        <TouchableOpacity
+          onPress={() => setShowMedia(true)}
+          activeOpacity={0.85}
+          style={styles.videoLink}
+        >
+          <Ionicons name="play-circle" size={28} color={colors.accent} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.videoLinkTitle}>Watch video</Text>
+            <Text style={styles.videoLinkUrl} numberOfLines={1}>{post.video_url}</Text>
+          </View>
+          <Ionicons name="open-outline" size={18} color={colors.textMuted} />
+        </TouchableOpacity>
+      ) : null}
 
       {/* Actions */}
       <View style={styles.actions}>
@@ -347,6 +369,12 @@ export default function PostCard({ post, onDelete }) {
       </View>
 
       <ShareModal visible={showShare} onClose={() => setShowShare(false)} postId={post.id} post={post} />
+      <MediaViewer
+        visible={showMedia}
+        imageUrl={imageUrl}
+        videoUrl={post.video_url}
+        onClose={() => setShowMedia(false)}
+      />
     </View>
   );
 }
@@ -391,6 +419,20 @@ function makeStyles(colors) { return StyleSheet.create({
     marginBottom: 10,
     backgroundColor: colors.bgHover,
   },
+  videoLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    backgroundColor: colors.bgHover,
+    marginBottom: 10,
+  },
+  videoLinkTitle: { fontSize: 13, fontWeight: '600', color: colors.text },
+  videoLinkUrl: { fontSize: 11, color: colors.textMuted, marginTop: 1 },
   actions: {
     flexDirection: 'row',
     gap: 5,
