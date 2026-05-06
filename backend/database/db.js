@@ -408,6 +408,41 @@ function getDb() {
         PRIMARY KEY (event_id, user_id)
       );
     `);
+
+    // One-shot migration: convert any avatar_url stored as a base64 data URL
+    // into a file on the persistent uploads volume. Earlier builds stored the
+    // full data URL in the column, which made every feed payload huge and
+    // routinely caused RN <Image /> to fail to render. After this migration
+    // those rows hold a small `/uploads/avatar-...jpg` path instead.
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      let UPLOAD_DIR;
+      try { ({ UPLOAD_DIR } = require('../middleware/upload')); }
+      catch { UPLOAD_DIR = null; }
+      if (UPLOAD_DIR) {
+        const rows = db.prepare(
+          "SELECT id, avatar_url FROM users WHERE avatar_url LIKE 'data:image/%'"
+        ).all();
+        const update = db.prepare('UPDATE users SET avatar_url = ? WHERE id = ?');
+        for (const r of rows) {
+          const m = /^data:image\/(jpeg|jpg|png|webp|gif);base64,(.+)$/.exec(r.avatar_url);
+          if (!m) continue;
+          const ext = m[1] === 'png' ? '.png' : m[1] === 'webp' ? '.webp' : m[1] === 'gif' ? '.gif' : '.jpg';
+          const filename = `avatar-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+          const filepath = path.join(UPLOAD_DIR, filename);
+          try {
+            fs.writeFileSync(filepath, Buffer.from(m[2], 'base64'));
+            update.run(`/uploads/${filename}`, r.id);
+          } catch (err) {
+            console.warn('[db] avatar migration skip', r.id, err.message);
+          }
+        }
+        if (rows.length) console.log(`[db] migrated ${rows.length} base64 avatars to disk`);
+      }
+    } catch (err) {
+      console.warn('[db] avatar migration failed (non-fatal):', err.message);
+    }
   }
   return db;
 }

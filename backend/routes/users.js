@@ -3,6 +3,9 @@ const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../database/db');
 const { authMiddleware, optionalAuth, generateToken } = require('../middleware/auth');
 const upload = require('../middleware/upload');
+const { UPLOAD_DIR } = require('../middleware/upload');
+const fs = require('fs');
+const path = require('path');
 const { calculateStreak, isStreakAtRisk, getEarnedBadges, BADGE_DEFS } = require('../utils/streaks');
 const { sendPush } = require('../utils/push');
 const { trackEvent, metaFromReq } = require('../utils/analytics');
@@ -435,18 +438,50 @@ router.get('/:username/habits', optionalAuth, (req, res) => {
 
 // ── /users/me — settings endpoints ───────────────────────────────────────────
 
-// PATCH /api/users/me/avatar — store avatar as base64 data URL (persists across deploys)
+// PATCH /api/users/me/avatar — accept a base64 data URL, write it to the
+// persistent uploads volume, and store the public /uploads/... path.
+//
+// Earlier this route stored the full data URL in users.avatar_url. That made
+// every feed/post response carry a multi-hundred-KB string per author, and
+// React Native's <Image /> reliably failed to render the larger ones — which
+// is why testers saw missing avatars on Pulse Check even after re-uploading.
+// Writing to disk keeps the JSON tiny and lets RN cache the image normally.
 router.patch('/me/avatar', authMiddleware, (req, res) => {
   const { avatar_data } = req.body;
   if (!avatar_data || typeof avatar_data !== 'string') return res.status(400).json({ error: 'avatar_data required' });
   // Whitelist raster image MIME types only — block SVG (can contain <script>) and other formats.
-  if (!/^data:image\/(jpeg|jpg|png|webp|gif);base64,/.test(avatar_data)) {
-    return res.status(400).json({ error: 'Invalid image data' });
+  const m = /^data:image\/(jpeg|jpg|png|webp|gif);base64,(.+)$/.exec(avatar_data);
+  if (!m) return res.status(400).json({ error: 'Invalid image data' });
+  if (avatar_data.length > 7_000_000) return res.status(400).json({ error: 'Image too large. Choose a smaller photo.' });
+
+  const mime = m[1] === 'jpg' ? 'jpeg' : m[1];
+  const ext  = mime === 'jpeg' ? '.jpg' : `.${mime}`;
+  let buf;
+  try { buf = Buffer.from(m[2], 'base64'); }
+  catch { return res.status(400).json({ error: 'Invalid image data' }); }
+  if (buf.length === 0) return res.status(400).json({ error: 'Invalid image data' });
+
+  const filename = `avatar-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+  const filepath = path.join(UPLOAD_DIR, filename);
+  try { fs.writeFileSync(filepath, buf); }
+  catch (err) {
+    console.error('[avatar] write failed', err.message);
+    return res.status(500).json({ error: 'Could not save avatar' });
   }
-  if (avatar_data.length > 700000) return res.status(400).json({ error: 'Image too large. Choose a smaller photo.' });
+  const publicUrl = `/uploads/${filename}`;
 
   const db = getDb();
-  db.prepare('UPDATE users SET avatar_url = ? WHERE id = ?').run(avatar_data, req.user.id);
+  // Best-effort cleanup of the previous avatar file if it was disk-backed.
+  try {
+    const prev = db.prepare('SELECT avatar_url FROM users WHERE id = ?').get(req.user.id)?.avatar_url;
+    if (typeof prev === 'string' && prev.startsWith('/uploads/')) {
+      const prevPath = path.join(UPLOAD_DIR, path.basename(prev));
+      // Only delete files inside UPLOAD_DIR — basename() blocks path traversal.
+      if (fs.existsSync(prevPath)) fs.unlinkSync(prevPath);
+    }
+  } catch {}
+
+  db.prepare('UPDATE users SET avatar_url = ? WHERE id = ?').run(publicUrl, req.user.id);
   const user = db.prepare('SELECT id, username, email, display_name, bio, avatar_url, created_at FROM users WHERE id = ?').get(req.user.id);
   res.json(user);
 });
