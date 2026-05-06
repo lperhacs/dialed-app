@@ -57,7 +57,10 @@ const otpLimiter = rateLimit({
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Serve uploads from the same directory the upload middleware writes to
+// (persistent volume in prod, local backend/uploads in dev).
+const { UPLOAD_DIR } = require('./middleware/upload');
+app.use('/uploads', express.static(UPLOAD_DIR));
 
 // Security headers — helmet sets sensible defaults (X-Content-Type-Options,
 // X-Frame-Options, HSTS, Referrer-Policy, etc.). CSP disabled because this is

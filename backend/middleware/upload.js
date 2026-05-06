@@ -2,7 +2,10 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
+// Persist uploads alongside the DB so they survive Railway redeploys.
+// In dev (no DB_PATH), falls back to backend/uploads.
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'database', 'dialed.db');
+const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(path.dirname(DB_PATH), 'uploads');
 if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 }
@@ -40,3 +43,4 @@ const upload = multer({
 });
 
 module.exports = upload;
+module.exports.UPLOAD_DIR = UPLOAD_DIR;
