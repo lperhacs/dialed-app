@@ -171,6 +171,25 @@ async function _cancelHabitReminderImpl(habitId) {
 }
 
 /**
+ * Schedule a local notification telling the user they were signed out.
+ * Call this only on involuntary logouts (401 responses), not manual logouts.
+ * Fires after 1 second so the app has a moment to navigate away first.
+ */
+export async function scheduleLogoutNotification() {
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'You\'ve been signed out',
+        body: 'Tap to sign back in to Dialed.',
+      },
+      trigger: { seconds: 1 },
+    });
+  } catch (err) {
+    console.warn('[notifications] logout notification failed:', err && err.message);
+  }
+}
+
+/**
  * Sync all habits: schedule reminders for those with any times set,
  * cancel for those without.
  */

@@ -2,6 +2,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { API_BASE_URL } from '../theme';
+import { scheduleLogoutNotification } from '../utils/notifications';
 
 // ── In-memory GET cache ───────────────────────────────────────────────────────
 // Keyed by full URL. Only GET requests. TTLs in milliseconds.
@@ -76,6 +77,7 @@ api.interceptors.response.use(
   async (err) => {
     if (err.response?.status === 401) {
       await AsyncStorage.multiRemove(['dialed_token', 'dialed_user']);
+      scheduleLogoutNotification(); // fire and forget — tells user they were signed out
       // AuthContext will detect the missing token on next render
     }
     return Promise.reject(err);
