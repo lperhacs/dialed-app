@@ -13,6 +13,7 @@ import { radius, spacing } from '../theme';
 
 const FEATURES = [
   { icon: 'infinite-outline',      label: 'Unlimited habits',         sub: 'Free plan limited to 3' },
+  { icon: 'alarm-outline',         label: 'Up to 10 reminders per habit', sub: 'Free plan limited to 1' },
   { icon: 'snow-outline',          label: '3 streak freezes/month',   sub: 'Save a streak when life happens' },
   { icon: 'bar-chart-outline',     label: 'Full habit analytics',     sub: 'Trends, completion rates, insights' },
   { icon: 'people-outline',        label: 'Up to 3 accountability buddies', sub: 'Free plan limited to 1' },

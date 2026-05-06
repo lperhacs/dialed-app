@@ -54,79 +54,109 @@ export async function registerPushToken() {
   }
 }
 
+// Compose a stable identifier for a single (habit, time) reminder so the same
+// pair always replaces itself when re-scheduled.
+function reminderId(habitId, time) {
+  return `habit:${habitId}:${time}`;
+}
+
+function parseHHMM(t) {
+  if (typeof t !== 'string' || !t.includes(':')) return null;
+  const [h, m] = t.split(':').map(s => parseInt(s, 10));
+  if (!Number.isFinite(h) || !Number.isFinite(m) || h < 0 || h > 23 || m < 0 || m > 59) return null;
+  return { hour: h, minute: m };
+}
+
+function triggerFor(frequency, hour, minute) {
+  if (frequency === 'daily' || frequency === 'weekly') {
+    // For weekly habits we still fire daily at the set time — counting the
+    // user's logs against the weekly target is the backend's job; the local
+    // notification just nudges them at the times they chose.
+    return { type: 'daily', hour, minute };
+  }
+  if (frequency === 'monthly') {
+    // No native monthly trigger. Schedule a one-shot 5 days before end of month.
+    const now = new Date();
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const target = new Date(endOfMonth.getFullYear(), endOfMonth.getMonth(), endOfMonth.getDate() - 4, hour, minute, 0);
+    if (target <= now) {
+      target.setMonth(target.getMonth() + 1);
+    }
+    return { date: target };
+  }
+  return null;
+}
+
 /**
- * Schedule (or reschedule) a daily/weekly reminder for a habit.
- * Uses the habit's id as the notification identifier so it can be
- * cancelled or replaced cleanly.
+ * Schedule (or reschedule) all reminders for a habit. Cancels any previously
+ * scheduled reminders for this habit first, then re-creates one local
+ * notification per HH:MM string in `habit.reminders` (Pro: up to 10).
  *
- * @param {object} habit  - must have id, name, frequency, reminder_time ("HH:MM")
+ * Backward compatible: if `habit.reminders` is missing/empty but
+ * `habit.reminder_time` is set (older mobile clients or pre-migration data),
+ * the single time is used.
  */
 export async function scheduleHabitReminder(habit) {
-  // Always cancel the previous notification for this habit first
   await cancelHabitReminder(habit.id);
 
-  if (!habit.reminder_time || typeof habit.reminder_time !== 'string' || !habit.reminder_time.includes(':')) return;
+  let times = Array.isArray(habit.reminders) ? habit.reminders : [];
+  if (!times.length && habit.reminder_time) times = [habit.reminder_time];
+  if (!times.length) return;
 
-  const [hourStr, minuteStr] = habit.reminder_time.split(':');
-  const hour   = parseInt(hourStr,   10);
-  const minute = parseInt(minuteStr, 10);
-
-  if (isNaN(hour) || isNaN(minute)) return;
-
-  let trigger;
-
-  if (habit.frequency === 'daily') {
-    trigger = { type: 'daily', hour, minute };
-  } else if (habit.frequency === 'weekly') {
-    // Fire every Monday at the specified time
-    trigger = { type: 'weekly', weekday: 2, hour, minute };
-  } else if (habit.frequency === 'monthly') {
-    // expo-notifications has no native monthly repeat trigger.
-    // Schedule a one-shot for 5 days before end of the current month as a
-    // "last chance" nudge. The server-side cron (POST /api/cron/habit-reminders)
-    // is the primary recurring reminder; this is a local fallback.
-    const now = new Date();
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0); // last day this month
-    const nudgeDate = new Date(endOfMonth.getFullYear(), endOfMonth.getMonth(), endOfMonth.getDate() - 4, hour, minute, 0);
-    // If that date has already passed this month, push to next month
-    const target = nudgeDate > now
-      ? nudgeDate
-      : new Date(now.getFullYear(), now.getMonth() + 2, 0);
-    if (target !== nudgeDate) {
-      target.setDate(target.getDate() - 4);
-      target.setHours(hour, minute, 0, 0);
+  for (const t of times) {
+    const parsed = parseHHMM(t);
+    if (!parsed) continue;
+    const trigger = triggerFor(habit.frequency, parsed.hour, parsed.minute);
+    if (!trigger) continue;
+    try {
+      await Notifications.scheduleNotificationAsync({
+        identifier: reminderId(habit.id, t),
+        content: {
+          title: 'Stay Dialed',
+          body: `Time to ${habit.name}!`,
+          data: { habitId: habit.id },
+        },
+        trigger,
+      });
+    } catch (err) {
+      console.warn('[notifications] schedule failed for', habit.id, t, err && err.message);
     }
-    trigger = { date: target };
-  } else {
-    return;
-  }
-
-  await Notifications.scheduleNotificationAsync({
-    identifier: String(habit.id),
-    content: {
-      title: 'Stay Dialed',
-      body: `Time to ${habit.name}!`,
-      data: { habitId: habit.id },
-    },
-    trigger,
-  });
-}
-
-export async function cancelHabitReminder(habitId) {
-  try {
-    await Notifications.cancelScheduledNotificationAsync(String(habitId));
-  } catch {
-    // Notification may not exist - that's fine
   }
 }
 
 /**
- * Sync all habits: schedule reminders for those with reminder_time,
+ * Cancel every scheduled local notification for a habit, regardless of how
+ * many reminder times it has. Walks the OS-scheduled list and cancels any
+ * whose identifier starts with `habit:<id>:` (multi-reminder format) or
+ * matches the legacy single-id scheme `<id>`.
+ */
+export async function cancelHabitReminder(habitId) {
+  try {
+    const all = await Notifications.getAllScheduledNotificationsAsync();
+    const idStr = String(habitId);
+    const prefix = `habit:${idStr}:`;
+    for (const n of all) {
+      const ident = n.identifier;
+      if (ident === idStr || (typeof ident === 'string' && ident.startsWith(prefix))) {
+        await Notifications.cancelScheduledNotificationAsync(ident);
+      }
+    }
+  } catch {
+    // Best-effort; missing/native errors must not crash the app.
+  }
+}
+
+/**
+ * Sync all habits: schedule reminders for those with any times set,
  * cancel for those without.
  */
 export async function syncAllHabitReminders(habits) {
+  if (!Array.isArray(habits)) return;
   for (const habit of habits) {
-    if (habit.reminder_time) {
+    const hasReminders =
+      (Array.isArray(habit.reminders) && habit.reminders.length > 0) ||
+      !!habit.reminder_time;
+    if (hasReminders) {
       await scheduleHabitReminder(habit);
     } else {
       await cancelHabitReminder(habit.id);

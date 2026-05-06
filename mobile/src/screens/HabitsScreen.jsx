@@ -210,8 +210,10 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
                 : habit.visibility_missed === 'buddy' ? 'Buddy only'
                 : 'Public'}
             </Text>
-            {!!habit.reminder_time && (
-              <Text style={styles.habitMetaText}>· {formatTime(habit.reminder_time)}</Text>
+            {Array.isArray(habit.reminders) && habit.reminders.length > 1 ? (
+              <Text style={styles.habitMetaText}>· {habit.reminders.length} reminders</Text>
+            ) : !!(habit.reminders?.[0] || habit.reminder_time) && (
+              <Text style={styles.habitMetaText}>· {formatTime(habit.reminders?.[0] || habit.reminder_time)}</Text>
             )}
           </View>
         </View>
@@ -448,9 +450,157 @@ function TimePicker({ value, onChange }) {
   );
 }
 
+// Multi-reminder Pro feature. Free users: 1 reminder. Pro users: up to 10.
+// State is held by the parent form and synced to the backend on Save.
+function RemindersField({ reminders, onChange, isPro, onUpgradePress }) {
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
+  const [picking, setPicking] = useState(false);
+  const [draftHour, setDraftHour] = useState(8);
+  const [draftMinute, setDraftMinute] = useState(0);
+  const limit = isPro ? 10 : 1;
+  const atLimit = reminders.length >= limit;
+
+  const adj = (field, delta) => {
+    if (field === 'hour') setDraftHour(h => (h + delta + 24) % 24);
+    else setDraftMinute(m => (m + delta + 60) % 60);
+  };
+
+  const addDraft = () => {
+    const t = `${String(draftHour).padStart(2, '0')}:${String(draftMinute).padStart(2, '0')}`;
+    if (reminders.includes(t)) {
+      setPicking(false);
+      return;
+    }
+    onChange([...reminders, t].sort());
+    setPicking(false);
+  };
+
+  const removeAt = (i) => {
+    const next = reminders.slice();
+    next.splice(i, 1);
+    onChange(next);
+  };
+
+  const handleAddPress = () => {
+    if (atLimit && !isPro) {
+      Alert.alert(
+        'Dialed Pro',
+        'Free plan is limited to 1 reminder per habit. Upgrade for up to 10.',
+        [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'See Pro', onPress: onUpgradePress },
+        ]
+      );
+      return;
+    }
+    if (atLimit) {
+      Alert.alert('Limit reached', `Up to ${limit} reminders per habit.`);
+      return;
+    }
+    // Default to 9:00 am for the first one, otherwise 1 hour after the last.
+    if (reminders.length === 0) {
+      setDraftHour(9); setDraftMinute(0);
+    } else {
+      const last = reminders[reminders.length - 1];
+      const [h, m] = last.split(':').map(n => parseInt(n, 10));
+      setDraftHour((h + 1) % 24); setDraftMinute(Number.isFinite(m) ? m : 0);
+    }
+    setPicking(true);
+  };
+
+  return (
+    <View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <Text style={styles.fieldLabel}>Reminders</Text>
+        {!isPro && (
+          <Text style={{ fontSize: 11, color: colors.textDim }}>Free: 1 · Pro: 10</Text>
+        )}
+      </View>
+
+      {reminders.length === 0 && !picking && (
+        <Text style={{ color: colors.textMuted, fontSize: 13, marginBottom: 10 }}>
+          No reminders set.
+        </Text>
+      )}
+
+      {reminders.map((t, i) => (
+        <View
+          key={`${t}-${i}`}
+          style={{
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+            backgroundColor: colors.bgHover, borderRadius: radius.sm,
+            paddingHorizontal: 12, paddingVertical: 10, marginBottom: 8,
+          }}
+        >
+          <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600' }}>{formatTime(t)}</Text>
+          <TouchableOpacity onPress={() => removeAt(i)} hitSlop={10}>
+            <Ionicons name="close" size={18} color={colors.textMuted} />
+          </TouchableOpacity>
+        </View>
+      ))}
+
+      {picking && (
+        <View style={[styles.timePickerRow, { marginTop: 4, marginBottom: 10 }]}>
+          <View style={styles.timeUnit}>
+            <TouchableOpacity onPress={() => adj('hour', 1)} hitSlop={10}><Text style={styles.timeAdj}>▲</Text></TouchableOpacity>
+            <Text style={styles.timeValue}>{String(draftHour % 12 || 12).padStart(2, '0')}</Text>
+            <TouchableOpacity onPress={() => adj('hour', -1)} hitSlop={10}><Text style={styles.timeAdj}>▼</Text></TouchableOpacity>
+          </View>
+          <Text style={styles.timeColon}>:</Text>
+          <View style={styles.timeUnit}>
+            <TouchableOpacity onPress={() => adj('minute', 15)} hitSlop={10}><Text style={styles.timeAdj}>▲</Text></TouchableOpacity>
+            <Text style={styles.timeValue}>{String(draftMinute).padStart(2, '0')}</Text>
+            <TouchableOpacity onPress={() => adj('minute', -15)} hitSlop={10}><Text style={styles.timeAdj}>▼</Text></TouchableOpacity>
+          </View>
+          <TouchableOpacity
+            style={styles.ampmBtn}
+            onPress={() => setDraftHour(h => h < 12 ? h + 12 : h - 12)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.ampmText}>{draftHour < 12 ? 'AM' : 'PM'}</Text>
+          </TouchableOpacity>
+          <View style={{ flex: 1 }} />
+          <TouchableOpacity onPress={() => setPicking(false)} hitSlop={8} style={{ paddingHorizontal: 8 }}>
+            <Text style={{ color: colors.textMuted, fontSize: 14 }}>Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={addDraft} hitSlop={8} style={{ paddingHorizontal: 10, paddingVertical: 6, backgroundColor: colors.accent, borderRadius: radius.sm }}>
+            <Text style={{ color: colors.bg, fontSize: 14, fontWeight: '700' }}>Add</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {!picking && (
+        <TouchableOpacity
+          onPress={handleAddPress}
+          style={{
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+            gap: 6,
+            paddingVertical: 10, borderRadius: radius.sm,
+            borderWidth: 1, borderColor: colors.borderSubtle, borderStyle: 'dashed',
+          }}
+          activeOpacity={0.7}
+        >
+          <Ionicons name="add" size={16} color={atLimit && !isPro ? colors.accent : colors.textMuted} />
+          <Text style={{ color: atLimit && !isPro ? colors.accent : colors.textMuted, fontSize: 14, fontWeight: '600' }}>
+            {atLimit && !isPro ? 'Add more with Pro' : 'Add reminder'}
+          </Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+}
+
 function HabitFormModal({ habit, visible, onClose, onSave }) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
+  const navigation = useNavigation();
+  const { isPro } = usePro();
+  const initialReminders = () => {
+    if (Array.isArray(habit?.reminders) && habit.reminders.length) return [...habit.reminders];
+    if (habit?.reminder_time) return [habit.reminder_time];
+    return [];
+  };
   const [form, setForm] = useState({
     name: habit?.name || '',
     description: habit?.description || '',
@@ -458,7 +608,7 @@ function HabitFormModal({ habit, visible, onClose, onSave }) {
     target_count: habit?.target_count || 1,
     visibility_missed: habit?.visibility_missed || 'public',
     color: habit?.color || '#34d399',
-    reminder_time: habit?.reminder_time || null,
+    reminders: initialReminders(),
   });
   const [saving, setSaving] = useState(false);
 
@@ -471,7 +621,7 @@ function HabitFormModal({ habit, visible, onClose, onSave }) {
         target_count: habit?.target_count || 1,
         visibility_missed: habit?.visibility_missed || 'public',
         color: habit?.color || '#34d399',
-        reminder_time: habit?.reminder_time || null,
+        reminders: initialReminders(),
       });
     }
   }, [visible, habit]);
@@ -482,16 +632,34 @@ function HabitFormModal({ habit, visible, onClose, onSave }) {
     if (!form.name.trim()) { Alert.alert('Name required'); return; }
     setSaving(true);
     try {
+      // Backend expects `reminders` (array). For backward compat with older
+      // server versions, keep reminder_time set to the first entry too.
+      const payload = {
+        ...form,
+        reminders: form.reminders,
+        reminder_time: form.reminders[0] || null,
+      };
       if (habit) {
-        const { data } = await api.put(`/habits/${habit.id}`, form);
+        const { data } = await api.put(`/habits/${habit.id}`, payload);
         onSave(data, false);
       } else {
-        const { data } = await api.post('/habits', form);
+        const { data } = await api.post('/habits', payload);
         onSave(data, true);
       }
       onClose();
     } catch (err) {
-      Alert.alert('Error', err.response?.data?.error || 'Failed to save');
+      if (err.response?.data?.pro_gate) {
+        Alert.alert(
+          'Dialed Pro',
+          err.response.data.error,
+          [
+            { text: 'Not now', style: 'cancel' },
+            { text: 'See Pro', onPress: () => { onClose(); navigation.navigate('Paywall'); } },
+          ]
+        );
+      } else {
+        Alert.alert('Error', err.response?.data?.error || 'Failed to save');
+      }
     } finally {
       setSaving(false);
     }
@@ -621,9 +789,11 @@ function HabitFormModal({ habit, visible, onClose, onSave }) {
           </View>
 
           <View style={styles.formField}>
-            <TimePicker
-              value={form.reminder_time}
-              onChange={t => setForm(f => ({ ...f, reminder_time: t }))}
+            <RemindersField
+              reminders={form.reminders}
+              onChange={r => setForm(f => ({ ...f, reminders: r }))}
+              isPro={isPro}
+              onUpgradePress={() => { onClose(); navigation.navigate('Paywall'); }}
             />
           </View>
 
