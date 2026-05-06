@@ -145,13 +145,29 @@ function computeJointStreak(db, pair, userIdA, userIdB) {
   // Persist updated freeze history when something changed (consumed a fresh
   // freeze, or refunded one that became a joint day). Prune anything older
   // than 30 days from today so the JSON column doesn't grow unboundedly.
+  // Wrapped in BEGIN IMMEDIATE so two concurrent reads can't both consume
+  // the same freeze quota slot via overlapping read-merge-write cycles.
   if ((newlyUsed.length > 0 || refunded) && pair?.id) {
     const cutoff = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
-    const next = [...usedSet].filter(d => typeof d === 'string' && d >= cutoff).sort();
     try {
+      db.exec('BEGIN IMMEDIATE');
+      // Re-read the row inside the lock; another writer may have raced ahead.
+      const fresh = db.prepare('SELECT freeze_used_dates FROM buddies WHERE id = ?').get(pair.id);
+      let merged = new Set(usedSet);
+      if (fresh?.freeze_used_dates) {
+        try {
+          const parsed = JSON.parse(fresh.freeze_used_dates);
+          if (Array.isArray(parsed)) for (const d of parsed) if (typeof d === 'string') merged.add(d);
+        } catch (_) { /* malformed — keep our view */ }
+      }
+      const next = [...merged].filter(d => typeof d === 'string' && d >= cutoff).sort();
       db.prepare('UPDATE buddies SET freeze_used_dates = ?, last_freeze_used_at = ? WHERE id = ?')
         .run(JSON.stringify(next), next[next.length - 1] || null, pair.id);
-    } catch (_) { /* best-effort — never fail a read over a freeze write */ }
+      db.exec('COMMIT');
+    } catch (_) {
+      try { db.exec('ROLLBACK'); } catch (_) { /* nothing to roll back */ }
+      /* best-effort — never fail a read over a freeze write */
+    }
   }
 
   // At-risk: alive via yesterday only — one or both haven't logged today.

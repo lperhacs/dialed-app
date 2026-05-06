@@ -29,10 +29,11 @@ import { API_BASE_URL } from './src/theme';
 
     global.ErrorUtils.setGlobalHandler(async (error, isFatal) => {
       try {
-        let userId = null;
+        // Server drops any client-supplied user_id — it now reads the user
+        // from a Bearer token (optionalAuth). Send the token if we have one.
+        let token = null;
         try {
-          const userStr = await AsyncStorage.getItem('dialed_user');
-          if (userStr) userId = (JSON.parse(userStr) || {}).id || null;
+          token = await AsyncStorage.getItem('dialed_token');
         } catch (_) {}
 
         const body = {
@@ -42,7 +43,6 @@ import { API_BASE_URL } from './src/theme';
           platform: Platform.OS,
           app_version: (Constants.expoConfig && Constants.expoConfig.version) || '',
           os_version: String(Platform.Version || ''),
-          user_id: userId,
         };
 
         // Best-effort, fire-and-forget. 3s timeout so a slow network doesn't
@@ -50,9 +50,11 @@ import { API_BASE_URL } from './src/theme';
         const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
         const timer = ctrl ? setTimeout(() => ctrl.abort(), 3000) : null;
         try {
+          const headers = { 'Content-Type': 'application/json' };
+          if (token) headers.Authorization = `Bearer ${token}`;
           await fetch(`${API_BASE_URL}/api/analytics/jserror`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify(body),
             signal: ctrl ? ctrl.signal : undefined,
           });

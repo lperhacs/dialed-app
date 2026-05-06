@@ -4,6 +4,7 @@ import {
   KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Modal, Pressable,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useHeaderHeight } from '@react-navigation/elements';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import api from '../api/client';
@@ -140,6 +141,7 @@ export default function ConversationScreen({ route }) {
   const { refresh: refreshBadges } = useBadges();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const headerHeight = useHeaderHeight();
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState('');
@@ -227,7 +229,7 @@ export default function ConversationScreen({ route }) {
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: colors.bg }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={90}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
     >
       <FlatList
         ref={listRef}

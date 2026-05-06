@@ -85,8 +85,15 @@ async function runWeeklyRecap() {
       } catch { /* malformed — send anyway */ }
     }
 
-    // Skip very new accounts — first-week users would get a hollow recap
-    const ageDays = (now - new Date(user.created_at)) / (1000 * 60 * 60 * 24);
+    // Skip very new accounts — first-week users would get a hollow recap.
+    // SQLite's datetime('now') stores naive UTC strings ("YYYY-MM-DD HH:MM:SS")
+    // which `new Date()` interprets as LOCAL time on the server, throwing the
+    // age calculation off by hours. Force UTC parsing.
+    const createdAtRaw = typeof user.created_at === 'string' ? user.created_at : '';
+    const createdIso = /[zZ]|[+-]\d{2}:?\d{2}$/.test(createdAtRaw)
+      ? createdAtRaw
+      : createdAtRaw.replace(' ', 'T') + 'Z';
+    const ageDays = (now - new Date(createdIso)) / (1000 * 60 * 60 * 24);
     if (ageDays < MIN_ACCOUNT_AGE_DAYS) continue;
 
     const week = lastCompletedWeek(now, tz);

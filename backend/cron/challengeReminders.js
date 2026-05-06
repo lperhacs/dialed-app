@@ -37,17 +37,19 @@ async function runChallengeStartReminders() {
       `).get(user_id, challenge.id);
       if (alreadySent) continue;
 
-      await sendPush(user_id, {
-        title: 'Challenge starts tomorrow',
-        body: `"${challenge.name}" kicks off tomorrow. Get ready.`,
-        data: { type: 'challenge_start', challengeId: challenge.id },
-      }, 'challenges');
-
+      // Insert dedup record FIRST — sendPush is best-effort. If push fails
+      // after the record exists, the next cron tick correctly skips.
       const { v4: uuidv4 } = require('uuid');
       db.prepare(`
         INSERT INTO notifications (id, user_id, type, challenge_id, message)
         VALUES (?, ?, 'challenge_start', ?, ?)
       `).run(uuidv4(), user_id, challenge.id, `"${challenge.name}" starts tomorrow`);
+
+      await sendPush(user_id, {
+        title: 'Challenge starts tomorrow',
+        body: `"${challenge.name}" kicks off tomorrow. Get ready.`,
+        data: { type: 'challenge_start', challengeId: challenge.id },
+      }, 'challenges');
 
       sent++;
     }

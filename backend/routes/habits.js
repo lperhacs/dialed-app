@@ -308,6 +308,9 @@ router.delete('/:id', authMiddleware, (req, res) => {
   const db = getDb();
   const habit = db.prepare('SELECT * FROM habits WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
   if (!habit) return res.status(404).json({ error: 'Habit not found' });
+  // Clear featured_habit_id pointers if they reference the habit being deleted —
+  // otherwise the user's profile keeps a dangling pointer that renders blank.
+  db.prepare('UPDATE users SET featured_habit_id = NULL WHERE featured_habit_id = ?').run(req.params.id);
   db.prepare('DELETE FROM habits WHERE id = ?').run(req.params.id);
   res.json({ deleted: true });
 });

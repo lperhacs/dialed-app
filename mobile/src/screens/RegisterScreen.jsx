@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, ScrollView, Alert, Image, Modal,
@@ -20,6 +20,12 @@ export default function RegisterScreen({ navigation }) {
   const [agreed, setAgreed] = useState(false);
   const [modal, setModal] = useState(null); // 'terms' | 'privacy' | null
   const [emailError, setEmailError] = useState('');
+  // Refs let the Next return-key advance focus down the chain. Without them
+  // tapping Next dismisses the keyboard mid-form on smaller devices, forcing
+  // the user to tap again to reach the next field.
+  const usernameRef = useRef(null);
+  const emailRef = useRef(null);
+  const passwordRef = useRef(null);
 
   const set = field => value => setForm(f => ({ ...f, [field]: value }));
 
@@ -69,14 +75,15 @@ export default function RegisterScreen({ navigation }) {
 
         <View style={styles.form}>
           {[
-            { field: 'display_name', label: 'Display name', placeholder: 'Alex Rivera', auto: 'words' },
-            { field: 'username',     label: 'Username',     placeholder: 'alex_rn',       auto: 'none' },
-            { field: 'email',        label: 'Email',        placeholder: 'alex@example.com', auto: 'none', keyboard: 'email-address' },
-            { field: 'password',     label: 'Password',     placeholder: 'At least 8 characters', secure: true },
-          ].map(({ field, label, placeholder, auto, keyboard, secure }) => (
+            { field: 'display_name', label: 'Display name', placeholder: 'Alex Rivera', auto: 'words', nextRef: usernameRef },
+            { field: 'username',     label: 'Username',     placeholder: 'alex_rn',       auto: 'none', selfRef: usernameRef, nextRef: emailRef },
+            { field: 'email',        label: 'Email',        placeholder: 'alex@example.com', auto: 'none', keyboard: 'email-address', selfRef: emailRef, nextRef: passwordRef },
+            { field: 'password',     label: 'Password',     placeholder: 'At least 8 characters', secure: true, selfRef: passwordRef, last: true },
+          ].map(({ field, label, placeholder, auto, keyboard, secure, selfRef, nextRef, last }) => (
             <View key={field} style={styles.field}>
               <Text style={styles.label}>{label}</Text>
               <TextInput
+                ref={selfRef}
                 style={[styles.input, field === 'email' && emailError ? styles.inputError : null]}
                 value={form[field]}
                 onChangeText={v => {
@@ -94,7 +101,9 @@ export default function RegisterScreen({ navigation }) {
                 autoCorrect={false}
                 keyboardType={keyboard}
                 secureTextEntry={secure}
-                returnKeyType="next"
+                returnKeyType={last ? 'done' : 'next'}
+                onSubmitEditing={last ? handleRegister : (() => nextRef?.current?.focus())}
+                blurOnSubmit={!!last}
               />
               {field === 'email' && !!emailError && (
                 <Text style={styles.fieldError}>{emailError}</Text>

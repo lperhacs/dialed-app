@@ -331,7 +331,15 @@ router.post('/:id/members/:userId/approve', authMiddleware, (req, res) => {
   if (!challenge) return res.status(404).json({ error: 'Club not found' });
   if (challenge.creator_id !== req.user.id) return res.status(403).json({ error: 'Not the creator' });
 
-  db.prepare("UPDATE challenge_members SET status = 'active' WHERE challenge_id = ? AND user_id = ?").run(req.params.id, req.params.userId);
+  // Atomic guarded UPDATE — only flips a row that is currently pending.
+  // Prevents (a) approving non-existent rows and (b) re-promoting an already-active
+  // member which would fire a duplicate notification.
+  const upd = db.prepare(
+    "UPDATE challenge_members SET status = 'active' WHERE challenge_id = ? AND user_id = ? AND status = 'pending'"
+  ).run(req.params.id, req.params.userId);
+  if (upd.changes === 0) {
+    return res.status(404).json({ error: 'No pending join request found' });
+  }
 
   db.prepare(
     "INSERT INTO notifications (id, user_id, type, from_user_id, challenge_id, message) VALUES (?, ?, 'challenge_join', ?, ?, ?)"

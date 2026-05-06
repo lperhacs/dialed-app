@@ -112,8 +112,8 @@ export default function InboxScreen() {
         conversationId: data.id,
         other: { id: user.id, username: user.username, display_name: user.display_name, avatar_url: user.avatar_url },
       });
-    } catch {
-      Alert.alert('Error', 'Could not start conversation');
+    } catch (err) {
+      Alert.alert('Error', err.response?.data?.error || 'Could not start conversation');
     } finally {
       setStarting(false);
     }

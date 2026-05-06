@@ -127,8 +127,8 @@ export default function ProfileScreen({ route, routeUsername, isOwn }) {
     try {
       const { data } = await api.post('/dm/conversations', { user_id: profile.id });
       navigation.navigate('Conversation', { conversationId: data.id, other: { id: profile.id, username: profile.username, display_name: profile.display_name, avatar_url: profile.avatar_url } });
-    } catch {
-      Alert.alert('Error', 'Could not open conversation');
+    } catch (err) {
+      Alert.alert('Error', err.response?.data?.error || 'Could not open conversation');
     }
   };
 

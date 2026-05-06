@@ -88,6 +88,7 @@ export default function CreateEventScreen() {
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={0}
     >
       <View style={styles.modalHeader}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.cancelBtn}>

@@ -2,8 +2,9 @@ import React, { useState, useCallback, useEffect } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   Modal, TextInput, ScrollView, Alert, ActivityIndicator,
-  RefreshControl,
+  RefreshControl, Linking,
 } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -828,6 +829,11 @@ export default function HabitsScreen() {
   const [editHabit, setEditHabit] = useState(null);
   const [calDefault, setCalDefault] = useState(7);
   const [showNudge, setShowNudge] = useState(false);
+  // Permission banner — shown when the user has reminders configured but
+  // iOS notifications are denied (the OS will silently drop every reminder
+  // and the user has no idea why their habits never ping). Banner gives a
+  // one-tap path to Settings.
+  const [notifsDenied, setNotifsDenied] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem(CAL_DEFAULT_KEY).then(v => {
@@ -838,23 +844,46 @@ export default function HabitsScreen() {
   // Refresh default when screen is focused (user may have changed it in Settings)
   useFocusEffect(useCallback(() => {
     AsyncStorage.getItem(CAL_DEFAULT_KEY).then(v => { if (v) setCalDefault(Number(v)); });
+    // Re-check OS notification permissions every time the screen focuses so a
+    // user who just toggled them on in Settings sees the banner disappear.
+    (async () => {
+      try {
+        const { status } = await Notifications.getPermissionsAsync();
+        setNotifsDenied(status !== 'granted');
+      } catch {
+        setNotifsDenied(false);
+      }
+    })();
   }, []));
 
 
   const load = useCallback(async () => {
     const { data } = await api.get('/habits');
-    setHabits(data);
-    syncAllHabitReminders(data);
-    if (data.length === 0) {
+    // Multi-reminder is a Pro feature. If a user downgrades, trim each habit
+    // back to its first reminder so the local OS schedule doesn't keep firing
+    // 5x/day after the entitlement lapses. Server still returns the full list,
+    // so we trim client-side for both display and OS sync.
+    let trimmed = data;
+    if (!isPro && Array.isArray(data)) {
+      trimmed = data.map(h => {
+        if (Array.isArray(h.reminders) && h.reminders.length > 1) {
+          return { ...h, reminders: h.reminders.slice(0, 1) };
+        }
+        return h;
+      });
+    }
+    setHabits(trimmed);
+    syncAllHabitReminders(trimmed);
+    if (trimmed.length === 0) {
       const seen = await AsyncStorage.getItem(HABIT_NUDGE_KEY);
       if (!seen) setShowNudge(true);
     }
-  }, []);
+  }, [isPro]);
 
   useFocusEffect(useCallback(() => {
     setLoading(true);
     load().finally(() => setLoading(false));
-  }, []));
+  }, [load]));
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -942,6 +971,34 @@ export default function HabitsScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {!loading && notifsDenied && habits.some(h => (Array.isArray(h.reminders) && h.reminders.length) || h.reminder_time) && (
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={() => Linking.openSettings().catch(() => {})}
+          style={{
+            marginHorizontal: spacing.lg,
+            marginTop: spacing.md,
+            padding: spacing.md,
+            borderRadius: radius.md,
+            backgroundColor: colors.bgCard,
+            borderWidth: 1,
+            borderColor: colors.danger || '#EF4444',
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: spacing.sm,
+          }}
+        >
+          <Ionicons name="notifications-off-outline" size={20} color={colors.danger || '#EF4444'} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: colors.text, fontSize: 14, fontWeight: '600' }}>Notifications are off</Text>
+            <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 2 }}>
+              Your habit reminders won't fire. Tap to open Settings.
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+        </TouchableOpacity>
+      )}
 
       {loading ? (
         <View style={styles.loadingCenter}><ActivityIndicator color={colors.accent} size="large" /></View>

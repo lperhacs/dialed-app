@@ -1,7 +1,17 @@
 const express = require('express');
+const crypto = require('crypto');
 const { getDb } = require('../database/db');
 const { authMiddleware } = require('../middleware/auth');
 const { trackEvent, metaFromReq } = require('../utils/analytics');
+
+// Constant-time string compare; rejects when secret is unset or lengths differ.
+function timingSafeStringEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || !b) return false;
+  const aBuf = Buffer.from(a);
+  const bBuf = Buffer.from(b);
+  if (aBuf.length !== bBuf.length) return false;
+  return crypto.timingSafeEqual(aBuf, bBuf);
+}
 
 // Return a Date representing yesterday at noon in the client's timezone.
 // Falls back to UTC if the timezone header is missing or invalid.
@@ -49,7 +59,7 @@ router.get('/status', authMiddleware, (req, res) => {
 // Requires server-to-server key: Authorization: Bearer <PRO_SERVER_KEY>
 router.post('/grant', (req, res) => {
   const key = (req.headers.authorization || '').replace('Bearer ', '');
-  if (!process.env.PRO_SERVER_KEY || key !== process.env.PRO_SERVER_KEY) {
+  if (!timingSafeStringEqual(key, process.env.PRO_SERVER_KEY)) {
     return res.status(403).json({ error: 'Forbidden' });
   }
 
@@ -94,13 +104,32 @@ router.post('/use-freeze', authMiddleware, (req, res) => {
   const { v4: uuidv4 } = require('uuid');
   const tz = req.headers['x-client-timezone'];
   const yesterday = localYesterday(tz);
-  db.prepare(
-    "INSERT INTO habit_logs (id, habit_id, user_id, note, logged_at) VALUES (?, ?, ?, '[freeze]', ?)"
-  ).run(uuidv4(), habit_id, req.user.id, yesterday.toISOString());
 
-  db.prepare('UPDATE users SET streak_freezes = streak_freezes - 1 WHERE id = ?').run(req.user.id);
+  // Decrement + log INSERT must be atomic — otherwise a thrown INSERT (FK
+  // violation, disk full) leaves the freeze permanently consumed with no log
+  // written, and the user pays for a feature that did nothing.
+  let remaining;
+  try {
+    db.exec('BEGIN IMMEDIATE');
+    const dec = db.prepare(
+      'UPDATE users SET streak_freezes = streak_freezes - 1 WHERE id = ? AND streak_freezes > 0'
+    ).run(req.user.id);
+    if (dec.changes === 0) {
+      db.exec('ROLLBACK');
+      return res.status(400).json({ error: 'No streak freezes remaining', freezes_remaining: 0 });
+    }
+    db.prepare(
+      "INSERT INTO habit_logs (id, habit_id, user_id, note, logged_at) VALUES (?, ?, ?, '[freeze]', ?)"
+    ).run(uuidv4(), habit_id, req.user.id, yesterday.toISOString());
+    const after = db.prepare('SELECT streak_freezes FROM users WHERE id = ?').get(req.user.id);
+    remaining = after ? after.streak_freezes : 0;
+    db.exec('COMMIT');
+  } catch (err) {
+    try { db.exec('ROLLBACK'); } catch (_) { /* nothing to roll back */ }
+    console.error('[use-freeze] failed:', err);
+    return res.status(500).json({ error: 'Could not use streak freeze' });
+  }
 
-  const remaining = user.streak_freezes - 1;
   trackEvent(req.user.id, 'streak_freeze_used', { habit_id }, metaFromReq(req));
   res.json({ used: true, freezes_remaining: remaining });
 });
@@ -197,17 +226,34 @@ router.post('/restore-streak', authMiddleware, (req, res) => {
 
   if (!missedDates.length) return res.status(400).json({ error: 'Nothing to restore' });
 
-  // Insert restore logs for each missed period
-  const insertLog = db.prepare(
-    "INSERT OR IGNORE INTO habit_logs (id, habit_id, user_id, note, logged_at) VALUES (?, ?, ?, '[restore]', ?)"
-  );
-  for (const date of missedDates) {
-    insertLog.run(uuidv4(), habit_id, req.user.id, date);
+  // Decrement + restore-log inserts must be atomic — otherwise a thrown INSERT
+  // (FK violation, disk full) leaves the freeze consumed with only some periods
+  // restored, and the user pays a freeze for a half-finished restoration.
+  let remaining;
+  try {
+    db.exec('BEGIN IMMEDIATE');
+    const dec = db.prepare(
+      'UPDATE users SET streak_freezes = streak_freezes - 1 WHERE id = ? AND streak_freezes > 0'
+    ).run(req.user.id);
+    if (dec.changes === 0) {
+      db.exec('ROLLBACK');
+      return res.status(400).json({ error: 'No streak freezes remaining', freezes_remaining: 0 });
+    }
+    const insertLog = db.prepare(
+      "INSERT OR IGNORE INTO habit_logs (id, habit_id, user_id, note, logged_at) VALUES (?, ?, ?, '[restore]', ?)"
+    );
+    for (const date of missedDates) {
+      insertLog.run(uuidv4(), habit_id, req.user.id, date);
+    }
+    const after = db.prepare('SELECT streak_freezes FROM users WHERE id = ?').get(req.user.id);
+    remaining = after ? after.streak_freezes : 0;
+    db.exec('COMMIT');
+  } catch (err) {
+    try { db.exec('ROLLBACK'); } catch (_) { /* nothing to roll back */ }
+    console.error('[restore-streak] failed:', err);
+    return res.status(500).json({ error: 'Could not restore streak' });
   }
 
-  db.prepare('UPDATE users SET streak_freezes = streak_freezes - 1 WHERE id = ?').run(req.user.id);
-
-  const remaining = user.streak_freezes - 1;
   trackEvent(req.user.id, 'streak_restored', { habit_id, missed: missedDates.length }, metaFromReq(req));
   res.json({ restored: true, periods_filled: missedDates.length, freezes_remaining: remaining });
 });

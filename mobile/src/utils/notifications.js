@@ -96,32 +96,52 @@ function triggerFor(frequency, hour, minute) {
  * `habit.reminder_time` is set (older mobile clients or pre-migration data),
  * the single time is used.
  */
+// Per-habit serialization queue. Two near-simultaneous calls (e.g. user edits
+// reminder times then immediately deletes the habit) could otherwise interleave
+// the inner getAll → cancel → schedule sequence, leaving stale OS reminders
+// firing after the habit no longer exists. Each habit waits for its prior
+// op to fully resolve before starting.
+const _habitOpQueue = new Map();
+function _runSerial(habitId, fn) {
+  const key = String(habitId);
+  const prev = _habitOpQueue.get(key) || Promise.resolve();
+  const next = prev.catch(() => {}).then(fn);
+  _habitOpQueue.set(key, next);
+  // Clean up the map slot once this op (and any chained ones) settle.
+  next.finally(() => {
+    if (_habitOpQueue.get(key) === next) _habitOpQueue.delete(key);
+  });
+  return next;
+}
+
 export async function scheduleHabitReminder(habit) {
-  await cancelHabitReminder(habit.id);
+  return _runSerial(habit.id, async () => {
+    await _cancelHabitReminderImpl(habit.id);
 
-  let times = Array.isArray(habit.reminders) ? habit.reminders : [];
-  if (!times.length && habit.reminder_time) times = [habit.reminder_time];
-  if (!times.length) return;
+    let times = Array.isArray(habit.reminders) ? habit.reminders : [];
+    if (!times.length && habit.reminder_time) times = [habit.reminder_time];
+    if (!times.length) return;
 
-  for (const t of times) {
-    const parsed = parseHHMM(t);
-    if (!parsed) continue;
-    const trigger = triggerFor(habit.frequency, parsed.hour, parsed.minute);
-    if (!trigger) continue;
-    try {
-      await Notifications.scheduleNotificationAsync({
-        identifier: reminderId(habit.id, t),
-        content: {
-          title: 'Stay Dialed',
-          body: `Time to ${habit.name}!`,
-          data: { habitId: habit.id },
-        },
-        trigger,
-      });
-    } catch (err) {
-      console.warn('[notifications] schedule failed for', habit.id, t, err && err.message);
+    for (const t of times) {
+      const parsed = parseHHMM(t);
+      if (!parsed) continue;
+      const trigger = triggerFor(habit.frequency, parsed.hour, parsed.minute);
+      if (!trigger) continue;
+      try {
+        await Notifications.scheduleNotificationAsync({
+          identifier: reminderId(habit.id, t),
+          content: {
+            title: 'Stay Dialed',
+            body: `Time to ${habit.name}!`,
+            data: { habitId: habit.id },
+          },
+          trigger,
+        });
+      } catch (err) {
+        console.warn('[notifications] schedule failed for', habit.id, t, err && err.message);
+      }
     }
-  }
+  });
 }
 
 /**
@@ -131,6 +151,10 @@ export async function scheduleHabitReminder(habit) {
  * matches the legacy single-id scheme `<id>`.
  */
 export async function cancelHabitReminder(habitId) {
+  return _runSerial(habitId, () => _cancelHabitReminderImpl(habitId));
+}
+
+async function _cancelHabitReminderImpl(habitId) {
   try {
     const all = await Notifications.getAllScheduledNotificationsAsync();
     const idStr = String(habitId);

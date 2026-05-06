@@ -131,6 +131,32 @@ router.post('/conversations', authMiddleware, (req, res) => {
   const target = db.prepare('SELECT id FROM users WHERE id = ?').get(user_id);
   if (!target) return res.status(404).json({ error: 'User not found' });
 
+  // Mutual-follow gate — same rule as group conversations: at least one
+  // direction of the follow graph must exist before a DM thread can be
+  // created. Returns the existing thread (if any) without the gate so a
+  // legitimate prior conversation isn't suddenly blocked by a later unfollow.
+  const existingForGate = db.prepare(
+    `SELECT cp1.conversation_id
+     FROM conversation_participants cp1
+     JOIN conversation_participants cp2 ON cp1.conversation_id = cp2.conversation_id
+     JOIN conversations c ON c.id = cp1.conversation_id
+     WHERE cp1.user_id = ? AND cp2.user_id = ? AND c.is_group = 0
+     LIMIT 1`
+  ).get(req.user.id, user_id);
+  if (!existingForGate) {
+    const followLink = db.prepare(
+      `SELECT 1 FROM follows
+       WHERE (follower_id = ? AND following_id = ?)
+          OR (follower_id = ? AND following_id = ?)
+       LIMIT 1`
+    ).get(req.user.id, user_id, user_id, req.user.id);
+    if (!followLink) {
+      return res.status(403).json({
+        error: 'You can only message people you follow or who follow you',
+      });
+    }
+  }
+
   // Look for an existing 1-on-1 conversation between the two users
   // (must filter is_group = 0 — otherwise a shared group chat would be returned as a DM)
   const existing = db.prepare(

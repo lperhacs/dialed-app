@@ -65,9 +65,17 @@ router.post('/register', (req, res) => {
   }
 
   const db = getDb();
-  const existing = db.prepare('SELECT id FROM users WHERE username = ? OR email = ?').get(username, email);
-  if (existing) {
-    return res.status(409).json({ error: 'Username or email already taken' });
+  // Distinguish username collision (which the user can change) from email collision
+  // (which would leak account existence — return generic error and don't INSERT).
+  const usernameTaken = db.prepare('SELECT id FROM users WHERE username = ?').get(username.toLowerCase());
+  if (usernameTaken) {
+    return res.status(409).json({ error: 'Username already taken' });
+  }
+  const emailTaken = db.prepare('SELECT id FROM users WHERE email = ?').get(email.toLowerCase());
+  if (emailTaken) {
+    // Don't reveal which emails are registered. Return a generic 400 that doesn't
+    // distinguish from other validation failures.
+    return res.status(400).json({ error: 'Could not create account. Please try a different email.' });
   }
 
   const id = uuidv4();
@@ -180,12 +188,20 @@ router.post('/verify-email', authMiddleware, (req, res) => {
   }
 
   if (record.code !== code.toString().trim()) {
-    const attempts = (record.attempts || 0) + 1;
-    if (attempts >= 5) {
+    // Atomic increment guarded by attempts < 5 — prevents parallel-request race
+    // where two concurrent wrong-code submissions both read attempts=4 and bypass the cap.
+    const upd = db.prepare(
+      'UPDATE email_verifications SET attempts = attempts + 1 WHERE id = ? AND attempts < 5'
+    ).run(record.id);
+    if (upd.changes === 0) {
       db.prepare('DELETE FROM email_verifications WHERE user_id = ?').run(req.user.id);
       return res.status(429).json({ error: 'Too many attempts. Please request a new code.' });
     }
-    db.prepare('UPDATE email_verifications SET attempts = ? WHERE id = ?').run(attempts, record.id);
+    const after = db.prepare('SELECT attempts FROM email_verifications WHERE id = ?').get(record.id);
+    if (after && after.attempts >= 5) {
+      db.prepare('DELETE FROM email_verifications WHERE user_id = ?').run(req.user.id);
+      return res.status(429).json({ error: 'Too many attempts. Please request a new code.' });
+    }
     return res.status(400).json({ error: 'Incorrect code.' });
   }
 
@@ -278,12 +294,19 @@ router.post('/reset-password', (req, res) => {
   }
 
   if (record.code !== String(code).trim()) {
-    const attempts = (record.attempts || 0) + 1;
-    if (attempts >= 5) {
+    // Atomic guarded increment — see verify-email for rationale.
+    const upd = db.prepare(
+      'UPDATE password_resets SET attempts = attempts + 1 WHERE id = ? AND attempts < 5'
+    ).run(record.id);
+    if (upd.changes === 0) {
       db.prepare('DELETE FROM password_resets WHERE user_id = ?').run(user.id);
       return res.status(429).json({ error: 'Too many attempts. Please request a new code.' });
     }
-    db.prepare('UPDATE password_resets SET attempts = ? WHERE id = ?').run(attempts, record.id);
+    const after = db.prepare('SELECT attempts FROM password_resets WHERE id = ?').get(record.id);
+    if (after && after.attempts >= 5) {
+      db.prepare('DELETE FROM password_resets WHERE user_id = ?').run(user.id);
+      return res.status(429).json({ error: 'Too many attempts. Please request a new code.' });
+    }
     return genericInvalid();
   }
 
@@ -313,7 +336,15 @@ router.post('/send-otp', authMiddleware, (req, res) => {
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
   const db = getDb();
-  // Upsert — replaces any existing code for this phone, binding it to the requesting user
+  // Block cross-user hijack: if a non-expired record exists for this phone
+  // bound to a DIFFERENT user, refuse. Without this guard, any authenticated
+  // user could overwrite another user's pending OTP and lock them out of
+  // their own verification flow.
+  const existing = db.prepare('SELECT user_id, expires_at FROM phone_otps WHERE phone = ?').get(cleaned);
+  if (existing && existing.user_id && existing.user_id !== req.user.id && new Date(existing.expires_at) > new Date()) {
+    return res.status(409).json({ error: 'A verification is already in progress for this number.' });
+  }
+  // Upsert — replaces any existing (own or expired) code for this phone, binding it to the requesting user
   db.prepare(`
     INSERT INTO phone_otps (phone, otp, expires_at, attempts, user_id)
     VALUES (?, ?, ?, 0, ?)

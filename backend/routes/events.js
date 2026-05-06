@@ -5,6 +5,20 @@ const { authMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
 
+// Privacy filter — applied to every list/search/discover query so private
+// events (is_public = 0) only surface for the creator OR active club members.
+// TWO positional ? params required, both req.user.id, in order:
+//   1. creator self-check
+//   2. challenge_members.user_id check
+const EVENT_PRIVACY_FILTER = `(
+  e.is_public = 1
+  OR e.creator_id = ?
+  OR (e.club_id IS NOT NULL AND EXISTS (
+    SELECT 1 FROM challenge_members cm
+    WHERE cm.challenge_id = e.club_id AND cm.user_id = ? AND cm.status = 'active'
+  ))
+)`;
+
 // EVENT_SELECT uses 3 positional ? params, all for userId (in order):
 //   1. my_status subquery
 //   2. friends_going_names follower_id
@@ -41,16 +55,17 @@ router.get('/search', authMiddleware, (req, res) => {
   const rows = db.prepare(`
     ${EVENT_SELECT}
     WHERE (e.title LIKE ? ESCAPE '\\' OR e.description LIKE ? ESCAPE '\\' OR e.location LIKE ? ESCAPE '\\')
+      AND ${EVENT_PRIVACY_FILTER}
     ORDER BY e.event_date ASC LIMIT 20
-  `).all(req.user.id, req.user.id, req.user.id, term, term, term);
+  `).all(req.user.id, req.user.id, req.user.id, term, term, term, req.user.id, req.user.id);
   res.json(rows);
 });
 
-// GET /api/events — list all upcoming events
+// GET /api/events — list all upcoming events (privacy-filtered)
 router.get('/', authMiddleware, (req, res) => {
   const db = getDb();
-  const rows = db.prepare(`${EVENT_SELECT} WHERE e.event_date >= date('now') ORDER BY e.event_date ASC`)
-    .all(req.user.id, req.user.id, req.user.id);
+  const rows = db.prepare(`${EVENT_SELECT} WHERE e.event_date >= date('now') AND ${EVENT_PRIVACY_FILTER} ORDER BY e.event_date ASC`)
+    .all(req.user.id, req.user.id, req.user.id, req.user.id, req.user.id);
   res.json(rows);
 });
 
@@ -59,9 +74,9 @@ router.get('/discover', authMiddleware, (req, res) => {
   const db = getDb();
   const userId = req.user.id;
 
-  // Get all upcoming events with base fields
-  const events = db.prepare(`${EVENT_SELECT} WHERE e.event_date >= date('now') ORDER BY e.event_date ASC`)
-    .all(userId, userId, userId);
+  // Get all upcoming events with base fields (privacy-filtered)
+  const events = db.prepare(`${EVENT_SELECT} WHERE e.event_date >= date('now') AND ${EVENT_PRIVACY_FILTER} ORDER BY e.event_date ASC`)
+    .all(userId, userId, userId, userId, userId);
 
   // Habit keywords for this user
   const habits = db.prepare("SELECT name FROM habits WHERE user_id = ? AND is_active = 1").all(userId);
@@ -100,11 +115,17 @@ router.get('/mine', authMiddleware, (req, res) => {
   res.json(rows);
 });
 
-// GET /api/events/club/:clubId — events for a specific club
+// GET /api/events/club/:clubId — events for a specific club (must be a member or public-only)
 router.get('/club/:clubId', authMiddleware, (req, res) => {
   const db = getDb();
-  const rows = db.prepare(`${EVENT_SELECT} WHERE e.club_id = ? AND e.event_date >= date('now') ORDER BY e.event_date ASC`)
-    .all(req.user.id, req.user.id, req.user.id, req.params.clubId);
+  // Confirm the requester is an active member before exposing private club events.
+  const isMember = db.prepare(
+    "SELECT 1 FROM challenge_members WHERE challenge_id = ? AND user_id = ? AND status = 'active'"
+  ).get(req.params.clubId, req.user.id);
+  const sql = isMember
+    ? `${EVENT_SELECT} WHERE e.club_id = ? AND e.event_date >= date('now') ORDER BY e.event_date ASC`
+    : `${EVENT_SELECT} WHERE e.club_id = ? AND e.event_date >= date('now') AND e.is_public = 1 ORDER BY e.event_date ASC`;
+  const rows = db.prepare(sql).all(req.user.id, req.user.id, req.user.id, req.params.clubId);
   res.json(rows);
 });
 

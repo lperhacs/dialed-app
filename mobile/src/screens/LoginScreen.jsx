@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, ScrollView, Alert, Image,
@@ -18,6 +18,9 @@ export default function LoginScreen({ navigation }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  // Ref lets the username field's "Next" return-key advance focus to password
+  // instead of dismissing the keyboard mid-form on small devices.
+  const passwordRef = useRef(null);
 
   const handleLogin = async () => {
     if (!username.trim() || !password.trim()) {
@@ -65,11 +68,14 @@ export default function LoginScreen({ navigation }) {
               autoCapitalize="none"
               autoCorrect={false}
               returnKeyType="next"
+              onSubmitEditing={() => passwordRef.current?.focus()}
+              blurOnSubmit={false}
             />
           </View>
           <View style={styles.field}>
             <Text style={styles.label}>Password</Text>
             <TextInput
+              ref={passwordRef}
               style={styles.input}
               value={password}
               onChangeText={setPassword}

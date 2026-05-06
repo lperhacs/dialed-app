@@ -191,6 +191,20 @@ router.put('/profile', authMiddleware, upload.single('avatar'), (req, res) => {
     return res.status(400).json({ error: 'Bio must be 300 characters or fewer' });
   }
 
+  // Validate username format up front (was previously skipped on this legacy route,
+  // letting through spaces/emoji/length-1 names that broke search & profile lookups).
+  if (username?.trim() && !/^[a-zA-Z0-9_]{3,20}$/.test(username.trim())) {
+    return res.status(400).json({ error: 'Username must be 3-20 alphanumeric characters or underscores' });
+  }
+
+  // If we're about to overwrite avatar_url, clean up the previous file on the
+  // persistent volume — otherwise the old image lingers forever and slowly fills
+  // the 500MB Railway volume.
+  let prevAvatar = null;
+  if (avatar_url) {
+    prevAvatar = db.prepare('SELECT avatar_url FROM users WHERE id = ?').get(req.user.id)?.avatar_url;
+  }
+
   const updates = [];
   const values = [];
   if (display_name?.trim()) { updates.push('display_name = ?'); values.push(display_name.trim()); }
@@ -219,6 +233,14 @@ router.put('/profile', authMiddleware, upload.single('avatar'), (req, res) => {
   if (updates.length > 0) {
     values.push(req.user.id);
     db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+  }
+
+  // Successful avatar swap — delete the previous file (best-effort).
+  if (avatar_url && typeof prevAvatar === 'string' && prevAvatar.startsWith('/uploads/')) {
+    try {
+      const prevPath = path.join(UPLOAD_DIR, path.basename(prevAvatar));
+      if (fs.existsSync(prevPath)) fs.unlinkSync(prevPath);
+    } catch {}
   }
 
   const user = db.prepare(
@@ -461,6 +483,23 @@ router.patch('/me/avatar', authMiddleware, (req, res) => {
   catch { return res.status(400).json({ error: 'Invalid image data' }); }
   if (buf.length === 0) return res.status(400).json({ error: 'Invalid image data' });
 
+  // Magic-byte sniff — a malicious client can lie about the MIME prefix and
+  // ship arbitrary bytes (HTML, SVG, executable, etc.). Refuse to write the
+  // file unless the actual file signature matches the claimed image format.
+  const looksLikeJpeg = buf.length >= 3 && buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF;
+  const looksLikePng  = buf.length >= 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47 && buf[4] === 0x0D && buf[5] === 0x0A && buf[6] === 0x1A && buf[7] === 0x0A;
+  const looksLikeGif  = buf.length >= 6 && buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x38 && (buf[4] === 0x37 || buf[4] === 0x39) && buf[5] === 0x61;
+  // RIFF....WEBP — bytes 0-3 'RIFF', bytes 8-11 'WEBP'.
+  const looksLikeWebp = buf.length >= 12
+    && buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46
+    && buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50;
+  const matches =
+    (mime === 'jpeg' && looksLikeJpeg) ||
+    (mime === 'png'  && looksLikePng) ||
+    (mime === 'gif'  && looksLikeGif) ||
+    (mime === 'webp' && looksLikeWebp);
+  if (!matches) return res.status(400).json({ error: 'Invalid image data' });
+
   const filename = `avatar-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
   const filepath = path.join(UPLOAD_DIR, filename);
   try { fs.writeFileSync(filepath, buf); }
@@ -700,30 +739,96 @@ router.delete('/me', authMiddleware, (req, res) => {
 
   const id = req.user.id;
 
-  // Delete in dependency order — wrapped in transaction to prevent partial deletion
+  // Helper: drop a query if the table or column doesn't exist on this DB.
+  // Schema has drifted between schema.sql and db.js migrations, so a few of
+  // these tables (chat_mutes, challenge_messages, dm reactions) may or may not
+  // be present depending on when the DB was last initialized. Failing softly
+  // keeps deletion working everywhere.
+  const tryRun = (sql, ...args) => {
+    try { db.prepare(sql).run(...args); }
+    catch (err) {
+      if (!/no such (table|column)/i.test(err.message)) throw err;
+    }
+  };
+
+  // Delete in dependency order — wrapped in transaction to prevent partial deletion.
+  // Critical: with PRAGMA foreign_keys = ON, a DELETE that leaves orphan FK
+  // references (e.g. likes pointing at this user's posts, events created by
+  // this user) will fail and roll back the whole thing, leaving the user
+  // unable to delete their account at all.
   db.exec('BEGIN IMMEDIATE');
   try {
-    db.prepare('DELETE FROM likes WHERE user_id = ?').run(id);
-    db.prepare('DELETE FROM cheers WHERE user_id = ?').run(id);
-    db.prepare('DELETE FROM comment_likes WHERE user_id = ?').run(id);
-    db.prepare('DELETE FROM comments WHERE user_id = ?').run(id);
-    db.prepare('DELETE FROM habit_logs WHERE habit_id IN (SELECT id FROM habits WHERE user_id = ?)').run(id);
-    db.prepare('DELETE FROM habits WHERE user_id = ?').run(id);
-    db.prepare('DELETE FROM posts WHERE user_id = ?').run(id);
-    db.prepare('DELETE FROM follows WHERE follower_id = ? OR following_id = ?').run(id, id);
-    db.prepare('DELETE FROM badges WHERE user_id = ?').run(id);
-    db.prepare('DELETE FROM notifications WHERE user_id = ?').run(id);
-    db.prepare('DELETE FROM challenge_members WHERE user_id = ?').run(id);
-    db.prepare('DELETE FROM buddies WHERE requester_id = ? OR recipient_id = ?').run(id, id);
-    db.prepare('DELETE FROM event_attendees WHERE user_id = ?').run(id);
-    db.prepare('DELETE FROM analytics_events WHERE user_id = ?').run(id);
-    db.prepare('DELETE FROM direct_messages WHERE sender_id = ?').run(id);
-    db.prepare('DELETE FROM conversation_participants WHERE user_id = ?').run(id);
+    // 1. Reactions/comments BY this user
+    tryRun('DELETE FROM likes WHERE user_id = ?', id);
+    tryRun('DELETE FROM cheers WHERE user_id = ?', id);
+    tryRun('DELETE FROM comment_likes WHERE user_id = ?', id);
+
+    // 2. Reactions/comments BY OTHERS on this user's posts (must go before posts)
+    tryRun('DELETE FROM likes WHERE post_id IN (SELECT id FROM posts WHERE user_id = ?)', id);
+    tryRun('DELETE FROM cheers WHERE post_id IN (SELECT id FROM posts WHERE user_id = ?)', id);
+    tryRun('DELETE FROM comment_likes WHERE comment_id IN (SELECT id FROM comments WHERE post_id IN (SELECT id FROM posts WHERE user_id = ?))', id);
+    tryRun('DELETE FROM comments WHERE post_id IN (SELECT id FROM posts WHERE user_id = ?)', id);
+    tryRun('DELETE FROM comments WHERE user_id = ?', id);
+
+    // 3. Habits + logs (logs first to satisfy FK)
+    tryRun('DELETE FROM habit_reminders WHERE user_id = ?', id);
+    tryRun('DELETE FROM habit_logs WHERE habit_id IN (SELECT id FROM habits WHERE user_id = ?)', id);
+    tryRun('DELETE FROM habits WHERE user_id = ?', id);
+
+    // 4. DMs referencing this user's posts/events/clubs need to be wiped first
+    //    or NULL'd, otherwise the post DELETE below will FK-fail.
+    tryRun('UPDATE direct_messages SET post_id = NULL WHERE post_id IN (SELECT id FROM posts WHERE user_id = ?)', id);
+    tryRun('UPDATE direct_messages SET event_id = NULL WHERE event_id IN (SELECT id FROM events WHERE creator_id = ?)', id);
+
+    // 5. Posts
+    tryRun('DELETE FROM posts WHERE user_id = ?', id);
+
+    // 6. Events created by this user (and their attendees)
+    tryRun('DELETE FROM event_attendees WHERE event_id IN (SELECT id FROM events WHERE creator_id = ?)', id);
+    tryRun('DELETE FROM events WHERE creator_id = ?', id);
+    tryRun('DELETE FROM event_attendees WHERE user_id = ?', id);
+
+    // 7. Social graph
+    tryRun('DELETE FROM follows WHERE follower_id = ? OR following_id = ?', id, id);
+    tryRun('DELETE FROM badges WHERE user_id = ?', id);
+    tryRun('DELETE FROM notifications WHERE user_id = ? OR from_user_id = ?', id, id);
+
+    // 8. Challenges (clubs)
+    tryRun('DELETE FROM challenge_messages WHERE user_id = ?', id);
+    tryRun('DELETE FROM challenge_invites WHERE inviter_id = ? OR invitee_id = ?', id, id);
+    tryRun('DELETE FROM challenge_habit_links WHERE user_id = ?', id);
+    tryRun('DELETE FROM challenge_members WHERE user_id = ?', id);
+    // Challenges this user created — transfer to "deleted" placeholder is overkill
+    // pre-launch; just delete them since members were already removed.
+    tryRun('DELETE FROM challenges WHERE creator_id = ?', id);
+
+    // 9. Buddies
+    tryRun('DELETE FROM buddies WHERE requester_id = ? OR recipient_id = ?', id, id);
+
+    // 10. DMs
+    tryRun('DELETE FROM dm_reactions WHERE user_id = ?', id);
+    tryRun('DELETE FROM direct_messages WHERE sender_id = ?', id);
+    tryRun('DELETE FROM chat_mutes WHERE user_id = ?', id);
+    tryRun('DELETE FROM conversation_participants WHERE user_id = ?', id);
+    // Empty conversations left behind (no participants) are best-effort cleaned
+    tryRun('DELETE FROM direct_messages WHERE conversation_id IN (SELECT id FROM conversations WHERE id NOT IN (SELECT DISTINCT conversation_id FROM conversation_participants))');
+    tryRun('DELETE FROM conversations WHERE id NOT IN (SELECT DISTINCT conversation_id FROM conversation_participants)');
+
+    // 11. Auth/session/verification
+    tryRun('DELETE FROM email_verifications WHERE user_id = ?', id);
+    tryRun('DELETE FROM password_resets WHERE user_id = ?', id);
+    tryRun('DELETE FROM phone_otps WHERE user_id = ?', id);
+
+    // 12. Analytics
+    tryRun('DELETE FROM analytics_events WHERE user_id = ?', id);
+
+    // 13. Finally, the user row itself
     db.prepare('DELETE FROM users WHERE id = ?').run(id);
     db.exec('COMMIT');
   } catch (err) {
     db.exec('ROLLBACK');
-    throw err;
+    console.error('[delete-account] failed:', err.message);
+    return res.status(500).json({ error: 'Could not delete account. Please try again.' });
   }
 
   res.json({ ok: true });

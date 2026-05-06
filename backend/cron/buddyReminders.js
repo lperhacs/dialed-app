@@ -66,15 +66,9 @@ async function runBuddyAccountabilityReminders() {
       const localDate = getPeriodKeyTz(now, 'daily', tz);
       const dedupRef = `${pair.id}:${localDate}`;
 
-      // Check if already sent today (user-local) for this pair
-      const alreadySent = db.prepare(`
-        SELECT 1 FROM notifications
-        WHERE user_id = ? AND type = 'buddy_5pm_reminder'
-          AND reference_id = ?
-      `).get(u.id, dedupRef);
-      if (alreadySent) continue;
-
-      // Check if user has any unlogged daily habits today
+      // Check if user has any unlogged daily habits today. Both the self
+      // reminder and the buddy nudge depend on this — if everything's logged,
+      // there's nothing to remind about either side of.
       const unlogged = db.prepare(`
         SELECT h.id, h.name FROM habits h
         WHERE h.user_id = ? AND h.is_active = 1 AND h.frequency = 'daily'
@@ -83,28 +77,43 @@ async function runBuddyAccountabilityReminders() {
 
       if (unlogged.length === 0) continue;
 
-      // Respect notify prefs
+      // Respect notify prefs (only gates the self reminder; buddy nudge
+      // honors the buddy's own prefs, which we don't currently store split,
+      // but the buddy_nudge_reminder type is already filterable client-side).
+      let selfPrefAllowed = true;
       if (u.prefs) {
         try {
           const prefs = JSON.parse(u.prefs);
-          if (prefs.buddy === false) continue;
+          if (prefs.buddy === false) selfPrefAllowed = false;
         } catch { /* malformed */ }
       }
 
-      // Notify the user who hasn't logged
-      const habitList = unlogged.length === 1
-        ? `"${unlogged[0].name}"`
-        : `${unlogged.length} habits`;
+      // Self reminder — independently deduped. If a previous tick inserted
+      // the self row but failed before nudging the buddy, the self check
+      // skips here while the buddy nudge below can still recover.
+      const alreadySentSelf = db.prepare(`
+        SELECT 1 FROM notifications
+        WHERE user_id = ? AND type = 'buddy_5pm_reminder'
+          AND reference_id = ?
+      `).get(u.id, dedupRef);
 
-      await sendPush(u.id, {
-        title: 'Your buddy is watching',
-        body: `Log ${habitList} today — ${u.buddyName} will notice.`,
-        data: { type: 'buddy_5pm_reminder', buddyId: u.buddyId },
-      }, 'buddy');
+      if (selfPrefAllowed && !alreadySentSelf) {
+        const habitList = unlogged.length === 1
+          ? `"${unlogged[0].name}"`
+          : `${unlogged.length} habits`;
 
-      db.prepare(
-        "INSERT INTO notifications (id, user_id, type, reference_id, message) VALUES (?, ?, 'buddy_5pm_reminder', ?, ?)"
-      ).run(uuidv4(), u.id, dedupRef, `Log your habits — ${u.buddyName} is watching.`);
+        // Insert the dedup row BEFORE sending so a sendPush failure can't
+        // result in a duplicate reminder on the next cron tick.
+        db.prepare(
+          "INSERT INTO notifications (id, user_id, type, reference_id, message) VALUES (?, ?, 'buddy_5pm_reminder', ?, ?)"
+        ).run(uuidv4(), u.id, dedupRef, `Log your habits — ${u.buddyName} is watching.`);
+
+        await sendPush(u.id, {
+          title: 'Your buddy is watching',
+          body: `Log ${habitList} today — ${u.buddyName} will notice.`,
+          data: { type: 'buddy_5pm_reminder', buddyId: u.buddyId },
+        }, 'buddy');
+      }
 
       // Nudge the buddy. Dedup on (buddyId, type='buddy_nudge_reminder',
       // pair.id+local-date) so the buddy can't be re-nudged for the same

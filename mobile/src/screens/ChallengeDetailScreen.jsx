@@ -212,6 +212,9 @@ function RequestRow({ request, challengeId, onApprove, onReject }) {
       onApprove(request.id);
     } catch (err) {
       Alert.alert('Error', err.response?.data?.error || 'Failed');
+      // 404 means the request row no longer exists (already actioned in another
+      // tab/device, or rejected). Drop it from the list so it can't be retried.
+      if (err.response?.status === 404) onApprove(request.id);
       setLoading(false);
     }
   };

@@ -76,8 +76,8 @@ function ShareModal({ visible, onClose, postId, post }) {
       reset();
       onClose();
       navigation.navigate('Conversation', { conversationId: conv.id, other: selectedUser });
-    } catch {
-      Alert.alert('Error', 'Could not send post');
+    } catch (err) {
+      Alert.alert('Error', err.response?.data?.error || 'Could not send post');
       setSending(false);
     }
   };

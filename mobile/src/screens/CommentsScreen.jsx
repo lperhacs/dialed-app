@@ -4,6 +4,7 @@ import {
   KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Image,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useHeaderHeight } from '@react-navigation/elements';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
@@ -122,6 +123,7 @@ export default function CommentsScreen({ route }) {
   const styles = makeStyles(colors);
   const { postId, post: postParam } = route.params;
   const navigation = useNavigation();
+  const headerHeight = useHeaderHeight();
   const { user } = useAuth();
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -154,6 +156,11 @@ export default function CommentsScreen({ route }) {
       }
       setText('');
       setReplyTo(null);
+    } catch (err) {
+      // Without this, an API failure swallows silently — user sees the
+      // composer disabled with no feedback, then hits send again, hits the
+      // same error, and assumes the app is broken.
+      Alert.alert('Could not post comment', err?.response?.data?.error || 'Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -165,8 +172,12 @@ export default function CommentsScreen({ route }) {
       {
         text: 'Delete', style: 'destructive',
         onPress: async () => {
-          await api.delete(`/posts/${postId}/comments/${id}`);
-          setComments(cs => cs.filter(c => c.id !== id));
+          try {
+            await api.delete(`/posts/${postId}/comments/${id}`);
+            setComments(cs => cs.filter(c => c.id !== id));
+          } catch (err) {
+            Alert.alert('Could not delete', err?.response?.data?.error || 'Please try again.');
+          }
         },
       },
     ]);
@@ -215,7 +226,11 @@ export default function CommentsScreen({ route }) {
   ) : null;
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
+    >
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={colors.accent} /></View>
       ) : (

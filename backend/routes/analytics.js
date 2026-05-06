@@ -1,17 +1,30 @@
 const express = require('express');
+const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../database/db');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, optionalAuth } = require('../middleware/auth');
 const { analyticsLimiter, jsErrorLimiter } = require('../middleware/rateLimits');
 
 const router = express.Router();
 
+// Constant-time compare prevents timing-attack discovery of ANALYTICS_KEY.
+function timingSafeStringEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || !b) return false;
+  const aBuf = Buffer.from(a);
+  const bBuf = Buffer.from(b);
+  if (aBuf.length !== bBuf.length) return false;
+  return crypto.timingSafeEqual(aBuf, bBuf);
+}
+
 // POST /api/analytics/jserror — capture JS errors from the mobile app's
-// global error handler. NO auth: the app may crash before/without a session,
-// and we want every error captured. Heavily input-bounded to avoid abuse.
-router.post('/jserror', jsErrorLimiter, (req, res) => {
+// global error handler. Auth is OPTIONAL (the app may crash before/without
+// a session, and we want every error captured) — but when a valid token IS
+// provided we tie the error to req.user.id rather than trusting the body.
+// Never trust client-supplied user_id: it could be spoofed to attribute
+// errors to another user and mask the actual offender.
+router.post('/jserror', jsErrorLimiter, optionalAuth, (req, res) => {
   try {
-    const { message, stack, is_fatal, platform, app_version, os_version, user_id } = req.body || {};
+    const { message, stack, is_fatal, platform, app_version, os_version } = req.body || {};
     if (!message || typeof message !== 'string') {
       return res.status(400).json({ error: 'message required' });
     }
@@ -21,7 +34,7 @@ router.post('/jserror', jsErrorLimiter, (req, res) => {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       uuidv4(),
-      typeof user_id === 'string' ? user_id.slice(0, 64) : null,
+      req.user?.id || null,
       String(message).slice(0, 1000),
       typeof stack === 'string' ? stack.slice(0, 8000) : '',
       is_fatal ? 1 : 0,
@@ -40,7 +53,7 @@ router.post('/jserror', jsErrorLimiter, (req, res) => {
 function adminOnly(req, res, next) {
   const key = process.env.ANALYTICS_KEY;
   if (!key) return res.status(503).json({ error: 'Analytics not configured' });
-  if (req.headers['x-analytics-key'] !== key) {
+  if (!timingSafeStringEqual(req.headers['x-analytics-key'], key)) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   next();

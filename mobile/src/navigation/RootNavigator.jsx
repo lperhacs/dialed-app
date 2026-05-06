@@ -138,8 +138,12 @@ export default function RootNavigator() {
             component={CreatePostScreen}
             options={{
               presentation: 'modal',
-              title: 'New Post',
-              headerStyle: { backgroundColor: colors.bgCard },
+              // CreatePostScreen renders its own modal header, so the native
+              // header must be hidden — otherwise two headers stack and the
+              // ~92pt offset throws KeyboardAvoidingView's math off, which is
+              // why the Photo/Video toolbar and TextInput were sliding under
+              // the keyboard. (Fix for tester-reported keyboard bug.)
+              headerShown: false,
             }}
           />
           <Stack.Screen

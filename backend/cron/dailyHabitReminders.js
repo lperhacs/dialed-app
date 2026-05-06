@@ -159,16 +159,19 @@ async function runDailyHabitReminders() {
         : `You haven't logged "${habit.name}" yet this week.${streakLine ? streakLine + ' Don\'t break it.' : ''}`;
     }
 
+    // Persist the in-app notification BEFORE the push send. sendPush is
+    // network-dependent; if it throws, the dedup record + inbox entry must
+    // still exist so we don't blast a duplicate on the next cron tick.
+    db.prepare(`
+      INSERT INTO notifications (id, user_id, type, reference_id, message)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(uuidv4(), habit.user_id, notifType, dedupRef, body);
+
     await sendPush(
       habit.user_id,
       { title, body, data: { habitId: habit.id } },
       'reminders'
     );
-
-    db.prepare(`
-      INSERT INTO notifications (id, user_id, type, reference_id, message)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(uuidv4(), habit.user_id, notifType, dedupRef, body);
 
     sent++;
   }

@@ -397,8 +397,10 @@ function getDb() {
         title TEXT NOT NULL,
         description TEXT,
         event_date TEXT NOT NULL,
+        event_time TEXT,
         location TEXT,
         is_public INTEGER NOT NULL DEFAULT 1,
+        club_id TEXT REFERENCES challenges(id),
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
       CREATE TABLE IF NOT EXISTS event_attendees (

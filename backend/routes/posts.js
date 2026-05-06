@@ -5,6 +5,7 @@ const { authMiddleware, optionalAuth } = require('../middleware/auth');
 const upload = require('../middleware/upload');
 const { sendPush } = require('../utils/push');
 const { trackEvent, metaFromReq } = require('../utils/analytics');
+const { calculateStreak } = require('../utils/streaks');
 
 const router = express.Router();
 
@@ -454,6 +455,16 @@ router.post('/:id/comments', authMiddleware, (req, res) => {
 
   const post = db.prepare('SELECT * FROM posts WHERE id = ?').get(req.params.id);
   if (!post) return res.status(404).json({ error: 'Post not found' });
+
+  // If parent_id is supplied it must reference an existing comment ON THIS POST.
+  // Without this check a client can graft a reply onto an unrelated thread by
+  // submitting any comment id, leaking the parent comment via the joined feed.
+  if (parent_id) {
+    const parent = db.prepare(
+      'SELECT id FROM comments WHERE id = ? AND post_id = ?'
+    ).get(parent_id, req.params.id);
+    if (!parent) return res.status(400).json({ error: 'Invalid parent comment' });
+  }
 
   const id = uuidv4();
   db.prepare(

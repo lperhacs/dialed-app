@@ -1,14 +1,24 @@
 'use strict';
 const express = require('express');
+const crypto = require('crypto');
 const { runMonthlyHabitReminders } = require('../cron/habitReminders');
 const { runDailyHabitReminders } = require('../cron/dailyHabitReminders');
 const { runDbBackup } = require('../cron/dbBackup');
 
 const router = express.Router();
 
+// Constant-time compare prevents timing-attack discovery of SERVER_SECRET.
+function timingSafeStringEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || !b) return false;
+  const aBuf = Buffer.from(a);
+  const bBuf = Buffer.from(b);
+  if (aBuf.length !== bBuf.length) return false;
+  return crypto.timingSafeEqual(aBuf, bBuf);
+}
+
 function requireServerKey(req, res, next) {
   const key = req.headers['x-server-key'];
-  if (!key || key !== process.env.SERVER_SECRET) {
+  if (!timingSafeStringEqual(key, process.env.SERVER_SECRET)) {
     return res.status(403).json({ error: 'Forbidden' });
   }
   next();

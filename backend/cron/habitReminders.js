@@ -52,18 +52,19 @@ async function runMonthlyHabitReminders() {
 
     const msg = `Don't forget to log "${habit.name}" this month!`;
 
+    // Persist in-app notification first — it's the dedup gate. If sendPush
+    // throws after this, next cron tick still sees the row and skips.
+    db.prepare(`
+      INSERT INTO notifications (id, user_id, type, reference_id, message)
+      VALUES (?, ?, 'monthly_reminder', ?, ?)
+    `).run(uuidv4(), habit.user_id, habit.id, msg);
+
     // Push (silently skipped if user has no token or has reminders pref off)
     await sendPush(
       habit.user_id,
       { title: 'Stay Dialed', body: msg, data: { habitId: habit.id } },
       'reminders'
     );
-
-    // In-app notification
-    db.prepare(`
-      INSERT INTO notifications (id, user_id, type, reference_id, message)
-      VALUES (?, ?, 'monthly_reminder', ?, ?)
-    `).run(uuidv4(), habit.user_id, habit.id, msg);
 
     sent++;
   }

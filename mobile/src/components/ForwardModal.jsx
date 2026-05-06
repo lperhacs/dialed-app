@@ -105,8 +105,8 @@ export default function ForwardModal({ visible, onClose, type, item }) {
       reset();
       onClose();
       navigation.navigate('Conversation', { conversationId: conv.id, other: selectedUser });
-    } catch {
-      Alert.alert('Error', 'Could not forward');
+    } catch (err) {
+      Alert.alert('Error', err.response?.data?.error || 'Could not forward');
       setSending(false);
     }
   };
