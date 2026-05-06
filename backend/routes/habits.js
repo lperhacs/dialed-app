@@ -59,9 +59,19 @@ router.get('/', authMiddleware, (req, res) => {
     const total_logs = logs.length;
     const calendar = buildStreakCalendar(logs, h.frequency, target, 365);
     const currentPeriod = getPeriodKeyTz(new Date(), h.frequency, tz);
-    const period_count = logs.filter(l => getPeriodKeyTz(l.logged_at, h.frequency, tz) === currentPeriod).length;
+    const todayKey = getPeriodKeyTz(new Date(), 'daily', tz);
+    // Count distinct days within the current period — for weekly/monthly with
+    // target_count > 1 this means "X days per week", not "X logs per week".
+    const periodDays = new Set();
+    for (const l of logs) {
+      if (getPeriodKeyTz(l.logged_at, h.frequency, tz) === currentPeriod) {
+        periodDays.add(getPeriodKeyTz(l.logged_at, 'daily', tz));
+      }
+    }
+    const period_count = periodDays.size;
+    const logged_today = periodDays.has(todayKey);
     const logged_this_period = period_count > 0;
-    return { ...h, streak, at_risk, total_logs, calendar, period_count, logged_this_period };
+    return { ...h, streak, at_risk, total_logs, calendar, period_count, logged_today, logged_this_period };
   });
 
   res.json(enriched);
@@ -212,7 +222,9 @@ router.post('/:id/log', authMiddleware, (req, res) => {
   const lookback = lookbackMap[habit.frequency] || '-2 days';
 
   const target = habit.target_count || 1;
+  const dailyKey = getPeriodKeyTz(logDate, 'daily', tz);
   let periodCount = 0;
+  let alreadyLoggedToday = false;
   const id = uuidv4();
 
   let inserted = false;
@@ -221,8 +233,18 @@ router.post('/:id/log', authMiddleware, (req, res) => {
     const recentLogs = db.prepare(
       `SELECT logged_at FROM habit_logs WHERE habit_id = ? AND logged_at >= date('now', ?)`
     ).all(habit.id, lookback);
-    periodCount = recentLogs.filter(l => getPeriodKeyTz(l.logged_at, habit.frequency, tz) === today).length;
-    if (periodCount < target) {
+    // Count distinct days within the current period (one log per day rule).
+    // For weekly with target=5, this means "5 different days this week".
+    const periodDays = new Set();
+    for (const l of recentLogs) {
+      if (getPeriodKeyTz(l.logged_at, habit.frequency, tz) === today) {
+        periodDays.add(getPeriodKeyTz(l.logged_at, 'daily', tz));
+      }
+    }
+    periodCount = periodDays.size;
+    alreadyLoggedToday = periodDays.has(dailyKey);
+
+    if (!alreadyLoggedToday && periodCount < target) {
       if (loggedAtOverride) {
         db.prepare('INSERT INTO habit_logs (id, habit_id, user_id, note, logged_at) VALUES (?, ?, ?, ?, ?)').run(id, habit.id, req.user.id, note || '', loggedAtOverride);
       } else {
@@ -236,7 +258,10 @@ router.post('/:id/log', authMiddleware, (req, res) => {
     throw e;
   }
   if (!inserted) {
-    return res.status(400).json({ error: target > 1 ? `Goal reached! You've already logged ${target}x this period.` : 'Already logged this period' });
+    if (alreadyLoggedToday) {
+      return res.status(400).json({ error: 'Already logged today — see you tomorrow!' });
+    }
+    return res.status(400).json({ error: target > 1 ? `Goal reached! You've hit ${target} days this period.` : 'Already logged this period' });
   }
 
   // Award badges
@@ -258,7 +283,7 @@ router.post('/:id/log', authMiddleware, (req, res) => {
     milestone: milestone ? milestone.label : null,
   }, metaFromReq(req));
 
-  res.status(201).json({ logged: true, streak, at_risk, total_logs: logs.length, period_count: newPeriodCount, target_count: target, goal_met: goalJustMet, milestone });
+  res.status(201).json({ logged: true, streak, at_risk, total_logs: logs.length, period_count: newPeriodCount, logged_today: true, target_count: target, goal_met: goalJustMet, milestone });
 });
 
 // DELETE /api/habits/:id/log — undo the most recent log for the current period

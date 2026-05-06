@@ -71,11 +71,14 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
   const [freezing, setFreezing] = useState(false);
   const target = habit.target_count || 1;
   const [periodCount, setPeriodCount] = useState(habit.period_count ?? (habit.logged_this_period ? target : 0));
+  const [loggedToday, setLoggedToday] = useState(!!habit.logged_today);
   const [calDays, setCalDays] = useState(defaultDays);
   const [milestone, setMilestone] = useState(null);
   const [loggedDay, setLoggedDay] = useState(null);
 
   const goalMet = periodCount >= target;
+  // Even if the weekly/monthly goal isn't met, you can only log once per day.
+  const lockedUntilTomorrow = loggedToday && !goalMet;
 
   // Sync if the parent's default changes (e.g. user changes setting and refreshes)
   useEffect(() => { setCalDays(defaultDays); }, [defaultDays]);
@@ -86,7 +89,8 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
   // bumped optimistic count would persist after the server says it's gone.
   useEffect(() => {
     setPeriodCount(habit.period_count ?? (habit.logged_this_period ? target : 0));
-  }, [habit.period_count, habit.logged_this_period, target]);
+    setLoggedToday(!!habit.logged_today);
+  }, [habit.period_count, habit.logged_this_period, habit.logged_today, target]);
 
   const handleFreeze = async () => {
     if (freezing) return;
@@ -160,10 +164,12 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
   const handleLog = async () => {
     setLogging(true);
     setPeriodCount(c => c + 1); // optimistic
+    setLoggedToday(true);        // optimistic — locks the button immediately
     try {
       const { data } = await api.post(`/habits/${habit.id}/log`, { note: '' });
       onLog(habit.id, data);
       setPeriodCount(data.period_count ?? periodCount + 1);
+      if (typeof data.logged_today === 'boolean') setLoggedToday(data.logged_today);
       if (data.milestone) {
         setMilestone(data.milestone);
         // For private habits, show milestone but don't force a post
@@ -177,6 +183,7 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
       }
     } catch (err) {
       setPeriodCount(c => Math.max(0, c - 1)); // revert
+      setLoggedToday(!!habit.logged_today);    // revert optimistic lock
       Alert.alert('Already logged', err.response?.data?.error || 'Try again later.');
     } finally {
       setLogging(false);
@@ -237,19 +244,26 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
       <HabitCalendar calendar={habit.calendar || []} color={habit.color} days={calDays} frequency={habit.frequency} />
 
       {(() => {
-        const freqLabel = habit.frequency === 'daily' ? 'Today' : habit.frequency === 'weekly' ? 'This Week' : 'This Month';
-        const progressLabel = target > 1 ? ` · ${periodCount}/${target}` : '';
+        const periodNoun = habit.frequency === 'weekly' ? 'this week'
+          : habit.frequency === 'monthly' ? 'this month'
+          : null;
+        const progressLabel = target > 1 && periodNoun
+          ? ` · ${periodCount}/${target} days ${periodNoun}`
+          : '';
+        const disabled = logging || goalMet || lockedUntilTomorrow;
         const btnLabel = logging ? 'Logging…'
-          : goalMet ? `✓ ${freqLabel}${progressLabel}`
-          : `Log ${freqLabel}${progressLabel}`;
+          : goalMet ? (target > 1 ? `✓ Done${progressLabel}` : '✓ Logged today')
+          : lockedUntilTomorrow ? `✓ Logged today${progressLabel}`
+          : target > 1 ? `Log today${progressLabel}`
+          : 'Log today';
         return (
           <TouchableOpacity
-            style={[styles.logBtn, { backgroundColor: goalMet ? colors.bgHover : habit.color }, (logging || goalMet) && styles.logBtnDisabled]}
+            style={[styles.logBtn, { backgroundColor: disabled ? colors.bgHover : habit.color }, disabled && styles.logBtnDisabled]}
             onPress={handleLog}
-            disabled={logging || goalMet}
+            disabled={disabled}
             activeOpacity={0.85}
           >
-            <Text style={[styles.logBtnText, goalMet && { color: colors.textMuted }]}>
+            <Text style={[styles.logBtnText, disabled && { color: colors.textMuted }]}>
               {btnLabel}
             </Text>
           </TouchableOpacity>
@@ -523,30 +537,44 @@ function HabitFormModal({ habit, visible, onClose, onSave }) {
           </View>
 
           <View style={styles.formField}>
-            <Text style={styles.fieldLabel}>Frequency</Text>
+            <Text style={styles.fieldLabel}>How often?</Text>
             <View style={styles.segmentRow}>
-              {['daily', 'weekly', 'monthly'].map(f => (
+              {[
+                { value: 'daily', label: 'Every day' },
+                { value: 'weekly', label: 'Days per week' },
+                { value: 'monthly', label: 'Times per month' },
+              ].map(({ value, label }) => (
                 <TouchableOpacity
-                  key={f}
-                  style={[styles.segment, form.frequency === f && styles.segmentActive]}
+                  key={value}
+                  style={[styles.segment, form.frequency === value && styles.segmentActive]}
                   onPress={() => setForm(prev => ({
                     ...prev,
-                    frequency: f,
-                    target_count: f === 'daily' ? 1 : prev.target_count || 1,
+                    frequency: value,
+                    // Default to a sensible target when switching modes
+                    target_count: value === 'daily' ? 1
+                      : value === 'weekly' ? (prev.target_count > 1 && prev.target_count <= 7 ? prev.target_count : 5)
+                      : (prev.target_count || 1),
                   }))}
                 >
-                  <Text style={[styles.segmentText, form.frequency === f && styles.segmentTextActive]}>
-                    {f.charAt(0).toUpperCase() + f.slice(1)}
+                  <Text style={[styles.segmentText, form.frequency === value && styles.segmentTextActive]}>
+                    {label}
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
+            <Text style={styles.fieldHint}>
+              {form.frequency === 'daily'
+                ? 'One log every day. Want a rest day? Pick "Days per week".'
+                : form.frequency === 'weekly'
+                  ? `Log up to once per day, ${form.target_count || 5} day${(form.target_count || 5) === 1 ? '' : 's'} a week.`
+                  : 'Log up to once per day this month.'}
+            </Text>
           </View>
 
           {form.frequency !== 'daily' && (
             <View style={styles.formField}>
               <Text style={styles.fieldLabel}>
-                {form.frequency === 'weekly' ? 'Days per week' : 'Times per month'}
+                {form.frequency === 'weekly' ? 'Days per week' : 'Days per month'}
               </Text>
               <View style={styles.stepperRow}>
                 <TouchableOpacity
@@ -677,6 +705,7 @@ export default function HabitsScreen() {
         at_risk: data.at_risk,
         total_logs: data.total_logs,
         period_count: newPeriodCount,
+        logged_today: data.logged_today ?? true,
         logged_this_period: newPeriodCount >= target,
       };
     }));
@@ -895,6 +924,7 @@ function makeStyles(colors) {
     modalTitle: { fontSize: 16, fontWeight: '600', color: colors.text },
     formField: { gap: 6 },
     fieldLabel: { fontSize: 13, fontWeight: '500', color: colors.textMuted },
+    fieldHint: { fontSize: 12, color: colors.textDim, marginTop: 6, lineHeight: 16 },
     textInput: {
       backgroundColor: colors.bgInput, borderWidth: 1, borderColor: colors.border,
       borderRadius: radius.sm, color: colors.text, fontSize: 15,
