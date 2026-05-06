@@ -356,6 +356,39 @@ function getDb() {
       CREATE INDEX IF NOT EXISTS idx_chl_user ON challenge_habit_links(user_id);
     `);
 
+    // Habit reminders — multi-reminder Pro feature.
+    // Free users: 1 row per habit. Pro users: up to 10 rows per habit.
+    // Backfilled once from the older single-column habits.reminder_time so
+    // existing reminders survive the migration.
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS habit_reminders (
+        id          TEXT PRIMARY KEY,
+        user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        habit_id    TEXT NOT NULL REFERENCES habits(id) ON DELETE CASCADE,
+        time_of_day TEXT NOT NULL,
+        created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_habit_reminders_habit ON habit_reminders(habit_id);
+      CREATE INDEX IF NOT EXISTS idx_habit_reminders_user  ON habit_reminders(user_id);
+    `);
+    // One-shot backfill: copy any existing habits.reminder_time into the
+    // new table when there are no rows yet for that habit.
+    try {
+      const legacy = db.prepare(
+        "SELECT id, user_id, reminder_time FROM habits WHERE reminder_time IS NOT NULL AND reminder_time != ''"
+      ).all();
+      const hasRow = db.prepare("SELECT 1 FROM habit_reminders WHERE habit_id = ? LIMIT 1");
+      const ins = db.prepare(
+        "INSERT INTO habit_reminders (id, user_id, habit_id, time_of_day) VALUES (?, ?, ?, ?)"
+      );
+      const { randomUUID } = require('crypto');
+      for (const h of legacy) {
+        if (!hasRow.get(h.id)) ins.run(randomUUID(), h.user_id, h.id, h.reminder_time);
+      }
+    } catch (err) {
+      console.warn('[db] habit_reminders backfill failed (non-fatal):', err.message);
+    }
+
     // Events
     db.exec(`
       CREATE TABLE IF NOT EXISTS events (

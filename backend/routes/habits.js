@@ -8,6 +8,69 @@ const { sendPush } = require('../utils/push');
 
 const router = express.Router();
 
+// ── Reminders helpers ────────────────────────────────────────────────────────
+// Free users get 1 reminder per habit; Pro users get up to MAX_REMINDERS_PRO.
+const MAX_REMINDERS_PRO = 10;
+const TIME_RX = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+function getRemindersForHabit(db, habitId) {
+  return db
+    .prepare("SELECT time_of_day FROM habit_reminders WHERE habit_id = ? ORDER BY time_of_day ASC")
+    .all(habitId)
+    .map(r => r.time_of_day);
+}
+
+/**
+ * Replace the reminders for `habitId` with `times` (array of HH:MM strings).
+ * Validates count against the user's Pro status. Throws an Error with
+ * `.status` set when validation fails so callers can return a clean response.
+ *
+ * Also keeps the legacy `habits.reminder_time` column in sync with the FIRST
+ * reminder so older clients reading that column still see something sensible.
+ */
+function replaceReminders(db, userId, habitId, times, isPro) {
+  if (!Array.isArray(times)) {
+    const err = new Error('reminders must be an array of HH:MM strings');
+    err.status = 400; throw err;
+  }
+  // Normalize, dedupe, sort
+  const cleaned = [...new Set(times.filter(t => typeof t === 'string').map(t => t.trim()))];
+  for (const t of cleaned) {
+    if (!TIME_RX.test(t)) {
+      const err = new Error(`Invalid reminder time "${t}" — must be HH:MM (24h)`);
+      err.status = 400; throw err;
+    }
+  }
+  const limit = isPro ? MAX_REMINDERS_PRO : 1;
+  if (cleaned.length > limit) {
+    const err = new Error(
+      isPro
+        ? `Up to ${MAX_REMINDERS_PRO} reminders per habit.`
+        : 'Free plan is limited to 1 reminder per habit. Upgrade to Dialed Pro for up to 10.'
+    );
+    err.status = 403;
+    err.proGate = !isPro;
+    throw err;
+  }
+
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    db.prepare('DELETE FROM habit_reminders WHERE habit_id = ?').run(habitId);
+    const ins = db.prepare(
+      'INSERT INTO habit_reminders (id, user_id, habit_id, time_of_day) VALUES (?, ?, ?, ?)'
+    );
+    for (const t of cleaned.sort()) ins.run(uuidv4(), userId, habitId, t);
+    // Keep legacy single-column field in sync with the first reminder.
+    db.prepare('UPDATE habits SET reminder_time = ? WHERE id = ?')
+      .run(cleaned[0] || null, habitId);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
+  return cleaned;
+}
+
 function awardBadges(db, userId, habitId) {
   const logs = db.prepare('SELECT logged_at FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(habitId);
   const habit = db.prepare('SELECT * FROM habits WHERE id = ?').get(habitId);
@@ -71,7 +134,8 @@ router.get('/', authMiddleware, (req, res) => {
     const period_count = periodDays.size;
     const logged_today = periodDays.has(todayKey);
     const logged_this_period = period_count > 0;
-    return { ...h, streak, at_risk, total_logs, calendar, period_count, logged_today, logged_this_period };
+    const reminders = getRemindersForHabit(db, h.id);
+    return { ...h, streak, at_risk, total_logs, calendar, period_count, logged_today, logged_this_period, reminders };
   });
 
   res.json(enriched);
@@ -116,9 +180,25 @@ router.post('/', authMiddleware, (req, res) => {
     'INSERT INTO habits (id, user_id, name, description, frequency, visibility_missed, color, reminder_time, target_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
   ).run(id, req.user.id, name.trim(), description?.trim() || '', frequency, visibility_missed || 'public', color || '#f97316', reminder_time || null, resolvedTarget);
 
+  // Reminders array (Pro feature). If not provided, fall back to the single
+  // reminder_time field for backward compatibility with older mobile clients.
+  let reminders = [];
+  const rawReminders = Array.isArray(req.body.reminders)
+    ? req.body.reminders
+    : (reminder_time ? [reminder_time] : []);
+  if (rawReminders.length) {
+    try {
+      reminders = replaceReminders(db, req.user.id, id, rawReminders, !!user?.is_pro);
+    } catch (err) {
+      // Roll the habit back so we don't leave a half-created habit
+      db.prepare('DELETE FROM habits WHERE id = ?').run(id);
+      return res.status(err.status || 400).json({ error: err.message, pro_gate: !!err.proGate });
+    }
+  }
+
   const habit = db.prepare('SELECT * FROM habits WHERE id = ?').get(id);
   trackEvent(req.user.id, 'habit_created', { frequency, color: color || '#f97316', target_count: resolvedTarget }, metaFromReq(req));
-  res.status(201).json({ ...habit, streak: 0, at_risk: false, total_logs: 0, calendar: [], period_count: 0 });
+  res.status(201).json({ ...habit, streak: 0, at_risk: false, total_logs: 0, calendar: [], period_count: 0, reminders });
 });
 
 // GET /api/habits/:id
@@ -132,7 +212,8 @@ router.get('/:id', authMiddleware, (req, res) => {
   const at_risk = isStreakAtRisk(logs, habit.frequency, habit.target_count || 1);
   const calendar = buildStreakCalendar(logs, habit.frequency, habit.target_count || 1, 365);
 
-  res.json({ ...habit, streak, at_risk, total_logs: logs.length, calendar, recent_logs: logs.slice(0, 10) });
+  const reminders = getRemindersForHabit(db, habit.id);
+  res.json({ ...habit, streak, at_risk, total_logs: logs.length, calendar, recent_logs: logs.slice(0, 10), reminders });
 });
 
 // PUT /api/habits/:id
@@ -176,8 +257,50 @@ router.put('/:id', authMiddleware, (req, res) => {
     WHERE id = ?`
   ).run(name, description, frequency, visibility_missed, color, is_active !== undefined ? (is_active ? 1 : 0) : null, reminder_time !== undefined ? (reminder_time || null) : db.prepare('SELECT reminder_time FROM habits WHERE id = ?').get(req.params.id)?.reminder_time, resolvedTarget, req.params.id);
 
+  // Reminders array — Pro-gated update. If `reminders` is provided in the
+  // body, replace the full set for this habit. Backward-compatible: if only
+  // `reminder_time` is sent, the COALESCE update above already handled it
+  // and we leave habit_reminders alone.
+  if (Array.isArray(req.body.reminders)) {
+    try {
+      const proRow = db.prepare('SELECT is_pro FROM users WHERE id = ?').get(req.user.id);
+      replaceReminders(db, req.user.id, req.params.id, req.body.reminders, !!proRow?.is_pro);
+    } catch (err) {
+      return res.status(err.status || 400).json({ error: err.message, pro_gate: !!err.proGate });
+    }
+  }
+
   const updated = db.prepare('SELECT * FROM habits WHERE id = ?').get(req.params.id);
-  res.json(updated);
+  const reminders = getRemindersForHabit(db, req.params.id);
+  res.json({ ...updated, reminders });
+});
+
+// GET /api/habits/:id/reminders — list reminders for a habit
+router.get('/:id/reminders', authMiddleware, (req, res) => {
+  const db = getDb();
+  const habit = db.prepare('SELECT id FROM habits WHERE id = ? AND user_id = ?')
+    .get(req.params.id, req.user.id);
+  if (!habit) return res.status(404).json({ error: 'Habit not found' });
+  res.json({ reminders: getRemindersForHabit(db, req.params.id) });
+});
+
+// PUT /api/habits/:id/reminders — replace reminders array
+router.put('/:id/reminders', authMiddleware, (req, res) => {
+  const db = getDb();
+  const habit = db.prepare('SELECT id FROM habits WHERE id = ? AND user_id = ?')
+    .get(req.params.id, req.user.id);
+  if (!habit) return res.status(404).json({ error: 'Habit not found' });
+  const proRow = db.prepare('SELECT is_pro FROM users WHERE id = ?').get(req.user.id);
+  try {
+    const reminders = replaceReminders(
+      db, req.user.id, req.params.id,
+      Array.isArray(req.body.reminders) ? req.body.reminders : [],
+      !!proRow?.is_pro
+    );
+    res.json({ reminders });
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message, pro_gate: !!err.proGate });
+  }
 });
 
 // DELETE /api/habits/:id
