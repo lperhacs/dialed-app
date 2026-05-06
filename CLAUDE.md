@@ -1,6 +1,6 @@
 # Dialed Brain
 *Shared project context for Claude Code and Cowork — update after every session*
-*Last updated: May 3, 2026 (later)*
+*Last updated: May 6, 2026*
 
 ## Core retention values
 *The behaviors and feelings that, if present, predict a user sticks. Every feature decision should serve at least one.*
@@ -94,6 +94,33 @@ Think Strava meets a gym buddy.
   current tokens use `token_version` for selective invalidation on password change)
 
 ## Strategy session log
+### May 6, 2026 — Build 31 (multi-reminder Pro + avatar fix)
+- Third "no new features" rule override (after joint streak and the ad-hoc
+  bug fixes). User explicitly authorized shipping a paid multi-reminder
+  feature mid-session: Pro users get up to 10 reminders per habit, free
+  users stay at 1. Same retention-signal contamination risk applies;
+  decision stands because the gate is a Pro upsell, not a retention lever.
+- Schema: new `habit_reminders (id, user_id, habit_id, time_of_day)` table.
+  One-shot backfill on startup copies any legacy `habits.reminder_time`
+  value in so existing reminders survive. `habits.reminder_time` is still
+  written (first entry) for back-compat with older mobile builds.
+- Backend: `replaceReminders()` helper in routes/habits.js validates the
+  count vs `users.is_pro`. New `GET/PUT /habits/:id/reminders` plus the
+  array travels through `GET/POST/PUT /habits`. Free-cap exceedances
+  return `{ error, pro_gate: true }` so the mobile can route to paywall.
+- Mobile: replaced single TimePicker with `RemindersField` chip list;
+  scheduling uses composite identifier `habit:<id>:<HH:MM>` so each time
+  has its own slot the cancel pass can clean up. Legacy single-id
+  reminders are still cancelled correctly. Paywall now lists the cap.
+- Avatar fix: PATCH /users/me/avatar previously stored the full base64
+  data URL in users.avatar_url. Every Pulse Check page joined that
+  column for every author → multi-MB JSON, RN <Image /> failing to
+  render large data URIs. Now writes the bytes to `/uploads/avatar-*`
+  on the persistent volume and stores the path. Startup migration
+  converts existing data: rows so testers don't have to re-upload.
+- CreatePostScreen: `keyboardVerticalOffset 40 → 0` so the keyboard no
+  longer covers the Photo/Video toolbar in the iOS modal stack.
+
 ### May 3, 2026 (later) — Joint buddy streak shipped (override of "no new features" rule)
 - Decided to ship joint buddy streak now (was in post-retention-validation backlog).
   Acknowledged contamination risk to retention signal; user's call was to ship anyway.
