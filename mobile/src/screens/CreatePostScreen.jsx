@@ -139,16 +139,6 @@ export default function CreatePostScreen() {
         });
       });
 
-      // Backward compat: first image also as image_url (handled server-side via image field)
-      // and first image as legacy 'image' key
-      if (images.length > 0) {
-        formData.append('image', {
-          uri: images[0].uri,
-          type: 'image/jpeg',
-          name: 'photo.jpg',
-        });
-      }
-
       // Video URLs as JSON string + legacy single field
       const filledUrls = videoUrls.filter(v => v.trim());
       if (filledUrls.length > 0) {

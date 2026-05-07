@@ -375,7 +375,8 @@ router.post('/', authMiddleware, upload.array('images', 10), (req, res) => {
 
     db.exec('COMMIT');
   } catch (err) {
-    db.exec('ROLLBACK');
+    try { db.exec('ROLLBACK'); } catch (_) {}
+    console.error('[posts] create failed:', err.message, err.stack);
     return res.status(500).json({ error: 'Failed to create post' });
   }
 
