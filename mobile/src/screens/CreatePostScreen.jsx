@@ -66,6 +66,37 @@ export default function CreatePostScreen() {
     }
   };
 
+  const takePhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow camera access to take photos.');
+      return;
+    }
+    if (images.length >= MAX_IMAGES) {
+      Alert.alert('Limit reached', `You can attach up to ${MAX_IMAGES} photos per post.`);
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: false,
+      quality: 0.8,
+    });
+    if (!result.canceled) {
+      setImages(prev => {
+        const combined = [...prev, ...result.assets];
+        return combined.slice(0, MAX_IMAGES);
+      });
+    }
+  };
+
+  const showPhotoOptions = () => {
+    Alert.alert('Add Photo', null, [
+      { text: 'Take Photo', onPress: takePhoto },
+      { text: 'Choose from Library', onPress: pickImages },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
   const removeImage = (idx) => {
     setImages(prev => prev.filter((_, i) => i !== idx));
   };
@@ -264,7 +295,7 @@ export default function CreatePostScreen() {
               </View>
             ))}
             {images.length < MAX_IMAGES && (
-              <TouchableOpacity onPress={pickImages} style={styles.addMoreBtn} activeOpacity={0.75}>
+              <TouchableOpacity onPress={showPhotoOptions} style={styles.addMoreBtn} activeOpacity={0.75}>
                 <Ionicons name="add" size={20} color={colors.textMuted} />
               </TouchableOpacity>
             )}
@@ -345,7 +376,7 @@ export default function CreatePostScreen() {
 
       {/* Toolbar */}
       <View style={styles.toolbar}>
-        <TouchableOpacity onPress={pickImages} style={styles.toolBtn} activeOpacity={0.7}>
+        <TouchableOpacity onPress={showPhotoOptions} style={styles.toolBtn} activeOpacity={0.7}>
           <Ionicons name="image-outline" size={18} color={colors.textMuted} />
           <Text style={styles.toolLabel}>
             Photo{images.length > 0 ? ` (${images.length})` : ''}

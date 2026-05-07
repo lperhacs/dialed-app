@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, RefreshControl, Image, Linking,
+  Alert, ActivityIndicator, RefreshControl, Image, Linking, Platform,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -85,7 +85,10 @@ function EventFeedCard({ event, currentUser, onDelete, onRsvpToggle }) {
     const lat = event.latitude;
     const lng = event.longitude;
     const label = encodeURIComponent(event.location || event.title);
-    Linking.openURL(`maps://?ll=${lat},${lng}&q=${label}`).catch(() => {});
+    const url = Platform.OS === 'ios'
+      ? `maps://?ll=${lat},${lng}&q=${label}`
+      : `geo:${lat},${lng}?q=${label}`;
+    Linking.openURL(url).catch(() => {});
   };
 
   return (

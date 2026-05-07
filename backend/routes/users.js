@@ -632,6 +632,7 @@ router.patch('/me/password', authMiddleware, (req, res) => {
   const bcrypt = require('bcryptjs');
   const db = getDb();
   const user = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.id);
+  if (!user) return res.status(401).json({ error: 'User not found' });
 
   if (!bcrypt.compareSync(current_password, user.password_hash)) {
     return res.status(401).json({ error: 'Current password is incorrect' });
@@ -658,6 +659,7 @@ router.patch('/me/email', authMiddleware, async (req, res) => {
   const { sendVerificationEmail } = require('../utils/email');
   const db = getDb();
   const user = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.id);
+  if (!user) return res.status(401).json({ error: 'User not found' });
 
   if (!bcrypt.compareSync(password, user.password_hash)) {
     return res.status(401).json({ error: 'Password is incorrect' });
@@ -733,7 +735,7 @@ router.delete('/me', authMiddleware, (req, res) => {
   const bcrypt = require('bcryptjs');
   const db = getDb();
   const account = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.id);
-  if (!bcrypt.compareSync(password, account.password_hash)) {
+  if (!account || !bcrypt.compareSync(password, account.password_hash)) {
     return res.status(401).json({ error: 'Password is incorrect' });
   }
 

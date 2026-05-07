@@ -411,6 +411,9 @@ function getDb() {
         event_date TEXT NOT NULL,
         event_time TEXT,
         location TEXT,
+        cover_image_url TEXT DEFAULT NULL,
+        latitude REAL DEFAULT NULL,
+        longitude REAL DEFAULT NULL,
         is_public INTEGER NOT NULL DEFAULT 1,
         club_id TEXT REFERENCES challenges(id),
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -443,7 +446,7 @@ function getDb() {
     try {
       const { randomUUID } = require('crypto');
       const legacyPosts = db.prepare(
-        "SELECT id, image_url, video_url FROM posts WHERE (image_url != '' OR video_url != '')"
+        "SELECT id, image_url, video_url FROM posts WHERE (COALESCE(image_url,'') != '' OR COALESCE(video_url,'') != '')"
       ).all();
       const hasMedia = db.prepare('SELECT 1 FROM post_media WHERE post_id = ? LIMIT 1');
       const insMedia = db.prepare(

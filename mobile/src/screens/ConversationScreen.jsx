@@ -259,6 +259,28 @@ export default function ConversationScreen({ route }) {
     if (!result.canceled) setPendingImage(result.assets[0]);
   };
 
+  const takePhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow camera access to take photos.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: false,
+      quality: 0.8,
+    });
+    if (!result.canceled) setPendingImage(result.assets[0]);
+  };
+
+  const showPhotoOptions = () => {
+    Alert.alert('Add Photo', null, [
+      { text: 'Take Photo', onPress: takePhoto },
+      { text: 'Choose from Library', onPress: pickImage },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
   const canSend = (text.trim().length > 0 || !!pendingImage) && !sending;
 
   const send = async () => {
@@ -339,7 +361,7 @@ export default function ConversationScreen({ route }) {
       )}
 
       <View style={[styles.inputBar, { paddingBottom: insets.bottom + 8 }]}>
-        <TouchableOpacity onPress={pickImage} style={styles.cameraBtn} activeOpacity={0.7} disabled={sending}>
+        <TouchableOpacity onPress={showPhotoOptions} style={styles.cameraBtn} activeOpacity={0.7} disabled={sending}>
           <Ionicons name="camera-outline" size={22} color={pendingImage ? colors.accent : colors.textMuted} />
         </TouchableOpacity>
         <TextInput

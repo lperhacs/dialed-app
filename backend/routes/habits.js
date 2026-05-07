@@ -390,8 +390,10 @@ router.post('/:id/log', authMiddleware, (req, res) => {
     return res.status(400).json({ error: target > 1 ? `Goal reached! You've hit ${target} days this period.` : 'Already logged this period' });
   }
 
-  // Award badges
-  awardBadges(db, req.user.id, habit.id);
+  // Award badges (non-fatal — a badge error must never fail the log)
+  try { awardBadges(db, req.user.id, habit.id); } catch (e) {
+    console.error('[habits] awardBadges failed (non-fatal):', e.message);
+  }
 
   const logs = db.prepare('SELECT logged_at FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(habit.id);
   const streak = calculateStreak(logs, habit.frequency, target);

@@ -61,12 +61,6 @@ export default function MediaViewer({
   React.useEffect(() => {
     if (visible) {
       setCurrentIndex(startIndex);
-      // Scroll to the correct page after mount
-      if (flatRef.current && startIndex > 0) {
-        setTimeout(() => {
-          flatRef.current?.scrollToIndex({ index: startIndex, animated: false });
-        }, 50);
-      }
     }
   }, [visible, startIndex]);
 
