@@ -271,13 +271,13 @@ router.get('/:username/badges', optionalAuth, (req, res) => {
 
   // Earned = currently active streak qualifies (not historical)
   const activeHabits = db.prepare(
-    'SELECT id, name, color, frequency FROM habits WHERE user_id = ? AND is_active = 1'
+    'SELECT id, name, color, frequency, target_count FROM habits WHERE user_id = ? AND is_active = 1'
   ).all(user.id);
 
   const activelyEarned = new Map(); // badge_type -> { habit_name, habit_color }
   for (const habit of activeHabits) {
     const logs = db.prepare('SELECT logged_at FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(habit.id);
-    const streak = calculateStreak(logs, habit.frequency);
+    const streak = calculateStreak(logs, habit.frequency, habit.target_count || 1);
     for (const def of BADGE_DEFS) {
       if (def.freq && def.freq !== habit.frequency) continue;
       if (def.check(streak) && !activelyEarned.has(def.type)) {
@@ -449,8 +449,8 @@ router.get('/:username/habits', optionalAuth, (req, res) => {
 
   const enriched = habits.map(h => {
     const logs = db.prepare('SELECT logged_at FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(h.id);
-    const streak = calculateStreak(logs, h.frequency);
-    const at_risk = isStreakAtRisk(logs, h.frequency);
+    const streak = calculateStreak(logs, h.frequency, h.target_count || 1);
+    const at_risk = isStreakAtRisk(logs, h.frequency, h.target_count || 1);
     const total_logs = logs.length;
     return { ...h, streak, at_risk, total_logs };
   });
@@ -568,7 +568,7 @@ router.patch('/me/location', authMiddleware, (req, res) => {
   if (typeof location !== 'string') return res.status(400).json({ error: 'location required' });
   const db = getDb();
   db.prepare('UPDATE users SET location = ? WHERE id = ?').run(location.trim().slice(0, 100), req.user.id);
-  res.json({ ok: true, location: location.trim() });
+  res.json({ ok: true, location: location.trim().slice(0, 100) });
 });
 
 // PUT /api/users/me/push-token

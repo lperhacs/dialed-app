@@ -322,9 +322,13 @@ router.post('/request', authMiddleware, (req, res) => {
     throw e;
   }
 
-  db.prepare(
-    "INSERT INTO notifications (id, user_id, type, from_user_id, message) VALUES (?, ?, 'buddy_request', ?, ?)"
-  ).run(uuidv4(), user_id, req.user.id, 'wants to be your accountability buddy');
+  try {
+    db.prepare(
+      "INSERT INTO notifications (id, user_id, type, from_user_id, message) VALUES (?, ?, 'buddy_request', ?, ?)"
+    ).run(uuidv4(), user_id, req.user.id, 'wants to be your accountability buddy');
+  } catch (e) {
+    console.error('[buddies] notification insert failed (non-fatal):', e.message);
+  }
 
   const actor = db.prepare('SELECT display_name FROM users WHERE id = ?').get(req.user.id);
   sendPush(user_id, {
