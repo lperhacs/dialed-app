@@ -307,12 +307,22 @@ router.get('/for-you', optionalAuth, (req, res) => {
 });
 
 // POST /api/posts
-router.post('/', authMiddleware, upload.array('images', 10), (req, res) => {
+// Accept both 'images' (new multi-upload) and legacy 'image' (single) field
+// so older builds (≤33) that send both don't get LIMIT_UNEXPECTED_FILE.
+const postUpload = upload.fields([
+  { name: 'images', maxCount: 10 },
+  { name: 'image',  maxCount: 1  },
+]);
+router.post('/', authMiddleware, postUpload, (req, res) => {
   const db = getDb();
   const { content, video_url, habit_id, habit_day } = req.body;
 
-  // Collect uploaded image files (new multi-upload path)
-  const imageFiles = Array.isArray(req.files) ? req.files : [];
+  // Collect uploaded image files — merge both field names, dedupe by filename
+  const fromImages = Array.isArray(req.files?.images) ? req.files.images : [];
+  const fromImage  = Array.isArray(req.files?.image)  ? req.files.image  : [];
+  // Build merged list: 'images' first, then any 'image' file not already included
+  const imageNames = new Set(fromImages.map(f => f.filename));
+  const imageFiles = [...fromImages, ...fromImage.filter(f => !imageNames.has(f.filename))];
 
   // Collect video URLs: prefer the JSON array field; fall back to the legacy
   // single video_url field so older mobile builds keep working.
