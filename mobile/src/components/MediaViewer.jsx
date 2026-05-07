@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import {
   Modal, View, Image, TouchableOpacity, StyleSheet,
   Dimensions, StatusBar, Platform, Linking, Text,
-  FlatList,
+  FlatList, ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -19,11 +19,22 @@ function buildMedia(media, imageUrl, videoUrl) {
 
 function ImagePage({ url }) {
   return (
-    <Image
-      source={{ uri: url }}
-      style={pagStyles.image}
-      resizeMode="contain"
-    />
+    <ScrollView
+      style={{ width: SCREEN_W, height: SCREEN_H }}
+      contentContainerStyle={{ width: SCREEN_W, height: SCREEN_H }}
+      maximumZoomScale={5}
+      minimumZoomScale={1}
+      bouncesZoom
+      centerContent
+      showsHorizontalScrollIndicator={false}
+      showsVerticalScrollIndicator={false}
+    >
+      <Image
+        source={{ uri: url }}
+        style={pagStyles.image}
+        resizeMode="contain"
+      />
+    </ScrollView>
   );
 }
 

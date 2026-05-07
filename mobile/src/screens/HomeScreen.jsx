@@ -141,7 +141,10 @@ export default function HomeScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchPosts(1, tab, true);
+    await Promise.all([
+      fetchPosts(1, tab, true),
+      api.get('/buddies').then(r => setBuddyData(r.data)).catch(() => {}),
+    ]);
     setRefreshing(false);
   };
 
