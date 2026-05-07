@@ -101,7 +101,7 @@ export default function LocationPickerModal({ visible, onConfirm, onClose }) {
 
   const handleConfirm = () => {
     if (!pin) return;
-    onConfirm(pin.address);
+    onConfirm({ address: pin.address, latitude: pin.latitude, longitude: pin.longitude });
     onClose();
   };
 

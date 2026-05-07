@@ -2,7 +2,9 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Modal, Pressable,
+  Image,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { useNavigation } from '@react-navigation/native';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,7 +14,7 @@ import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
 import MentionSuggestions from '../components/MentionSuggestions';
 import useMentionInput from '../hooks/useMentionInput';
-import { radius, spacing } from '../theme';
+import { radius, spacing, API_BASE_URL } from '../theme';
 import { useTheme } from '../context/ThemeContext';
 import { useBadges } from '../context/BadgeContext';
 
@@ -109,9 +111,37 @@ function MuteModal({ visible, isMuted, onClose, onMute, onUnmute }) {
   );
 }
 
+function ImageViewerModal({ visible, imageUrl, onClose }) {
+  const { colors } = useTheme();
+  if (!imageUrl) return null;
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' }} onPress={onClose}>
+        <Pressable onPress={() => {}}>
+          <Image
+            source={{ uri: imageUrl }}
+            style={{ width: 340, height: 340, borderRadius: 8 }}
+            resizeMode="contain"
+          />
+        </Pressable>
+        <TouchableOpacity
+          onPress={onClose}
+          style={{ position: 'absolute', top: 56, right: 20, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}
+          hitSlop={12}
+        >
+          <Ionicons name="close" size={20} color="#fff" />
+        </TouchableOpacity>
+      </Pressable>
+    </Modal>
+  );
+}
+
 function MessageBubble({ msg, isMe, showSender }) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
+  const [viewerVisible, setViewerVisible] = useState(false);
+  const fullImageUrl = msg.image_url ? `${API_BASE_URL}${msg.image_url}` : null;
+
   return (
     <View style={[styles.bubbleRow, isMe && styles.bubbleRowMe]}>
       {!isMe && <Avatar user={{ avatar_url: msg.avatar_url, display_name: msg.display_name }} size="xs" />}
@@ -122,6 +152,15 @@ function MessageBubble({ msg, isMe, showSender }) {
         {msg.shared_post  && <SharedPostPreview  post={msg.shared_post}   />}
         {msg.shared_event && <SharedEventPreview event={msg.shared_event} />}
         {msg.shared_club  && <SharedClubPreview  club={msg.shared_club}   />}
+        {!!fullImageUrl && (
+          <TouchableOpacity onPress={() => setViewerVisible(true)} activeOpacity={0.85}>
+            <Image
+              source={{ uri: fullImageUrl }}
+              style={styles.bubbleImage}
+              resizeMode="cover"
+            />
+          </TouchableOpacity>
+        )}
         {!!msg.content && (
           <Text style={[styles.bubbleText, isMe && styles.bubbleTextMe]}>{msg.content}</Text>
         )}
@@ -129,6 +168,7 @@ function MessageBubble({ msg, isMe, showSender }) {
           {timeAgo(msg.created_at)}
         </Text>
       </View>
+      <ImageViewerModal visible={viewerVisible} imageUrl={fullImageUrl} onClose={() => setViewerVisible(false)} />
     </View>
   );
 }
@@ -150,6 +190,7 @@ export default function ConversationScreen({ route }) {
   const [isMuted, setIsMuted] = useState(false);
   const [mutedUntil, setMutedUntil] = useState(null);
   const [muteModalVisible, setMuteModalVisible] = useState(false);
+  const [pendingImage, setPendingImage] = useState(null);
   const listRef = useRef(null);
 
   const title = isGroup ? groupName : (other?.display_name || 'Conversation');
@@ -204,17 +245,52 @@ export default function ConversationScreen({ route }) {
     }
   };
 
+  const pickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow photo access to send images.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.8,
+    });
+    if (!result.canceled) setPendingImage(result.assets[0]);
+  };
+
+  const canSend = (text.trim().length > 0 || !!pendingImage) && !sending;
+
   const send = async () => {
-    if (!text.trim() || sending) return;
+    if (!canSend) return;
     const content = text.trim();
+    const imageToSend = pendingImage;
     setText('');
+    setPendingImage(null);
     setSending(true);
     try {
-      const { data } = await api.post(`/dm/conversations/${conversationId}/messages`, { content });
+      let data;
+      if (imageToSend) {
+        const formData = new FormData();
+        formData.append('content', content);
+        formData.append('image', {
+          uri: imageToSend.uri,
+          type: 'image/jpeg',
+          name: 'photo.jpg',
+        });
+        const res = await api.post(`/dm/conversations/${conversationId}/messages`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        data = res.data;
+      } else {
+        const res = await api.post(`/dm/conversations/${conversationId}/messages`, { content });
+        data = res.data;
+      }
       setMessages(prev => [...prev, data]);
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80);
     } catch {
       setText(content);
+      if (imageToSend) setPendingImage(imageToSend);
       Alert.alert('Error', 'Could not send message');
     } finally {
       setSending(false);
@@ -251,7 +327,21 @@ export default function ConversationScreen({ route }) {
       />
 
       <MentionSuggestions suggestions={mentionSuggestions} onSelect={pickMention} />
+
+      {/* Pending image preview above input bar */}
+      {!!pendingImage && (
+        <View style={styles.pendingImageRow}>
+          <Image source={{ uri: pendingImage.uri }} style={styles.pendingImageThumb} resizeMode="cover" />
+          <TouchableOpacity onPress={() => setPendingImage(null)} style={styles.pendingImageRemove} hitSlop={8}>
+            <Ionicons name="close" size={14} color="#fff" />
+          </TouchableOpacity>
+        </View>
+      )}
+
       <View style={[styles.inputBar, { paddingBottom: insets.bottom + 8 }]}>
+        <TouchableOpacity onPress={pickImage} style={styles.cameraBtn} activeOpacity={0.7} disabled={sending}>
+          <Ionicons name="camera-outline" size={22} color={pendingImage ? colors.accent : colors.textMuted} />
+        </TouchableOpacity>
         <TextInput
           style={styles.input}
           value={text}
@@ -264,12 +354,15 @@ export default function ConversationScreen({ route }) {
           onSubmitEditing={send}
         />
         <TouchableOpacity
-          style={[styles.sendBtn, (!text.trim() || sending) && styles.sendBtnOff]}
+          style={[styles.sendBtn, !canSend && styles.sendBtnOff]}
           onPress={send}
-          disabled={!text.trim() || sending}
+          disabled={!canSend}
           activeOpacity={0.8}
         >
-          <Ionicons name="arrow-up" size={18} color={colors.bg} />
+          {sending
+            ? <ActivityIndicator size="small" color={colors.bg} />
+            : <Ionicons name="arrow-up" size={18} color={colors.bg} />
+          }
         </TouchableOpacity>
       </View>
 
@@ -304,6 +397,7 @@ function makeStyles(colors) {
   bubbleText: { fontSize: 15, color: colors.text, lineHeight: 20 },
   bubbleTextMe: { color: colors.bg },
   bubbleTime: { fontSize: 10, color: colors.textDim, alignSelf: 'flex-end' },
+  bubbleImage: { width: 200, height: 200, borderRadius: radius.sm, backgroundColor: colors.bgHover },
   // Shared post
   sharedPost: {
     backgroundColor: colors.bgHover,
@@ -325,6 +419,32 @@ function makeStyles(colors) {
   sharedLabel: { fontSize: 10, fontWeight: '600', color: colors.accent },
   sharedTitle: { fontSize: 13, fontWeight: '700', color: colors.text },
   sharedMeta: { fontSize: 12, color: colors.textMuted },
+  // Pending image preview
+  pendingImageRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingHorizontal: spacing.md,
+    paddingTop: 8,
+    paddingBottom: 4,
+    backgroundColor: colors.bg,
+  },
+  pendingImageThumb: {
+    width: 72,
+    height: 72,
+    borderRadius: radius.sm,
+    backgroundColor: colors.bgHover,
+  },
+  pendingImageRemove: {
+    position: 'absolute',
+    top: 4,
+    left: spacing.md + 56,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    borderRadius: 12,
+    width: 22,
+    height: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   // Input
   inputBar: {
     flexDirection: 'row',
@@ -335,6 +455,12 @@ function makeStyles(colors) {
     borderTopWidth: 1,
     borderTopColor: colors.borderSubtle,
     backgroundColor: colors.bg,
+  },
+  cameraBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   input: {
     flex: 1,

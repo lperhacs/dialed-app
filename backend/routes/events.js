@@ -2,6 +2,7 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../database/db');
 const { authMiddleware } = require('../middleware/auth');
+const upload = require('../middleware/upload');
 
 const router = express.Router();
 
@@ -130,8 +131,8 @@ router.get('/club/:clubId', authMiddleware, (req, res) => {
 });
 
 // POST /api/events — create an event
-router.post('/', authMiddleware, (req, res) => {
-  const { title, description, event_date, event_time, location, is_public, club_id } = req.body;
+router.post('/', authMiddleware, upload.single('image'), (req, res) => {
+  const { title, description, event_date, event_time, location, is_public, club_id, latitude, longitude } = req.body;
   if (!title?.trim()) return res.status(400).json({ error: 'Title is required' });
   if (!event_date) return res.status(400).json({ error: 'Event date is required' });
   if (title.trim().length > 200) return res.status(400).json({ error: 'Title must be 200 characters or fewer' });
@@ -143,6 +144,10 @@ router.post('/', authMiddleware, (req, res) => {
   if (event_time && !/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(event_time)) {
     return res.status(400).json({ error: 'Invalid event_time format (HH:MM or HH:MM:SS required)' });
   }
+
+  const cover_image_url = req.file ? `/uploads/${req.file.filename}` : null;
+  const lat = latitude != null && latitude !== '' ? parseFloat(latitude) : null;
+  const lng = longitude != null && longitude !== '' ? parseFloat(longitude) : null;
 
   const db = getDb();
 
@@ -164,9 +169,9 @@ router.post('/', authMiddleware, (req, res) => {
 
   const id = uuidv4();
   db.prepare(`
-    INSERT INTO events (id, creator_id, title, description, event_date, event_time, location, is_public, club_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, req.user.id, title.trim(), description?.trim() || null, event_date, event_time || null, location?.trim() || null, is_public ? 1 : 0, club_id || null);
+    INSERT INTO events (id, creator_id, title, description, event_date, event_time, location, is_public, club_id, cover_image_url, latitude, longitude)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, req.user.id, title.trim(), description?.trim() || null, event_date, event_time || null, location?.trim() || null, is_public ? 1 : 0, club_id || null, cover_image_url, lat, lng);
 
   // Fan-out notifications to club members
   if (club_id) {

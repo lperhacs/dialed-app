@@ -1,15 +1,16 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, RefreshControl,
+  Alert, ActivityIndicator, RefreshControl, Image, Linking,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
 import ForwardModal from '../components/ForwardModal';
-import { radius, spacing } from '../theme';
+import { radius, spacing, API_BASE_URL } from '../theme';
 import { useTheme } from '../context/ThemeContext';
 
 function friendsGoingText(names, count) {
@@ -80,8 +81,24 @@ function EventFeedCard({ event, currentUser, onDelete, onRsvpToggle }) {
     ]);
   };
 
+  const openNativeMaps = () => {
+    const lat = event.latitude;
+    const lng = event.longitude;
+    const label = encodeURIComponent(event.location || event.title);
+    Linking.openURL(`maps://?ll=${lat},${lng}&q=${label}`).catch(() => {});
+  };
+
   return (
     <View style={styles.card}>
+      {/* Cover photo */}
+      {event.cover_image_url ? (
+        <Image
+          source={{ uri: `${API_BASE_URL}${event.cover_image_url}` }}
+          style={styles.coverImage}
+          resizeMode="cover"
+        />
+      ) : null}
+
       {/* Shared to club banner */}
       {event.club_id && event.club_name ? (
         <View style={styles.sharedBanner}>
@@ -136,6 +153,29 @@ function EventFeedCard({ event, currentUser, onDelete, onRsvpToggle }) {
           </View>
         </View>
       </View>
+
+      {/* Map preview */}
+      {event.latitude != null && event.longitude != null ? (
+        <TouchableOpacity onPress={openNativeMaps} activeOpacity={0.9} style={styles.mapWrap}>
+          <MapView
+            style={styles.mapView}
+            provider={PROVIDER_DEFAULT}
+            initialRegion={{
+              latitude: event.latitude,
+              longitude: event.longitude,
+              latitudeDelta: 0.01,
+              longitudeDelta: 0.01,
+            }}
+            scrollEnabled={false}
+            zoomEnabled={false}
+            pitchEnabled={false}
+            rotateEnabled={false}
+            pointerEvents="none"
+          >
+            <Marker coordinate={{ latitude: event.latitude, longitude: event.longitude }} />
+          </MapView>
+        </TouchableOpacity>
+      ) : null}
 
       {/* Friends going */}
       {event.friends_going_count > 0 && (
@@ -405,6 +445,26 @@ function makeStyles(colors) {
       borderWidth: 1,
       borderColor: colors.borderSubtle,
       overflow: 'hidden',
+    },
+
+    /* Cover image */
+    coverImage: {
+      width: '100%',
+      height: 160,
+    },
+
+    /* Map preview */
+    mapWrap: {
+      marginHorizontal: spacing.md,
+      marginBottom: 10,
+      borderRadius: radius.md,
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: colors.borderSubtle,
+    },
+    mapView: {
+      height: 140,
+      width: '100%',
     },
 
     /* Delete button */

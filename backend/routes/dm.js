@@ -3,6 +3,7 @@ const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../database/db');
 const { authMiddleware } = require('../middleware/auth');
 const { sendPush } = require('../utils/push');
+const upload = require('../middleware/upload');
 
 const router = express.Router();
 
@@ -193,7 +194,7 @@ router.get('/conversations/:id/messages', authMiddleware, (req, res) => {
   if (!member) return res.status(403).json({ error: 'Not a participant' });
 
   const messages = db.prepare(
-    `SELECT dm.id, dm.content, dm.created_at, dm.post_id, dm.event_id, dm.club_id,
+    `SELECT dm.id, dm.content, dm.created_at, dm.post_id, dm.event_id, dm.club_id, dm.image_url,
        u.id as sender_id, u.username, u.display_name, u.avatar_url
      FROM direct_messages dm
      JOIN users u ON u.id = dm.sender_id
@@ -272,10 +273,11 @@ router.delete('/conversations/:id/mute', authMiddleware, (req, res) => {
 });
 
 // POST /api/dm/conversations/:id/messages
-router.post('/conversations/:id/messages', authMiddleware, (req, res) => {
+router.post('/conversations/:id/messages', authMiddleware, upload.single('image'), (req, res) => {
   const db = getDb();
   const { content, post_id, event_id, club_id } = req.body;
-  if (!content?.trim() && !post_id && !event_id && !club_id) return res.status(400).json({ error: 'Message cannot be empty' });
+  const image_url = req.file ? `/uploads/${req.file.filename}` : null;
+  if (!content?.trim() && !post_id && !event_id && !club_id && !image_url) return res.status(400).json({ error: 'Message cannot be empty' });
   if (content && content.length > 2000) return res.status(400).json({ error: 'Message must be 2000 characters or fewer' });
 
   const member = db.prepare(
@@ -303,11 +305,11 @@ router.post('/conversations/:id/messages', authMiddleware, (req, res) => {
 
   const id = uuidv4();
   db.prepare(
-    'INSERT INTO direct_messages (id, conversation_id, sender_id, content, post_id, event_id, club_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).run(id, req.params.id, req.user.id, content?.trim() || '', post_id || null, event_id || null, club_id || null);
+    'INSERT INTO direct_messages (id, conversation_id, sender_id, content, post_id, event_id, club_id, image_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(id, req.params.id, req.user.id, content?.trim() || '', post_id || null, event_id || null, club_id || null, image_url);
 
   const message = db.prepare(
-    `SELECT dm.id, dm.content, dm.created_at, dm.post_id, dm.event_id, dm.club_id,
+    `SELECT dm.id, dm.content, dm.created_at, dm.post_id, dm.event_id, dm.club_id, dm.image_url,
        u.id as sender_id, u.username, u.display_name, u.avatar_url
      FROM direct_messages dm
      JOIN users u ON u.id = dm.sender_id
@@ -323,6 +325,7 @@ router.post('/conversations/:id/messages', authMiddleware, (req, res) => {
   ).all(req.params.id, req.user.id);
   const preview = content?.trim()
     ? (content.trim().length > 60 ? content.trim().slice(0, 60) + '…' : content.trim())
+    : image_url ? 'Sent a photo'
     : post_id ? 'Shared a post' : event_id ? 'Shared an event' : 'Shared a club';
   for (const r of recipients) {
     sendPush(r.user_id, {

@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, Alert, KeyboardAvoidingView, Platform, Modal,
+  ScrollView, Alert, KeyboardAvoidingView, Platform, Modal, Image,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import * as ImagePicker from 'expo-image-picker';
 import LocationPickerModal from '../components/LocationPickerModal';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -47,8 +48,11 @@ export default function CreateEventScreen() {
   const [showCalendar, setShowCalendar] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [location, setLocation] = useState('');
+  const [locationLat, setLocationLat] = useState(null);
+  const [locationLng, setLocationLng] = useState(null);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [isPublic, setIsPublic] = useState(true);
+  const [coverPhoto, setCoverPhoto] = useState(null); // { uri, type, name }
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
   const [clubs, setClubs] = useState([]);
@@ -61,20 +65,56 @@ export default function CreateEventScreen() {
 
   const canSubmit = title.trim() && selectedDate;
 
+  const pickCoverPhoto = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission required', 'Please allow photo access to add a cover photo.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [16, 9],
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets?.length > 0) {
+      const asset = result.assets[0];
+      const ext = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
+      setCoverPhoto({ uri: asset.uri, type: `image/${ext}`, name: `cover.${ext}` });
+    }
+  };
+
   const handleSubmit = async () => {
     if (submittingRef.current || !canSubmit) return;
     submittingRef.current = true;
     setSubmitting(true);
     try {
-      await api.post('/events', {
-        title: title.trim(),
-        description: description.trim() || null,
-        event_date: toISODate(selectedDate),
-        event_time: selectedTime ? toTimeString(selectedTime) : null,
-        location: location.trim() || null,
-        is_public: isPublic,
-        club_id: selectedClub?.id || null,
-      });
+      if (coverPhoto) {
+        const form = new FormData();
+        form.append('title', title.trim());
+        if (description.trim()) form.append('description', description.trim());
+        form.append('event_date', toISODate(selectedDate));
+        if (selectedTime) form.append('event_time', toTimeString(selectedTime));
+        if (location.trim()) form.append('location', location.trim());
+        form.append('is_public', isPublic ? 'true' : 'false');
+        if (selectedClub?.id) form.append('club_id', selectedClub.id);
+        if (locationLat != null) form.append('latitude', String(locationLat));
+        if (locationLng != null) form.append('longitude', String(locationLng));
+        form.append('image', { uri: coverPhoto.uri, type: coverPhoto.type, name: coverPhoto.name });
+        await api.post('/events', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+      } else {
+        await api.post('/events', {
+          title: title.trim(),
+          description: description.trim() || null,
+          event_date: toISODate(selectedDate),
+          event_time: selectedTime ? toTimeString(selectedTime) : null,
+          location: location.trim() || null,
+          is_public: isPublic,
+          club_id: selectedClub?.id || null,
+          latitude: locationLat,
+          longitude: locationLng,
+        });
+      }
       navigation.goBack();
     } catch (err) {
       Alert.alert('Error', err.response?.data?.error || 'Could not create event.');
@@ -106,6 +146,26 @@ export default function CreateEventScreen() {
       </View>
 
       <ScrollView style={styles.scroll} keyboardShouldPersistTaps="handled">
+        {/* Cover photo */}
+        {coverPhoto ? (
+          <View style={styles.coverPhotoWrap}>
+            <Image source={{ uri: coverPhoto.uri }} style={styles.coverPhoto} resizeMode="cover" />
+            <TouchableOpacity
+              style={styles.coverPhotoRemove}
+              onPress={() => setCoverPhoto(null)}
+              hitSlop={8}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="close-circle" size={26} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity style={styles.coverPhotoBtn} onPress={pickCoverPhoto} activeOpacity={0.75}>
+            <Ionicons name="image-outline" size={18} color={colors.textMuted} />
+            <Text style={styles.coverPhotoBtnText}>Add cover photo</Text>
+          </TouchableOpacity>
+        )}
+
         <View style={styles.composer}>
           <Avatar user={user} size="md" />
           <View style={{ flex: 1 }}>
@@ -165,7 +225,7 @@ export default function CreateEventScreen() {
               {location || 'Location (optional)'}
             </Text>
             {location ? (
-              <TouchableOpacity onPress={() => setLocation('')} hitSlop={10}>
+              <TouchableOpacity onPress={() => { setLocation(''); setLocationLat(null); setLocationLng(null); }} hitSlop={10}>
                 <Ionicons name="close" size={16} color={colors.textMuted} />
               </TouchableOpacity>
             ) : null}
@@ -206,7 +266,11 @@ export default function CreateEventScreen() {
 
       <LocationPickerModal
         visible={showLocationPicker}
-        onConfirm={(address) => setLocation(address)}
+        onConfirm={({ address, latitude, longitude }) => {
+          setLocation(address);
+          setLocationLat(latitude);
+          setLocationLng(longitude);
+        }}
         onClose={() => setShowLocationPicker(false)}
       />
 
@@ -322,6 +386,18 @@ function makeStyles(colors) {
   postBtnDisabled: { opacity: 0.45 },
   postBtnText: { color: colors.bg, fontSize: 14, fontWeight: '700' },
   scroll: { flex: 1 },
+  coverPhotoBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 16, paddingVertical: 12,
+    borderBottomWidth: 1, borderBottomColor: colors.borderSubtle,
+  },
+  coverPhotoBtnText: { fontSize: 14, color: colors.textMuted },
+  coverPhotoWrap: { position: 'relative' },
+  coverPhoto: { width: '100%', height: 180 },
+  coverPhotoRemove: {
+    position: 'absolute', top: 8, right: 8,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.4, shadowRadius: 3,
+  },
   composer: { flexDirection: 'row', gap: 12, padding: 16, paddingBottom: 8 },
   titleInput: { color: colors.text, fontSize: 18, fontWeight: '700', marginBottom: 8, paddingVertical: 0 },
   descInput: { color: colors.text, fontSize: 15, lineHeight: 21, minHeight: 60, textAlignVertical: 'top', paddingVertical: 0 },

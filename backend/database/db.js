@@ -91,6 +91,9 @@ function getDb() {
     if (!dmCols.includes('club_id')) {
       db.exec("ALTER TABLE direct_messages ADD COLUMN club_id TEXT DEFAULT NULL");
     }
+    if (!dmCols.includes('image_url')) {
+      db.exec("ALTER TABLE direct_messages ADD COLUMN image_url TEXT DEFAULT NULL");
+    }
 
     // Notifications reference_id column
     const notifCols = db.prepare("PRAGMA table_info(notifications)").all().map(c => c.name);
@@ -127,6 +130,15 @@ function getDb() {
       }
       if (!evCols.includes('event_time')) {
         db.exec("ALTER TABLE events ADD COLUMN event_time TEXT DEFAULT NULL");
+      }
+      if (!evCols.includes('cover_image_url')) {
+        db.exec("ALTER TABLE events ADD COLUMN cover_image_url TEXT DEFAULT NULL");
+      }
+      if (!evCols.includes('latitude')) {
+        db.exec("ALTER TABLE events ADD COLUMN latitude REAL DEFAULT NULL");
+      }
+      if (!evCols.includes('longitude')) {
+        db.exec("ALTER TABLE events ADD COLUMN longitude REAL DEFAULT NULL");
       }
     }
 

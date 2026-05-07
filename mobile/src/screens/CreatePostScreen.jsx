@@ -91,8 +91,7 @@ export default function CreatePostScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={0}
+      behavior="height"
     >
       {/* Modal header */}
       <View style={styles.modalHeader}>
