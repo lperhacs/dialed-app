@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Image, TouchableOpacity, StyleSheet, Alert, Modal, TextInput, FlatList, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, Image, TouchableOpacity, StyleSheet, Alert, Modal, TextInput, FlatList, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { API_BASE_URL, radius, spacing } from '../theme';
@@ -221,6 +221,21 @@ function renderMentions(text, colors, navigation) {
   });
 }
 
+// Build a normalised media array from a post object.
+// Prefers post.media if present; falls back to legacy image_url / video_url fields.
+function buildPostMedia(post) {
+  if (post.media && post.media.length > 0) {
+    return post.media.map(m => ({
+      type: m.type,
+      url: m.type === 'image' ? fullUrl(m.url) : m.url,
+    }));
+  }
+  const items = [];
+  if (post.image_url) items.push({ type: 'image', url: fullUrl(post.image_url) });
+  if (post.video_url) items.push({ type: 'video', url: post.video_url });
+  return items;
+}
+
 export default function PostCard({ post, onDelete }) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
@@ -230,6 +245,11 @@ export default function PostCard({ post, onDelete }) {
   const [cheerCount, setCheerCount] = useState(post.cheer_count || 0);
   const [showShare, setShowShare] = useState(false);
   const [showMedia, setShowMedia] = useState(false);
+  const [mediaStartIndex, setMediaStartIndex] = useState(0);
+
+  const mediaItems = buildPostMedia(post);
+  // Width of a single carousel item — card has horizontal padding spacing.lg on each side
+  const CARD_MEDIA_WIDTH = Dimensions.get('window').width - spacing.lg * 2;
 
   const toggleCheer = async () => {
     const was = cheered;
@@ -271,7 +291,6 @@ export default function PostCard({ post, onDelete }) {
     navigation.navigate('Comments', { postId: post.id, post });
   };
 
-  const imageUrl = fullUrl(post.image_url);
   const isOwn = user?.id === post.user_id;
 
   return (
@@ -320,32 +339,61 @@ export default function PostCard({ post, onDelete }) {
         </TouchableOpacity>
       )}
 
-      {/* Image - tappable to open fullscreen viewer */}
-      {imageUrl ? (
-        <TouchableOpacity onPress={() => setShowMedia(true)} activeOpacity={0.9}>
-          <Image
-            source={{ uri: imageUrl }}
-            style={styles.image}
-            resizeMode="cover"
-          />
-        </TouchableOpacity>
-      ) : null}
-
-      {/* Video link - tappable to open player */}
-      {post.video_url ? (
-        <TouchableOpacity
-          onPress={() => setShowMedia(true)}
-          activeOpacity={0.85}
-          style={styles.videoLink}
-        >
-          <Ionicons name="play-circle" size={28} color={colors.accent} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.videoLinkTitle}>Watch video</Text>
-            <Text style={styles.videoLinkUrl} numberOfLines={1}>{post.video_url}</Text>
-          </View>
-          <Ionicons name="open-outline" size={18} color={colors.textMuted} />
-        </TouchableOpacity>
-      ) : null}
+      {/* Media carousel - images and/or video links */}
+      {mediaItems.length > 0 && (
+        <View style={styles.carouselWrap}>
+          <ScrollView
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            style={{ width: CARD_MEDIA_WIDTH }}
+            scrollEnabled={mediaItems.length > 1}
+          >
+            {mediaItems.map((item, idx) => {
+              if (item.type === 'image') {
+                return (
+                  <TouchableOpacity
+                    key={idx}
+                    activeOpacity={0.9}
+                    onPress={() => { setMediaStartIndex(idx); setShowMedia(true); }}
+                    style={{ width: CARD_MEDIA_WIDTH }}
+                  >
+                    <Image
+                      source={{ uri: item.url }}
+                      style={[styles.image, { width: CARD_MEDIA_WIDTH }]}
+                      resizeMode="cover"
+                    />
+                  </TouchableOpacity>
+                );
+              }
+              // video
+              return (
+                <TouchableOpacity
+                  key={idx}
+                  activeOpacity={0.85}
+                  onPress={() => { setMediaStartIndex(idx); setShowMedia(true); }}
+                  style={[styles.videoLink, { width: CARD_MEDIA_WIDTH }]}
+                >
+                  <Ionicons name="play-circle" size={28} color={colors.accent} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.videoLinkTitle}>Watch video</Text>
+                    <Text style={styles.videoLinkUrl} numberOfLines={1}>{item.url}</Text>
+                  </View>
+                  <Ionicons name="open-outline" size={18} color={colors.textMuted} />
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+          {/* Pagination dots */}
+          {mediaItems.length > 1 && (
+            <View style={styles.dotsRow} pointerEvents="none">
+              {mediaItems.map((_, i) => (
+                <View key={i} style={styles.dot} />
+              ))}
+            </View>
+          )}
+        </View>
+      )}
 
       {/* Actions */}
       <View style={styles.actions}>
@@ -371,8 +419,8 @@ export default function PostCard({ post, onDelete }) {
       <ShareModal visible={showShare} onClose={() => setShowShare(false)} postId={post.id} post={post} />
       <MediaViewer
         visible={showMedia}
-        imageUrl={imageUrl}
-        videoUrl={post.video_url}
+        media={mediaItems}
+        startIndex={mediaStartIndex}
         onClose={() => setShowMedia(false)}
       />
     </View>
@@ -412,12 +460,28 @@ function makeStyles(colors) { return StyleSheet.create({
     color: colors.text,
     marginBottom: 10,
   },
+  carouselWrap: {
+    marginBottom: 10,
+    overflow: 'hidden',
+    borderRadius: radius.sm,
+  },
   image: {
-    width: '100%',
     height: 220,
     borderRadius: radius.sm,
-    marginBottom: 10,
     backgroundColor: colors.bgHover,
+  },
+  dotsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 5,
+    paddingTop: 6,
+  },
+  dot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: colors.textDim,
   },
   videoLink: {
     flexDirection: 'row',

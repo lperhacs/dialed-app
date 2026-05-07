@@ -1,5 +1,6 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('crypto');
 const { getDb } = require('../database/db');
 const { authMiddleware, optionalAuth } = require('../middleware/auth');
 const upload = require('../middleware/upload');
@@ -9,6 +10,12 @@ const { calculateStreak } = require('../utils/streaks');
 
 const router = express.Router();
 
+function fetchPostMedia(db, postId) {
+  return db.prepare(
+    'SELECT id, url, type, sort_order FROM post_media WHERE post_id = ? ORDER BY sort_order ASC'
+  ).all(postId);
+}
+
 function enrichPost(db, post, viewerId) {
   const liked_by_me = viewerId
     ? !!db.prepare('SELECT 1 FROM likes WHERE post_id = ? AND user_id = ?').get(post.id, viewerId)
@@ -16,7 +23,8 @@ function enrichPost(db, post, viewerId) {
   const cheered_by_me = viewerId
     ? !!db.prepare('SELECT 1 FROM cheers WHERE post_id = ? AND user_id = ?').get(post.id, viewerId)
     : false;
-  return { ...post, liked_by_me, cheered_by_me };
+  const media = fetchPostMedia(db, post.id);
+  return { ...post, liked_by_me, cheered_by_me, media };
 }
 
 function buildPostQuery(whereClause, userId) {
@@ -299,16 +307,36 @@ router.get('/for-you', optionalAuth, (req, res) => {
 });
 
 // POST /api/posts
-router.post('/', authMiddleware, upload.single('image'), (req, res) => {
+router.post('/', authMiddleware, upload.array('images', 10), (req, res) => {
   const db = getDb();
   const { content, video_url, habit_id, habit_day } = req.body;
-  if (!content && !req.file && !video_url) {
+
+  // Collect uploaded image files (new multi-upload path)
+  const imageFiles = Array.isArray(req.files) ? req.files : [];
+
+  // Collect video URLs: prefer the JSON array field; fall back to the legacy
+  // single video_url field so older mobile builds keep working.
+  let videoUrls = [];
+  if (req.body.video_urls) {
+    try {
+      const parsed = JSON.parse(req.body.video_urls);
+      videoUrls = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      videoUrls = [];
+    }
+  } else if (video_url) {
+    videoUrls = [video_url];
+  }
+
+  if (!content && imageFiles.length === 0 && videoUrls.length === 0) {
     return res.status(400).json({ error: 'Post must have content, image, or video' });
   }
   if (content && content.length > 2000) return res.status(400).json({ error: 'Post content must be 2000 characters or fewer' });
-  if (video_url) {
+
+  // Validate all video URLs
+  for (const vurl of videoUrls) {
     try {
-      const parsed = new URL(video_url);
+      const parsed = new URL(vurl);
       if (!['http:', 'https:'].includes(parsed.protocol)) {
         return res.status(400).json({ error: 'Invalid video URL' });
       }
@@ -317,17 +345,39 @@ router.post('/', authMiddleware, upload.single('image'), (req, res) => {
     }
   }
 
-  const image_url = req.file ? `/uploads/${req.file.filename}` : '';
-
   if (habit_id) {
     const habit = db.prepare('SELECT id FROM habits WHERE id = ? AND user_id = ?').get(habit_id, req.user.id);
     if (!habit) return res.status(400).json({ error: 'Invalid habit' });
   }
 
+  // Back-compat: write the first image and first video into the legacy columns
+  const firstImageUrl = imageFiles.length > 0 ? `/uploads/${imageFiles[0].filename}` : '';
+  const firstVideoUrl = videoUrls.length > 0 ? videoUrls[0] : '';
+
   const id = uuidv4();
-  db.prepare(
-    'INSERT INTO posts (id, user_id, content, image_url, video_url, habit_id, habit_day) VALUES (?, ?, ?, ?, ?, ?, ?)'
-  ).run(id, req.user.id, content || '', image_url, video_url || '', habit_id || null, parseInt(habit_day) || 0);
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    db.prepare(
+      'INSERT INTO posts (id, user_id, content, image_url, video_url, habit_id, habit_day) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(id, req.user.id, content || '', firstImageUrl, firstVideoUrl, habit_id || null, parseInt(habit_day) || 0);
+
+    // Insert post_media rows — images first (sort_order 0,1,...), then videos
+    const insMedia = db.prepare(
+      'INSERT INTO post_media (id, post_id, url, type, sort_order) VALUES (?, ?, ?, ?, ?)'
+    );
+    let order = 0;
+    for (const file of imageFiles) {
+      insMedia.run(randomUUID(), id, `/uploads/${file.filename}`, 'image', order++);
+    }
+    for (const vurl of videoUrls) {
+      insMedia.run(randomUUID(), id, vurl, 'video', order++);
+    }
+
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    return res.status(500).json({ error: 'Failed to create post' });
+  }
 
   const post = db.prepare(
     `SELECT p.*, u.username, u.display_name, u.avatar_url,
@@ -339,8 +389,10 @@ router.post('/', authMiddleware, upload.single('image'), (req, res) => {
      WHERE p.id = ?`
   ).get(id);
 
-  trackEvent(req.user.id, 'post_created', { has_image: !!req.file, has_habit: !!habit_id }, metaFromReq(req));
-  res.status(201).json({ ...post, liked_by_me: false, cheer_count: 0, cheered_by_me: false });
+  const media = fetchPostMedia(db, id);
+
+  trackEvent(req.user.id, 'post_created', { has_image: imageFiles.length > 0, has_habit: !!habit_id, media_count: media.length }, metaFromReq(req));
+  res.status(201).json({ ...post, liked_by_me: false, cheer_count: 0, cheered_by_me: false, media });
 });
 
 // DELETE /api/posts/:id

@@ -423,6 +423,47 @@ function getDb() {
       );
     `);
 
+    // Post media — multi-photo/video carousel support.
+    // Free and Pro users alike can attach up to 10 images/videos per post.
+    // The posts.image_url and posts.video_url columns are kept for back-compat
+    // with older mobile builds; new builds read the media[] array instead.
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS post_media (
+        id TEXT PRIMARY KEY,
+        post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+        url TEXT NOT NULL,
+        type TEXT NOT NULL DEFAULT 'image',
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_post_media_post ON post_media(post_id);
+    `);
+    // One-shot backfill: migrate legacy image_url / video_url columns into post_media
+    // so existing posts show their media in the new carousel.
+    try {
+      const { randomUUID } = require('crypto');
+      const legacyPosts = db.prepare(
+        "SELECT id, image_url, video_url FROM posts WHERE (image_url != '' OR video_url != '')"
+      ).all();
+      const hasMedia = db.prepare('SELECT 1 FROM post_media WHERE post_id = ? LIMIT 1');
+      const insMedia = db.prepare(
+        'INSERT INTO post_media (id, post_id, url, type, sort_order) VALUES (?, ?, ?, ?, ?)'
+      );
+      for (const p of legacyPosts) {
+        if (hasMedia.get(p.id)) continue;
+        let order = 0;
+        if (p.image_url && p.image_url !== '') {
+          insMedia.run(randomUUID(), p.id, p.image_url, 'image', order++);
+        }
+        if (p.video_url && p.video_url !== '') {
+          insMedia.run(randomUUID(), p.id, p.video_url, 'video', order++);
+        }
+      }
+      if (legacyPosts.length) console.log(`[db] backfilled post_media for ${legacyPosts.length} legacy posts`);
+    } catch (err) {
+      console.warn('[db] post_media backfill failed (non-fatal):', err.message);
+    }
+
     // One-shot migration: convert any avatar_url stored as a base64 data URL
     // into a file on the persistent uploads volume. Earlier builds stored the
     // full data URL in the column, which made every feed payload huge and

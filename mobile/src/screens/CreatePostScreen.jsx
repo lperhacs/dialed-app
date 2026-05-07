@@ -15,6 +15,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { radius, spacing } from '../theme';
 import { useTheme } from '../context/ThemeContext';
 
+const MAX_IMAGES = 10;
+const MAX_VIDEO_URLS = 5;
+
 export default function CreatePostScreen() {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
@@ -23,13 +26,14 @@ export default function CreatePostScreen() {
   const { user } = useAuth();
   const [content, setContent] = useState(route.params?.draft || '');
   const { suggestions: mentionSuggestions, onChangeText: onMentionChangeText, pickMention } = useMentionInput(content, setContent);
-  const [image, setImage] = useState(null);
-  const [videoUrl, setVideoUrl] = useState('');
+  // Multi-image support
+  const [images, setImages] = useState([]);
+  // Multi-video URL support
+  const [videoUrls, setVideoUrls] = useState([]);
   const [habitId, setHabitId] = useState(route.params?.habit_id ? String(route.params.habit_id) : '');
   const [habitDay, setHabitDay] = useState(route.params?.habit_day ? String(route.params.habit_day) : '');
   const [habits, setHabits] = useState([]);
   const [showHabits, setShowHabits] = useState(false);
-  const [showVideoInput, setShowVideoInput] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const required = !!route.params?.required;
 
@@ -37,22 +41,56 @@ export default function CreatePostScreen() {
     api.get('/habits').then(r => setHabits(r.data.filter(h => h.is_active))).catch(() => {});
   }, []);
 
-  const pickImage = async () => {
+  const pickImages = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Permission needed', 'Allow photo access to attach images.');
       return;
     }
+    const remaining = MAX_IMAGES - images.length;
+    if (remaining <= 0) {
+      Alert.alert('Limit reached', `You can attach up to ${MAX_IMAGES} photos per post.`);
+      return;
+    }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
+      allowsMultipleSelection: true,
       quality: 0.8,
+      selectionLimit: remaining,
     });
-    if (!result.canceled) setImage(result.assets[0]);
+    if (!result.canceled) {
+      setImages(prev => {
+        const combined = [...prev, ...result.assets];
+        return combined.slice(0, MAX_IMAGES);
+      });
+    }
   };
 
+  const removeImage = (idx) => {
+    setImages(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const addVideoUrl = () => {
+    if (videoUrls.length >= MAX_VIDEO_URLS) {
+      Alert.alert('Limit reached', `You can add up to ${MAX_VIDEO_URLS} video links per post.`);
+      return;
+    }
+    setVideoUrls(prev => [...prev, '']);
+    setShowHabits(false);
+  };
+
+  const updateVideoUrl = (idx, value) => {
+    setVideoUrls(prev => prev.map((v, i) => i === idx ? value : v));
+  };
+
+  const removeVideoUrl = (idx) => {
+    setVideoUrls(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const hasMedia = images.length > 0 || videoUrls.some(v => v.trim());
+
   const handleSubmit = async () => {
-    if (!content.trim() && !image && !videoUrl) {
+    if (!content.trim() && !hasMedia) {
       Alert.alert('Empty post', 'Add some text, a photo, or a video.');
       return;
     }
@@ -60,14 +98,34 @@ export default function CreatePostScreen() {
     try {
       const formData = new FormData();
       formData.append('content', content);
-      if (image) {
+
+      // Append each image under the same key — RN FormData supports this
+      images.forEach((img, i) => {
+        formData.append('images', {
+          uri: img.uri,
+          type: 'image/jpeg',
+          name: `photo_${i}.jpg`,
+        });
+      });
+
+      // Backward compat: first image also as image_url (handled server-side via image field)
+      // and first image as legacy 'image' key
+      if (images.length > 0) {
         formData.append('image', {
-          uri: image.uri,
+          uri: images[0].uri,
           type: 'image/jpeg',
           name: 'photo.jpg',
         });
       }
-      if (videoUrl) formData.append('video_url', videoUrl);
+
+      // Video URLs as JSON string + legacy single field
+      const filledUrls = videoUrls.filter(v => v.trim());
+      if (filledUrls.length > 0) {
+        formData.append('video_urls', JSON.stringify(filledUrls));
+        // Backward compat
+        formData.append('video_url', filledUrls[0]);
+      }
+
       if (habitId) formData.append('habit_id', habitId);
       if (habitDay) formData.append('habit_day', habitDay);
 
@@ -87,6 +145,8 @@ export default function CreatePostScreen() {
       ? { id: habitId, name: route.params.habit_name, color: route.params.habit_color || '#34d399' }
       : null
   );
+
+  const postBtnDisabled = submitting || (!content.trim() && !hasMedia);
 
   return (
     <KeyboardAvoidingView
@@ -138,8 +198,8 @@ export default function CreatePostScreen() {
         <Text style={styles.modalTitle}>New Post</Text>
         <TouchableOpacity
           onPress={handleSubmit}
-          disabled={submitting || (!content.trim() && !image && !videoUrl)}
-          style={[styles.postBtn, (submitting || (!content.trim() && !image && !videoUrl)) && styles.postBtnDisabled]}
+          disabled={postBtnDisabled}
+          style={[styles.postBtn, postBtnDisabled && styles.postBtnDisabled]}
           activeOpacity={0.85}
         >
           {submitting
@@ -168,7 +228,7 @@ export default function CreatePostScreen() {
             {/* Habit button - directly below input, under avatar */}
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }}>
               <TouchableOpacity
-                onPress={() => { setShowHabits(v => !v); setShowVideoInput(false); }}
+                onPress={() => setShowHabits(v => !v)}
                 style={[styles.habitInlineBtn, (showHabits || selectedHabit) && styles.habitInlineBtnActive]}
                 activeOpacity={0.75}
               >
@@ -187,14 +247,28 @@ export default function CreatePostScreen() {
 
         <Text style={styles.charCount}>{content.length}/500</Text>
 
-        {/* Image preview */}
-        {image && (
-          <View style={styles.imagePreview}>
-            <Image source={{ uri: image.uri }} style={styles.previewImg} resizeMode="cover" />
-            <TouchableOpacity onPress={() => setImage(null)} style={styles.removeImgBtn}>
-              <Ionicons name="close" size={14} color="#fff" />
-            </TouchableOpacity>
-          </View>
+        {/* Image thumbnails row */}
+        {images.length > 0 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.thumbnailRow}
+            contentContainerStyle={styles.thumbnailRowContent}
+          >
+            {images.map((img, idx) => (
+              <View key={idx} style={styles.thumbnail}>
+                <Image source={{ uri: img.uri }} style={styles.thumbnailImg} resizeMode="cover" />
+                <TouchableOpacity onPress={() => removeImage(idx)} style={styles.removeThumbnailBtn}>
+                  <Ionicons name="close" size={12} color="#fff" />
+                </TouchableOpacity>
+              </View>
+            ))}
+            {images.length < MAX_IMAGES && (
+              <TouchableOpacity onPress={pickImages} style={styles.addMoreBtn} activeOpacity={0.75}>
+                <Ionicons name="add" size={20} color={colors.textMuted} />
+              </TouchableOpacity>
+            )}
+          </ScrollView>
         )}
 
         {/* Habit tag display */}
@@ -248,35 +322,44 @@ export default function CreatePostScreen() {
           </View>
         )}
 
-        {/* Video input */}
-        {showVideoInput && (
-          <View style={styles.videoInputWrap}>
-            <TextInput
-              style={styles.input}
-              value={videoUrl}
-              onChangeText={setVideoUrl}
-              placeholder="YouTube / Vimeo embed URL"
-              placeholderTextColor={colors.textDim}
-              autoCapitalize="none"
-              keyboardType="url"
-            />
+        {/* Video URL inputs */}
+        {videoUrls.map((url, idx) => (
+          <View key={idx} style={styles.videoInputWrap}>
+            <View style={styles.videoInputRow}>
+              <TextInput
+                style={[styles.input, { flex: 1 }]}
+                value={url}
+                onChangeText={v => updateVideoUrl(idx, v)}
+                placeholder="YouTube / Vimeo embed URL"
+                placeholderTextColor={colors.textDim}
+                autoCapitalize="none"
+                keyboardType="url"
+              />
+              <TouchableOpacity onPress={() => removeVideoUrl(idx)} style={styles.removeVideoBtn} hitSlop={8}>
+                <Ionicons name="close" size={16} color={colors.textMuted} />
+              </TouchableOpacity>
+            </View>
           </View>
-        )}
+        ))}
       </ScrollView>
 
       {/* Toolbar */}
       <View style={styles.toolbar}>
-        <TouchableOpacity onPress={pickImage} style={styles.toolBtn} activeOpacity={0.7}>
+        <TouchableOpacity onPress={pickImages} style={styles.toolBtn} activeOpacity={0.7}>
           <Ionicons name="image-outline" size={18} color={colors.textMuted} />
-          <Text style={styles.toolLabel}>Photo</Text>
+          <Text style={styles.toolLabel}>
+            Photo{images.length > 0 ? ` (${images.length})` : ''}
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={() => { setShowVideoInput(v => !v); setShowHabits(false); }}
-          style={[styles.toolBtn, showVideoInput && styles.toolBtnActive]}
+          onPress={addVideoUrl}
+          style={[styles.toolBtn, videoUrls.length > 0 && styles.toolBtnActive]}
           activeOpacity={0.7}
         >
-          <Ionicons name="videocam-outline" size={18} color={showVideoInput ? colors.accent : colors.textMuted} />
-          <Text style={[styles.toolLabel, showVideoInput && { color: colors.accent }]}>Video</Text>
+          <Ionicons name="videocam-outline" size={18} color={videoUrls.length > 0 ? colors.accent : colors.textMuted} />
+          <Text style={[styles.toolLabel, videoUrls.length > 0 && { color: colors.accent }]}>
+            Video{videoUrls.length > 0 ? ` (${videoUrls.length})` : ''}
+          </Text>
         </TouchableOpacity>
         <View style={{ flex: 1 }} />
         <TouchableOpacity
@@ -322,12 +405,37 @@ function makeStyles(colors) {
     textAlignVertical: 'top',
   },
   charCount: { textAlign: 'right', color: colors.textDim, fontSize: 12, paddingRight: 16, marginTop: -8, marginBottom: 8 },
-  imagePreview: { margin: 16, marginTop: 0, position: 'relative' },
-  previewImg: { width: '100%', height: 200, borderRadius: 10, backgroundColor: colors.bgHover },
-  removeImgBtn: {
-    position: 'absolute', top: 8, right: 8,
-    backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 14,
-    width: 28, height: 28, justifyContent: 'center', alignItems: 'center',
+  // Image thumbnails
+  thumbnailRow: { marginHorizontal: 16, marginBottom: 12 },
+  thumbnailRowContent: { flexDirection: 'row', gap: 8, paddingVertical: 4 },
+  thumbnail: { position: 'relative', width: 72, height: 72 },
+  thumbnailImg: {
+    width: 72,
+    height: 72,
+    borderRadius: 8,
+    backgroundColor: colors.bgHover,
+  },
+  removeThumbnailBtn: {
+    position: 'absolute',
+    top: 3,
+    right: 3,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addMoreBtn: {
+    width: 72,
+    height: 72,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.bgHover,
   },
   habitTag: {
     flexDirection: 'row',
@@ -371,6 +479,7 @@ function makeStyles(colors) {
     textAlign: 'center',
   },
   videoInputWrap: { marginHorizontal: 16, marginBottom: 8 },
+  videoInputRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   input: {
     backgroundColor: colors.bgInput,
     borderWidth: 1.5,
@@ -380,6 +489,12 @@ function makeStyles(colors) {
     fontSize: 14,
     paddingHorizontal: 12,
     paddingVertical: 10,
+  },
+  removeVideoBtn: {
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   toolbar: {
     flexDirection: 'row',
