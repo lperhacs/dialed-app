@@ -246,6 +246,7 @@ export default function PostCard({ post, onDelete }) {
   const [showShare, setShowShare] = useState(false);
   const [showMedia, setShowMedia] = useState(false);
   const [mediaStartIndex, setMediaStartIndex] = useState(0);
+  const [activeCarouselIndex, setActiveCarouselIndex] = useState(0);
 
   const mediaItems = buildPostMedia(post);
   // Width of a single carousel item — card has horizontal padding spacing.lg on each side
@@ -348,6 +349,8 @@ export default function PostCard({ post, onDelete }) {
             showsHorizontalScrollIndicator={false}
             style={{ width: CARD_MEDIA_WIDTH }}
             scrollEnabled={mediaItems.length > 1}
+            onScroll={e => setActiveCarouselIndex(Math.round(e.nativeEvent.contentOffset.x / CARD_MEDIA_WIDTH))}
+            scrollEventThrottle={16}
           >
             {mediaItems.map((item, idx) => {
               if (item.type === 'image') {
@@ -388,7 +391,7 @@ export default function PostCard({ post, onDelete }) {
           {mediaItems.length > 1 && (
             <View style={styles.dotsRow} pointerEvents="none">
               {mediaItems.map((_, i) => (
-                <View key={i} style={styles.dot} />
+                <View key={i} style={[styles.dot, i === activeCarouselIndex && styles.dotActive]} />
               ))}
             </View>
           )}
@@ -482,6 +485,12 @@ function makeStyles(colors) { return StyleSheet.create({
     height: 5,
     borderRadius: 2.5,
     backgroundColor: colors.textDim,
+  },
+  dotActive: {
+    backgroundColor: colors.accent,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
   },
   videoLink: {
     flexDirection: 'row',
