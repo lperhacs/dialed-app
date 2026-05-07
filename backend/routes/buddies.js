@@ -388,9 +388,13 @@ router.post('/:id/nudge', authMiddleware, (req, res) => {
 
   const actor = db.prepare('SELECT display_name FROM users WHERE id = ?').get(req.user.id);
 
-  db.prepare(
-    "INSERT INTO notifications (id, user_id, type, from_user_id, message) VALUES (?, ?, 'buddy_nudge', ?, ?)"
-  ).run(uuidv4(), buddyUserId, req.user.id, 'nudged you to log your habits!');
+  try {
+    db.prepare(
+      "INSERT INTO notifications (id, user_id, type, from_user_id, message) VALUES (?, ?, 'buddy_nudge', ?, ?)"
+    ).run(uuidv4(), buddyUserId, req.user.id, 'nudged you to log your habits!');
+  } catch (e) {
+    console.error('[buddies] nudge notification insert failed (non-fatal):', e.message);
+  }
 
   sendPush(buddyUserId, {
     title: `${actor?.display_name || 'Your buddy'} is watching`,

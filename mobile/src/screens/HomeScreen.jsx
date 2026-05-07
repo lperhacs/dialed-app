@@ -31,7 +31,7 @@ function EmptyFeed({ tab }) {
   );
 }
 
-function BuddyCard({ buddyData, onNudge, onPress }) {
+function BuddyCard({ buddyData, onNudge, onPress, nudging }) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
   const { buddy } = buddyData;
@@ -73,12 +73,16 @@ function BuddyCard({ buddyData, onNudge, onPress }) {
         </View>
       </View>
       <TouchableOpacity
-        style={styles.nudgeBtn}
+        style={[styles.nudgeBtn, nudging && { opacity: 0.5 }]}
         onPress={onNudge}
         hitSlop={8}
         activeOpacity={0.75}
+        disabled={nudging}
       >
-        <Ionicons name="notifications-outline" size={14} color={colors.accent} />
+        {nudging
+          ? <ActivityIndicator size="small" color={colors.accent} style={{ width: 14, height: 14 }} />
+          : <Ionicons name="notifications-outline" size={14} color={colors.accent} />
+        }
         <Text style={styles.nudgeBtnText}>Nudge</Text>
       </TouchableOpacity>
     </TouchableOpacity>
@@ -218,6 +222,7 @@ export default function HomeScreen() {
         <BuddyCard
           buddyData={buddyData}
           onNudge={handleNudge}
+          nudging={nudging}
           onPress={() => navigation.navigate('UserProfile', { username: buddyData.buddy.username })}
         />
       )}
