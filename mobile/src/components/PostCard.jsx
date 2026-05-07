@@ -332,7 +332,7 @@ export default function PostCard({ post, onDelete }) {
       ) : null}
 
       {/* Video link - tappable to open player */}
-      {!imageUrl && post.video_url ? (
+      {post.video_url ? (
         <TouchableOpacity
           onPress={() => setShowMedia(true)}
           activeOpacity={0.85}

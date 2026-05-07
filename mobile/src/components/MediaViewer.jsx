@@ -31,14 +31,14 @@ export default function MediaViewer({ visible, imageUrl, videoUrl, onClose }) {
         {!!imageUrl && (
           <Image
             source={{ uri: imageUrl }}
-            style={styles.image}
+            style={imageUrl && videoUrl ? styles.imageWithVideo : styles.image}
             resizeMode="contain"
           />
         )}
 
-        {!imageUrl && !!videoUrl && (
-          <View style={styles.videoCard}>
-            <Ionicons name="play-circle" size={72} color="#fff" />
+        {!!videoUrl && (
+          <View style={[styles.videoCard, imageUrl && styles.videoCardBelow]}>
+            <Ionicons name="play-circle" size={imageUrl ? 40 : 72} color="#fff" />
             <Text style={styles.videoText} numberOfLines={2}>
               {videoUrl}
             </Text>
@@ -72,10 +72,20 @@ const styles = StyleSheet.create({
     width: SCREEN_W,
     height: SCREEN_H,
   },
+  imageWithVideo: {
+    width: SCREEN_W,
+    height: SCREEN_H * 0.65,
+  },
   videoCard: {
     alignItems: 'center',
     paddingHorizontal: 32,
     gap: 16,
+  },
+  videoCardBelow: {
+    marginTop: 16,
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 24,
   },
   videoText: {
     color: 'rgba(255,255,255,0.7)',
