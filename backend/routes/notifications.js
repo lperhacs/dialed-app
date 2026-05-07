@@ -36,13 +36,15 @@ router.get('/', authMiddleware, (req, res) => {
   const notifications = db.prepare(
     `SELECT n.*,
        u.username as from_username, u.display_name as from_display_name, u.avatar_url as from_avatar,
-       p.image_url as post_image, p.content as post_content
+       p.image_url as post_image, p.content as post_content,
+       CASE WHEN f.follower_id IS NOT NULL THEN 1 ELSE 0 END as is_following_back
      FROM notifications n
      LEFT JOIN users u ON u.id = n.from_user_id
      LEFT JOIN posts p ON p.id = n.post_id
+     LEFT JOIN follows f ON f.follower_id = ? AND f.following_id = n.from_user_id AND n.type = 'follow'
      WHERE n.user_id = ?
      ORDER BY n.created_at DESC LIMIT 50`
-  ).all(req.user.id);
+  ).all(req.user.id, req.user.id);
 
   const unread_count = db.prepare(
     'SELECT COUNT(*) as c FROM notifications WHERE user_id = ? AND is_read = 0'

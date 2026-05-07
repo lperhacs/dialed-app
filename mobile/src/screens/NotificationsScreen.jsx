@@ -85,11 +85,55 @@ function NotifAvatar({ notif }) {
   );
 }
 
+function FollowBackButton({ notif }) {
+  const { colors } = useTheme();
+  const [following, setFollowing] = useState(!!notif.is_following_back);
+  const [loading, setLoading] = useState(false);
+
+  const toggle = async () => {
+    if (loading) return;
+    setLoading(true);
+    try {
+      if (following) {
+        await api.delete(`/users/${notif.from_user_id}/follow`);
+        setFollowing(false);
+      } else {
+        await api.post(`/users/${notif.from_user_id}/follow`);
+        setFollowing(true);
+      }
+    } catch {
+      // silent — button snaps back on next render if needed
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <TouchableOpacity
+      onPress={toggle}
+      activeOpacity={0.8}
+      style={[
+        styles.followBtn,
+        following && { backgroundColor: 'transparent', borderColor: colors.border, borderWidth: 1 },
+        !following && { backgroundColor: colors.accent },
+      ]}
+    >
+      {loading
+        ? <ActivityIndicator size="small" color={following ? colors.textMuted : '#0a0a0a'} />
+        : <Text style={[styles.followBtnText, following && { color: colors.textMuted }]}>
+            {following ? 'Following' : 'Follow back'}
+          </Text>
+      }
+    </TouchableOpacity>
+  );
+}
+
 function NotifItem({ notif, onPress, onAvatarPress }) {
   const { colors } = useTheme();
   const { name, action } = buildParts(notif);
   const postImageUrl = resolvePostImage(notif.post_image);
   const showThumbnail = postImageUrl && (notif.type === 'like' || notif.type === 'comment' || notif.type === 'cheer');
+  const showFollowBack = notif.type === 'follow' && notif.from_user_id;
 
   return (
     <TouchableOpacity
@@ -116,7 +160,9 @@ function NotifItem({ notif, onPress, onAvatarPress }) {
         <Text style={[styles.time, { color: colors.textDim }]}>{timeAgo(notif.created_at)}</Text>
       </View>
 
-      {showThumbnail ? (
+      {showFollowBack ? (
+        <FollowBackButton notif={notif} />
+      ) : showThumbnail ? (
         <Image source={{ uri: postImageUrl }} style={styles.thumb} />
       ) : !notif.is_read ? (
         <View style={styles.dot} />
@@ -268,4 +314,17 @@ const styles = StyleSheet.create({
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 60 },
   emptyTitle: { fontSize: 16, fontWeight: '600', marginBottom: 6 },
   emptyText: { fontSize: 13, textAlign: 'center' },
+  followBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    minWidth: 96,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  followBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#0a0a0a',
+  },
 });
