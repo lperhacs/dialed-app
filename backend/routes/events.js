@@ -171,7 +171,9 @@ router.post('/', authMiddleware, upload.single('image'), (req, res) => {
   db.prepare(`
     INSERT INTO events (id, creator_id, title, description, event_date, event_time, location, is_public, club_id, cover_image_url, latitude, longitude)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, req.user.id, title.trim(), description?.trim() || null, event_date, event_time || null, location?.trim() || null, is_public ? 1 : 0, club_id || null, cover_image_url, lat, lng);
+  // Normalise is_public: handles boolean (JSON path) and '1'/'0'/'true'/'false' (FormData path)
+  const isPublicVal = (is_public === true || is_public === 1 || is_public === '1' || is_public === 'true') ? 1 : 0;
+  `).run(id, req.user.id, title.trim(), description?.trim() || null, event_date, event_time || null, location?.trim() || null, isPublicVal, club_id || null, cover_image_url, lat, lng);
 
   // Fan-out notifications to club members
   if (club_id) {

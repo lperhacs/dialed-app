@@ -415,7 +415,22 @@ router.get('/:username/posts', optionalAuth, (req, res) => {
      WHERE p.user_id = ?
      ORDER BY p.created_at DESC LIMIT 30`
   ).all(viewerId, user.id);
-  res.json(posts);
+
+  // Attach post_media so carousels render correctly on profile
+  const postIds = posts.map(p => p.id);
+  const mediaRows = postIds.length
+    ? db.prepare(
+        `SELECT post_id, url, type, sort_order FROM post_media
+         WHERE post_id IN (${postIds.map(() => '?').join(',')})
+         ORDER BY sort_order ASC`
+      ).all(...postIds)
+    : [];
+  const mediaByPost = {};
+  for (const row of mediaRows) {
+    if (!mediaByPost[row.post_id]) mediaByPost[row.post_id] = [];
+    mediaByPost[row.post_id].push({ url: row.url, type: row.type });
+  }
+  res.json(posts.map(p => ({ ...p, media: mediaByPost[p.id] || [] })));
 });
 
 // GET /api/users/:username/habits

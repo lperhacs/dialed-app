@@ -27,6 +27,7 @@ const TYPE_ICONS = {
   buddy_5pm_reminder:  { icon: 'alarm',             bg: '#14b8a6' },
   buddy_nudge_reminder:{ icon: 'notifications',     bg: '#14b8a6' },
   weekly_recap:        { icon: 'stats-chart',       bg: '#10b981' },
+  club_event:          { icon: 'calendar',           bg: '#8b5cf6' },
 };
 
 function buildParts(n) {
@@ -195,6 +196,8 @@ export default function NotificationsScreen() {
   const handlePress = (notif) => {
     if (notif.type === 'weekly_recap') {
       navigation.navigate('WeeklyRecap', notif.reference_id ? { week: notif.reference_id } : undefined);
+    } else if (notif.type === 'club_event' && notif.reference_id) {
+      navigation.navigate('Events', { highlightEventId: notif.reference_id });
     } else if ((notif.type === 'like' || notif.type === 'comment' || notif.type === 'cheer') && notif.post_id) {
       navigation.navigate('Comments', { postId: notif.post_id });
     } else if (notif.from_username) {

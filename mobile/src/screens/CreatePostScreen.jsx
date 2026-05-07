@@ -153,6 +153,8 @@ export default function CreatePostScreen() {
       await api.post('/posts', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
+      invalidateCache('/posts');
+      invalidateCache('/posts/explore');
       navigation.goBack();
     } catch (err) {
       Alert.alert('Error', err.response?.data?.error || 'Could not create post.');

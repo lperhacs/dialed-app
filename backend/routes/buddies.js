@@ -53,10 +53,10 @@ function computeJointStreak(db, pair, userIdA, userIdB) {
   ).get(userIdA, userIdB);
   const freezeQuota = (proRow?.a_pro ? 1 : 0) + (proRow?.b_pro ? 1 : 0);
   const aDays = db.prepare(
-    "SELECT DISTINCT date(logged_at) as d FROM habit_logs WHERE user_id = ?"
+    "SELECT DISTINCT date(logged_at) as d FROM habit_logs WHERE user_id = ? AND logged_at >= date('now', '-400 days')"
   ).all(userIdA).map(r => r.d);
   const bDaysSet = new Set(db.prepare(
-    "SELECT DISTINCT date(logged_at) as d FROM habit_logs WHERE user_id = ?"
+    "SELECT DISTINCT date(logged_at) as d FROM habit_logs WHERE user_id = ? AND logged_at >= date('now', '-400 days')"
   ).all(userIdB).map(r => r.d));
 
   const jointSet = new Set(aDays.filter(d => bDaysSet.has(d)));
@@ -293,6 +293,7 @@ router.post('/request', authMiddleware, (req, res) => {
   ).get(req.user.id, user_id, user_id, req.user.id);
 
   if (existing?.status === 'pending') return res.status(400).json({ error: 'Request already sent' });
+  if (existing?.status === 'active') return res.status(400).json({ error: 'Already buddies' });
 
   // Re-check counts INSIDE a transaction to close the race window where two
   // concurrent requests both passed the pre-check and would each insert.

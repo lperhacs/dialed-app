@@ -96,7 +96,7 @@ export default function CreateEventScreen() {
         form.append('event_date', toISODate(selectedDate));
         if (selectedTime) form.append('event_time', toTimeString(selectedTime));
         if (location.trim()) form.append('location', location.trim());
-        form.append('is_public', isPublic ? 'true' : 'false');
+        form.append('is_public', isPublic ? '1' : '0');
         if (selectedClub?.id) form.append('club_id', selectedClub.id);
         if (locationLat != null) form.append('latitude', String(locationLat));
         if (locationLng != null) form.append('longitude', String(locationLng));
