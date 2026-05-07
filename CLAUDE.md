@@ -63,8 +63,9 @@ Think Strava meets a gym buddy.
 - **Staying on SQLite for now** — concurrent load not yet a problem.
   Migrate to Postgres after real user traction.
   Immediate action: confirm SQLite file is on Railway persistent volume.
-- **No new features until retention is validated** — testers need to
-  prove the daily logging loop sticks before anything else is built.
+- **Build features when asked, no strategy gate required** — when the user
+  explicitly asks to add something, just build it. Do not push back citing
+  the retention-validation rule. That rule is retired.
 - **Group challenges are the onboarding entry point** — works without
   an existing social graph, users find buddies through challenges.
 - **Buddy pairing is the retention mechanic** — friend-based stakes
@@ -87,11 +88,17 @@ Think Strava meets a gym buddy.
 
 ## Do NOT do these without a strategy conversation first
 - Migrate to Postgres
-- Add new features
 - Change existing API contracts
 - Open to public or remove TestFlight gate
 - Change JWT signing format / payload shape (existing TestFlight tokens would break;
   current tokens use `token_version` for selective invalidation on password change)
+
+## Feature development rules
+- **Build when asked** — if the user asks for a feature, build it immediately. No pushback.
+- **Triple-test every feature before considering it done** — mentally walk through
+  the full user flow at least 3 times, check all edge cases (empty state, error state,
+  loading state, both light and dark mode), and verify backend + mobile are in sync.
+  Do not ship a feature with known gaps or untested paths.
 
 ## Strategy session log
 ### May 6, 2026 — Build 31 (multi-reminder Pro + avatar fix)

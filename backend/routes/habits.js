@@ -101,8 +101,8 @@ function awardBadges(db, userId, habitId) {
       if (habit.visibility_missed !== 'private' && habit.visibility_missed !== 'buddy') {
         const postContent = `Just earned the "${badge.label}" badge on my ${habit.name} habit — ${badge.desc}.`;
         db.prepare(
-          'INSERT INTO posts (id, user_id, content, habit_id, badge_id) VALUES (?, ?, ?, ?, ?)'
-        ).run(uuidv4(), userId, postContent, habitId, badgeId);
+          'INSERT INTO posts (id, user_id, content, habit_id, habit_day, badge_id) VALUES (?, ?, ?, ?, ?, ?)'
+        ).run(uuidv4(), userId, postContent, habitId, streak, badgeId);
       }
     }
   }
