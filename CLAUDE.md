@@ -1,6 +1,6 @@
 # Dialed Brain
 *Shared project context for Claude Code and Cowork — update after every session*
-*Last updated: May 6, 2026*
+*Last updated: May 7, 2026*
 
 ## Core retention values
 *The behaviors and feelings that, if present, predict a user sticks. Every feature decision should serve at least one.*
@@ -101,6 +101,19 @@ Think Strava meets a gym buddy.
   Do not ship a feature with known gaps or untested paths.
 
 ## Strategy session log
+### May 7, 2026 — Builds 33–34 (audit fixes + photo post bug + carousel dots)
+- Full end-to-end audit run (builds 33–34). Key bugs found and fixed:
+- **Photo posts with habits → 500 server error** (CRITICAL): Mobile was appending both `images` (array) and `image` (single) fields. `upload.array('images')` throws `LIMIT_UNEXPECTED_FILE` on any unexpected field name. Fixed by switching backend to `upload.fields([{name:'images',maxCount:10},{name:'image',maxCount:1}])` with deduplication.
+- **New posts not appearing in feed**: CreatePostScreen never called `invalidateCache('/posts')` after successful post. Fixed.
+- **Friends-only events with cover photos silently became public**: FormData sends string `"false"` which is truthy in JS. Mobile now sends `'1'`/`'0'`; backend normalizes both boolean and string values for `is_public`.
+- **Profile carousels missing**: GET /:username/posts only returned legacy `image_url`/`video_url`, not `post_media` rows. Fixed with batch query joining all post IDs.
+- **Carousel dots no active state**: All dots rendered identically. Fixed with `activeCarouselIndex` state + `onScroll` handler + accent color/larger size for active dot.
+- **Follow-back button**: Added to notifications center for follow-type notifications. Backend returns `is_following_back` via LEFT JOIN on follows table.
+- **club_event notifications**: Had no icon; tapping navigated nowhere. Added calendar icon and `Events` screen navigation with `highlightEventId`.
+- **Nudge button**: Shows spinner and disables during in-flight request.
+- Other fixes: db.js schema missing columns for fresh installs, awardBadges non-fatal try/catch, null-checks on user before bcrypt, computeJointStreak bounded to 400 days, OpenMaps using correct iOS/Android URL scheme, MediaViewer crash on unmounted ref.
+- **Audit methodology updated**: Audits must trace full request path — mobile field names → multer/parser config → handler → DB columns → response shape. Not just response shape alone.
+
 ### May 6, 2026 — Build 31 (multi-reminder Pro + avatar fix)
 - Third "no new features" rule override (after joint streak and the ad-hoc
   bug fixes). User explicitly authorized shipping a paid multi-reminder
