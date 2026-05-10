@@ -491,6 +491,7 @@ router.post('/:id/comments/:commentId/like', authMiddleware, (req, res) => {
   const db = getDb();
   const comment = db.prepare('SELECT * FROM comments WHERE id = ?').get(req.params.commentId);
   if (!comment) return res.status(404).json({ error: 'Comment not found' });
+  if (comment.post_id !== req.params.id) return res.status(404).json({ error: 'Comment not found' });
 
   const existing = db.prepare('SELECT 1 FROM comment_likes WHERE user_id = ? AND comment_id = ?').get(req.user.id, req.params.commentId);
   if (!existing) {
@@ -504,6 +505,9 @@ router.post('/:id/comments/:commentId/like', authMiddleware, (req, res) => {
 // DELETE /api/posts/:id/comments/:commentId/like
 router.delete('/:id/comments/:commentId/like', authMiddleware, (req, res) => {
   const db = getDb();
+  const comment = db.prepare('SELECT * FROM comments WHERE id = ?').get(req.params.commentId);
+  if (!comment) return res.status(404).json({ error: 'Comment not found' });
+  if (comment.post_id !== req.params.id) return res.status(404).json({ error: 'Comment not found' });
   db.prepare('DELETE FROM comment_likes WHERE user_id = ? AND comment_id = ?').run(req.user.id, req.params.commentId);
   const like_count = db.prepare('SELECT COUNT(*) as c FROM comment_likes WHERE comment_id = ?').get(req.params.commentId).c;
   res.json({ liked: false, like_count });
@@ -595,6 +599,7 @@ router.delete('/:id/comments/:commentId', authMiddleware, (req, res) => {
   const db = getDb();
   const comment = db.prepare('SELECT * FROM comments WHERE id = ?').get(req.params.commentId);
   if (!comment) return res.status(404).json({ error: 'Comment not found' });
+  if (comment.post_id !== req.params.id) return res.status(404).json({ error: 'Comment not found' });
   if (comment.user_id !== req.user.id) return res.status(403).json({ error: 'Not authorized' });
   db.prepare('DELETE FROM comments WHERE id = ?').run(req.params.commentId);
   res.json({ deleted: true });

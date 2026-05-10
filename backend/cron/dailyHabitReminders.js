@@ -112,7 +112,7 @@ async function runDailyHabitReminders() {
       // function so the dedup and the count agree (#7, #25).
       const recent = db.prepare(`
         SELECT logged_at FROM habit_logs
-        WHERE habit_id = ? AND logged_at >= date('now', '-14 days')
+        WHERE habit_id = ? AND logged_at >= date('now', '-21 days')
       `).all(habit.id);
       periodCount = recent.filter(l =>
         getPeriodKeyTz(l.logged_at, 'weekly', tz) === periodKey

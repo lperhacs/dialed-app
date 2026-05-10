@@ -72,8 +72,8 @@ async function runBuddyAccountabilityReminders() {
       const unlogged = db.prepare(`
         SELECT h.id, h.name FROM habits h
         WHERE h.user_id = ? AND h.is_active = 1 AND h.frequency = 'daily'
-          AND (SELECT COUNT(*) FROM habit_logs WHERE habit_id = h.id AND date(logged_at) = date('now')) = 0
-      `).all(u.id);
+          AND (SELECT COUNT(*) FROM habit_logs WHERE habit_id = h.id AND strftime('%Y-%m-%d', logged_at) = ?) = 0
+      `).all(u.id, localDate);
 
       if (unlogged.length === 0) continue;
 
@@ -91,22 +91,32 @@ async function runBuddyAccountabilityReminders() {
       // Self reminder — independently deduped. If a previous tick inserted
       // the self row but failed before nudging the buddy, the self check
       // skips here while the buddy nudge below can still recover.
-      const alreadySentSelf = db.prepare(`
-        SELECT 1 FROM notifications
-        WHERE user_id = ? AND type = 'buddy_5pm_reminder'
-          AND reference_id = ?
-      `).get(u.id, dedupRef);
+      let alreadySentSelf;
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        alreadySentSelf = db.prepare(`
+          SELECT 1 FROM notifications
+          WHERE user_id = ? AND type = 'buddy_5pm_reminder'
+            AND reference_id = ?
+        `).get(u.id, dedupRef);
+
+        if (selfPrefAllowed && !alreadySentSelf) {
+          // Insert the dedup row BEFORE sending so a sendPush failure can't
+          // result in a duplicate reminder on the next cron tick.
+          db.prepare(
+            "INSERT INTO notifications (id, user_id, type, reference_id, message) VALUES (?, ?, 'buddy_5pm_reminder', ?, ?)"
+          ).run(uuidv4(), u.id, dedupRef, `Log your habits — ${u.buddyName} is watching.`);
+        }
+        db.exec('COMMIT');
+      } catch (e) {
+        try { db.exec('ROLLBACK'); } catch (_) {}
+        alreadySentSelf = true; // treat as already sent to skip push on error
+      }
 
       if (selfPrefAllowed && !alreadySentSelf) {
         const habitList = unlogged.length === 1
           ? `"${unlogged[0].name}"`
           : `${unlogged.length} habits`;
-
-        // Insert the dedup row BEFORE sending so a sendPush failure can't
-        // result in a duplicate reminder on the next cron tick.
-        db.prepare(
-          "INSERT INTO notifications (id, user_id, type, reference_id, message) VALUES (?, ?, 'buddy_5pm_reminder', ?, ?)"
-        ).run(uuidv4(), u.id, dedupRef, `Log your habits — ${u.buddyName} is watching.`);
 
         await sendPush(u.id, {
           title: 'Your buddy is watching',
@@ -119,18 +129,28 @@ async function runBuddyAccountabilityReminders() {
       // pair.id+local-date) so the buddy can't be re-nudged for the same
       // local day.
       const buddyDedupRef = `${pair.id}:${localDate}`;
-      const buddyAlreadyNudged = db.prepare(`
-        SELECT 1 FROM notifications
-        WHERE user_id = ? AND type = 'buddy_nudge_reminder'
-          AND reference_id = ?
-      `).get(u.buddyId, buddyDedupRef);
+      let buddyAlreadyNudged;
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        buddyAlreadyNudged = db.prepare(`
+          SELECT 1 FROM notifications
+          WHERE user_id = ? AND type = 'buddy_nudge_reminder'
+            AND reference_id = ?
+        `).get(u.buddyId, buddyDedupRef);
+
+        if (!buddyAlreadyNudged) {
+          // Insert the dedup row BEFORE sending so a retry can't double-send.
+          db.prepare(
+            "INSERT INTO notifications (id, user_id, type, reference_id, message) VALUES (?, ?, 'buddy_nudge_reminder', ?, ?)"
+          ).run(uuidv4(), u.buddyId, buddyDedupRef, `${u.name} hasn't logged yet today — remind them.`);
+        }
+        db.exec('COMMIT');
+      } catch (e) {
+        try { db.exec('ROLLBACK'); } catch (_) {}
+        buddyAlreadyNudged = true; // treat as already sent to skip push on error
+      }
 
       if (!buddyAlreadyNudged) {
-        // Insert the dedup row BEFORE sending so a retry can't double-send.
-        db.prepare(
-          "INSERT INTO notifications (id, user_id, type, reference_id, message) VALUES (?, ?, 'buddy_nudge_reminder', ?, ?)"
-        ).run(uuidv4(), u.buddyId, buddyDedupRef, `${u.name} hasn't logged yet today — remind them.`);
-
         await sendPush(u.buddyId, {
           title: `Check in on ${u.name}`,
           body: `${u.name} hasn't logged yet today — remind them.`,
@@ -205,28 +225,35 @@ async function runMissedHabitAutoPost() {
       // Dedup: only one missed post per user per local day. Match on the
       // local "today" date so re-runs within the same user-local day don't
       // double-post.
-      const alreadyPosted = db.prepare(`
-        SELECT 1 FROM posts WHERE user_id = ? AND type = 'missed_habit'
-          AND date(created_at) = date('now')
-      `).get(userId);
-      if (alreadyPosted) continue;
-
       const names = missedHabits.map(h => h.name).join(', ');
       const content = missedHabits.length === 1
         ? `Missed "${names}" yesterday. Accountability is real.`
         : `Missed ${missedHabits.length} habits yesterday (${names}). Back at it today.`;
 
-      // #38 — when only one habit was missed, attribute the post to that habit
-      if (missedHabits.length === 1) {
-        db.prepare(
-          "INSERT INTO posts (id, user_id, content, type, habit_id) VALUES (?, ?, ?, 'missed_habit', ?)"
-        ).run(uuidv4(), userId, content, missedHabits[0].id);
-      } else {
-        db.prepare(
-          "INSERT INTO posts (id, user_id, content, type) VALUES (?, ?, ?, 'missed_habit')"
-        ).run(uuidv4(), userId, content);
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const alreadyPosted = db.prepare(`
+          SELECT 1 FROM posts WHERE user_id = ? AND type = 'missed_habit'
+            AND date(created_at) = date('now')
+        `).get(userId);
+
+        if (!alreadyPosted) {
+          // #38 — when only one habit was missed, attribute the post to that habit
+          if (missedHabits.length === 1) {
+            db.prepare(
+              "INSERT INTO posts (id, user_id, content, type, habit_id) VALUES (?, ?, ?, 'missed_habit', ?)"
+            ).run(uuidv4(), userId, content, missedHabits[0].id);
+          } else {
+            db.prepare(
+              "INSERT INTO posts (id, user_id, content, type) VALUES (?, ?, ?, 'missed_habit')"
+            ).run(uuidv4(), userId, content);
+          }
+          posted++;
+        }
+        db.exec('COMMIT');
+      } catch (e) {
+        try { db.exec('ROLLBACK'); } catch (_) {}
       }
-      posted++;
     }
   }
 

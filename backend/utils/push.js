@@ -55,8 +55,9 @@ async function sendPush(userId, payload, prefKey) {
     const result = await response.json();
     const errors = (result.data || []).filter(t => t.status === 'error');
     if (errors.length) console.error('[Push] delivery errors:', JSON.stringify(errors));
-  } catch {
+  } catch (err) {
     // Never let push failures surface to the caller
+    console.warn('[push] delivery failed for user', userId, ':', err.message);
   }
 }
 

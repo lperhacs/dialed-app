@@ -497,6 +497,7 @@ router.patch('/me/avatar', authMiddleware, (req, res) => {
   try { buf = Buffer.from(m[2], 'base64'); }
   catch { return res.status(400).json({ error: 'Invalid image data' }); }
   if (buf.length === 0) return res.status(400).json({ error: 'Invalid image data' });
+  if (buf.length > 10_000_000) return res.status(400).json({ error: 'Image too large' });
 
   // Magic-byte sniff — a malicious client can lie about the MIME prefix and
   // ship arbitrary bytes (HTML, SVG, executable, etc.). Refuse to write the

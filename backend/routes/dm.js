@@ -78,7 +78,7 @@ router.post('/group', authMiddleware, (req, res) => {
   for (const uid of user_ids) {
     if (typeof uid !== 'string' || uid.length > 36) return res.status(400).json({ error: 'Invalid user_ids' });
     const exists = db.prepare('SELECT 1 FROM users WHERE id = ?').get(uid);
-    if (!exists) return res.status(404).json({ error: `User not found: ${uid}` });
+    if (!exists) return res.status(404).json({ error: 'One or more users not found' });
   }
 
   // Consent check: every invitee (other than the creator) must be a mutual —
