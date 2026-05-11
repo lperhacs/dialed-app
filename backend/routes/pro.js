@@ -86,6 +86,20 @@ router.post('/grant', (req, res) => {
   res.json({ granted: true, expires_at: expiresAt });
 });
 
+// POST /api/pro/grant-all — grant annual pro to every user (beta use only)
+router.post('/grant-all', (req, res) => {
+  const key = (req.headers.authorization || '').replace('Bearer ', '');
+  if (!timingSafeStringEqual(key, process.env.PRO_SERVER_KEY)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  const db = getDb();
+  const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+  const { changes } = db.prepare(
+    'UPDATE users SET is_pro = 1, pro_expires_at = ?, streak_freezes = 3 WHERE is_pro = 0 OR pro_expires_at < ?'
+  ).run(expiresAt, new Date().toISOString());
+  res.json({ granted: changes, expires_at: expiresAt });
+});
+
 // POST /api/pro/use-freeze — spend a streak freeze on a habit
 router.post('/use-freeze', authMiddleware, (req, res) => {
   const db = getDb();
