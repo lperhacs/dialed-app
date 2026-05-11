@@ -43,7 +43,7 @@ Think Strava meets a gym buddy.
 ### Mobile
 - React Native + Expo SDK 52
 - Expo Router / React Navigation
-- EAS Build + TestFlight distribution
+- EAS Build (local) + TestFlight distribution
 
 ### Auth
 - JWT (jsonwebtoken)
@@ -56,7 +56,7 @@ Think Strava meets a gym buddy.
 ### Infrastructure
 - GitHub — source control
 - Railway — backend + SQLite hosting
-- Expo EAS — mobile build pipeline
+- Expo EAS (local builds only during beta) — mobile build pipeline
 - Apple TestFlight — beta distribution
 
 ## Active decisions and rationale
@@ -92,6 +92,8 @@ Think Strava meets a gym buddy.
 - Open to public or remove TestFlight gate
 - Change JWT signing format / payload shape (existing TestFlight tokens would break;
   current tokens use `token_version` for selective invalidation on password change)
+- Use EAS cloud builds (expo.dev) — during beta all builds are local (`eas build --local`).
+  Switch to cloud only when approaching public launch.
 
 ## Feature development rules
 - **Build when asked** — if the user asks for a feature, build it immediately. No pushback.
