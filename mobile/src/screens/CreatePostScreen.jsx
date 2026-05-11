@@ -131,11 +131,16 @@ export default function CreatePostScreen() {
       formData.append('content', content);
 
       // Append each image under the same key — RN FormData supports this
+      // Normalize HEIC/HEIF to jpeg (iOS default format, may not survive server fileFilter)
+      const ALLOWED_MIME = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']);
       images.forEach((img, i) => {
+        const rawMime = img.mimeType || 'image/jpeg';
+        const mimeType = ALLOWED_MIME.has(rawMime) ? rawMime : 'image/jpeg';
+        const ext = mimeType.split('/')[1]?.replace('jpeg', 'jpg') || 'jpg';
         formData.append('images', {
           uri: img.uri,
-          type: 'image/jpeg',
-          name: `photo_${i}.jpg`,
+          type: mimeType,
+          name: img.fileName || `photo_${i}.${ext}`,
         });
       });
 
@@ -174,7 +179,7 @@ export default function CreatePostScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior="height"
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       {/* Modal header */}
       <View style={styles.modalHeader}>
