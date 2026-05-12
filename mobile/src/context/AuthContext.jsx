@@ -17,9 +17,15 @@ export function AuthProvider({ children }) {
       setUser(data);
       await AsyncStorage.setItem('dialed_user', JSON.stringify(data));
       registerPushToken();
-    } catch {
-      await AsyncStorage.multiRemove(['dialed_token', 'dialed_user']);
-      setUser(null);
+    } catch (err) {
+      // Only wipe credentials on explicit auth rejection (401).
+      // Network errors, timeouts, or server outages should NOT log the user out —
+      // they'll be silently retried on next app open.
+      if (err.response?.status === 401) {
+        await AsyncStorage.multiRemove(['dialed_token', 'dialed_user']);
+        setUser(null);
+      }
+      // On network/other errors: keep the cached user state visible from storage
     } finally {
       setLoading(false);
     }
