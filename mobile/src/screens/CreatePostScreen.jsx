@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ScrollView, Image, Alert, KeyboardAvoidingView, Platform,
-  ActivityIndicator, Keyboard, TouchableWithoutFeedback,
+  ActivityIndicator, Keyboard,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -155,9 +155,10 @@ export default function CreatePostScreen() {
       if (habitId) formData.append('habit_id', habitId);
       if (habitDay) formData.append('habit_day', habitDay);
 
-      await api.post('/posts', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      // Do NOT set Content-Type manually — RN's native networking layer must
+      // inject the multipart boundary automatically. Explicit headers without
+      // a boundary break multipart parsing (regression in RN 0.76+ New Arch).
+      await api.post('/posts', formData);
       invalidateCache('/posts');
       invalidateCache('/posts/explore');
       navigation.goBack();
