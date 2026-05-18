@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ScrollView, Image, Alert, KeyboardAvoidingView, Platform,
+  ScrollView, Image, Alert, Animated, Platform,
   ActivityIndicator, Keyboard,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -39,6 +39,22 @@ export default function CreatePostScreen() {
 
   useEffect(() => {
     api.get('/habits').then(r => setHabits(r.data.filter(h => h.is_active))).catch(() => {});
+  }, []);
+
+  // iOS: KAV is unreliable in modal navigation stacks — animate paddingBottom
+  // directly in sync with the keyboard instead.
+  const keyboardPad = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return;
+    const animate = (toValue, e) => Animated.timing(keyboardPad, {
+      toValue,
+      duration: e.duration ?? 250,
+      useNativeDriver: false,
+    }).start();
+    const show = Keyboard.addListener('keyboardWillShow', e => animate(e.endCoordinates.height, e));
+    const change = Keyboard.addListener('keyboardWillChangeFrame', e => animate(e.endCoordinates.height, e));
+    const hide = Keyboard.addListener('keyboardWillHide', e => animate(0, e));
+    return () => { show.remove(); change.remove(); hide.remove(); };
   }, []);
 
   const pickImages = async () => {
@@ -178,10 +194,7 @@ export default function CreatePostScreen() {
   const postBtnDisabled = submitting || (!content.trim() && !hasMedia);
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
+    <Animated.View style={[styles.container, { paddingBottom: keyboardPad }]}>
       {/* Modal header */}
       <View style={styles.modalHeader}>
         <TouchableOpacity
@@ -401,7 +414,7 @@ export default function CreatePostScreen() {
           <Text style={styles.toolLabel}>Done</Text>
         </TouchableOpacity>
       </View>
-    </KeyboardAvoidingView>
+    </Animated.View>
   );
 }
 
