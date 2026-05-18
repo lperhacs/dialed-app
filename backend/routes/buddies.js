@@ -184,12 +184,24 @@ function computeJointStreak(db, pair, userIdA, userIdB) {
   };
 }
 
-// GET /api/buddies — current buddy pair + habit status
+// GET /api/buddies — all active buddy pairs + habit status
+// Pro users can have up to 3 buddies; this returns ALL of them.
 router.get('/', authMiddleware, (req, res) => {
   const db = getDb();
   const userId = req.user.id;
 
-  const buddy = getActiveBuddy(db, userId);
+  // Fetch ALL active buddies (not just the first one)
+  const activeBuddies = db.prepare(`
+    SELECT b.*,
+      CASE WHEN b.requester_id = ? THEN b.recipient_id ELSE b.requester_id END as buddy_user_id,
+      u.username as buddy_username,
+      u.display_name as buddy_display_name,
+      u.avatar_url as buddy_avatar_url
+    FROM buddies b
+    JOIN users u ON u.id = CASE WHEN b.requester_id = ? THEN b.recipient_id ELSE b.requester_id END
+    WHERE (b.requester_id = ? OR b.recipient_id = ?) AND b.status = 'active'
+    ORDER BY b.created_at ASC
+  `).all(userId, userId, userId, userId);
 
   const pending = db.prepare(`
     SELECT b.id, b.requester_id, u.username as from_username, u.display_name as from_display_name, u.avatar_url as from_avatar
@@ -198,18 +210,6 @@ router.get('/', authMiddleware, (req, res) => {
     WHERE b.recipient_id = ? AND b.status = 'pending'
   `).all(userId);
 
-  if (!buddy) return res.json({ buddy: null, pending_requests: pending });
-
-  // Buddies can see all habits except explicitly private ones
-  const buddyHabits = db.prepare(`
-    SELECT h.id, h.name, h.color, h.frequency, h.visibility_missed,
-      (SELECT COUNT(*) FROM habit_logs WHERE habit_id = h.id AND date(logged_at) = date('now')) as logged_today,
-      (SELECT COUNT(*) FROM habit_logs WHERE habit_id = h.id) as total_logs
-    FROM habits h WHERE h.user_id = ? AND h.is_active = 1
-      AND h.visibility_missed != 'private'
-    ORDER BY h.created_at ASC
-  `).all(buddy.buddy_user_id);
-
   const myHabits = db.prepare(`
     SELECT h.id, h.name, h.color, h.frequency,
       (SELECT COUNT(*) FROM habit_logs WHERE habit_id = h.id AND date(logged_at) = date('now')) as logged_today,
@@ -217,28 +217,58 @@ router.get('/', authMiddleware, (req, res) => {
     FROM habits h WHERE h.user_id = ? AND h.is_active = 1 ORDER BY h.created_at ASC
   `).all(userId);
 
-  const myShowMissed = buddy.requester_id === userId
-    ? !!buddy.requester_show_missed
-    : !!buddy.recipient_show_missed;
+  // Build per-buddy response with habits + joint streak for each pair
+  const buddies = activeBuddies.map(buddy => {
+    const buddyHabits = db.prepare(`
+      SELECT h.id, h.name, h.color, h.frequency, h.visibility_missed,
+        (SELECT COUNT(*) FROM habit_logs WHERE habit_id = h.id AND date(logged_at) = date('now')) as logged_today,
+        (SELECT COUNT(*) FROM habit_logs WHERE habit_id = h.id) as total_logs
+      FROM habits h WHERE h.user_id = ? AND h.is_active = 1
+        AND h.visibility_missed != 'private'
+      ORDER BY h.created_at ASC
+    `).all(buddy.buddy_user_id);
 
-  const joint = computeJointStreak(db, buddy, userId, buddy.buddy_user_id);
+    const joint = computeJointStreak(db, buddy, userId, buddy.buddy_user_id);
+    const myShowMissed = buddy.requester_id === userId
+      ? !!buddy.requester_show_missed
+      : !!buddy.recipient_show_missed;
 
-  res.json({
-    buddy: {
+    return {
       id: buddy.id,
       buddy_user_id: buddy.buddy_user_id,
       username: buddy.buddy_username,
       display_name: buddy.buddy_display_name,
       avatar_url: buddy.buddy_avatar_url,
       habits: buddyHabits,
-    },
+      my_show_missed: myShowMissed,
+      joint_streak: joint.streak,
+      joint_streak_alive_today: joint.alive_today,
+      joint_streak_at_risk: joint.at_risk,
+      joint_streak_freeze_used_recently: joint.freeze_used_recently,
+      joint_streak_freeze_quota: joint.freeze_quota,
+    };
+  });
+
+  const first = buddies[0] ?? null;
+
+  res.json({
+    buddies,
+    // Backward compat: old mobile builds read buddy (singular) and top-level streak fields
+    buddy: first ? {
+      id: first.id,
+      buddy_user_id: first.buddy_user_id,
+      username: first.username,
+      display_name: first.display_name,
+      avatar_url: first.avatar_url,
+      habits: first.habits,
+    } : null,
     my_habits: myHabits,
-    my_show_missed: myShowMissed,
-    joint_streak: joint.streak,
-    joint_streak_alive_today: joint.alive_today,
-    joint_streak_at_risk: joint.at_risk,
-    joint_streak_freeze_used_recently: joint.freeze_used_recently,
-    joint_streak_freeze_quota: joint.freeze_quota,
+    my_show_missed: first?.my_show_missed ?? false,
+    joint_streak: first?.joint_streak ?? 0,
+    joint_streak_alive_today: first?.joint_streak_alive_today ?? false,
+    joint_streak_at_risk: first?.joint_streak_at_risk ?? false,
+    joint_streak_freeze_used_recently: first?.joint_streak_freeze_used_recently ?? false,
+    joint_streak_freeze_quota: first?.joint_streak_freeze_quota ?? 0,
     pending_requests: pending,
   });
 });

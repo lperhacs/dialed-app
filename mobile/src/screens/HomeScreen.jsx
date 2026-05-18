@@ -31,17 +31,16 @@ function EmptyFeed({ tab }) {
   );
 }
 
-function BuddyCard({ buddyData, onNudge, onPress, nudging }) {
+// buddy: a single entry from buddyData.buddies[] — contains habits + joint streak for this pair
+function BuddyCard({ buddy, onNudge, onPress, nudging }) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
-  const { buddy } = buddyData;
-  if (!buddy) return null;
 
   const totalHabits = buddy.habits?.length ?? 0;
   const loggedCount = buddy.habits?.filter(h => h.logged_today > 0).length ?? 0;
   const allLogged = loggedCount === totalHabits && totalHabits > 0;
-  const jointStreak = buddyData.joint_streak || 0;
-  const streakAtRisk = !!buddyData.joint_streak_at_risk;
+  const jointStreak = buddy.joint_streak || 0;
+  const streakAtRisk = !!buddy.joint_streak_at_risk;
 
   return (
     <TouchableOpacity style={styles.buddyCard} onPress={onPress} activeOpacity={0.85}>
@@ -103,7 +102,7 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [buddyData, setBuddyData] = useState(null);
-  const [nudging, setNudging] = useState(false);
+  const [nudgingIds, setNudgingIds] = useState({});
 
   const fetchPosts = useCallback(async (p = 1, t = tab, reset = false) => {
     const endpoint = t === 'following' ? `/posts?page=${p}` : `/posts/explore?page=${p}`;
@@ -126,16 +125,16 @@ export default function HomeScreen() {
     }, [tab])
   );
 
-  const handleNudge = async () => {
-    if (nudging || !buddyData?.buddy) return;
-    setNudging(true);
+  const handleNudge = async (buddyRowId, displayName) => {
+    if (nudgingIds[buddyRowId]) return;
+    setNudgingIds(prev => ({ ...prev, [buddyRowId]: true }));
     try {
-      await api.post(`/buddies/${buddyData.buddy.id}/nudge`);
-      Alert.alert('Nudge sent', `${buddyData.buddy.display_name} has been notified.`);
+      await api.post(`/buddies/${buddyRowId}/nudge`);
+      Alert.alert('Nudge sent', `${displayName} has been notified.`);
     } catch (err) {
       Alert.alert('Nudge', err.response?.data?.error || 'Could not send nudge');
     } finally {
-      setNudging(false);
+      setNudgingIds(prev => ({ ...prev, [buddyRowId]: false }));
     }
   };
 
@@ -220,15 +219,16 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* Buddy status card */}
-      {buddyData?.buddy && (
+      {/* Buddy status cards — one per active buddy */}
+      {(buddyData?.buddies ?? []).map(buddy => (
         <BuddyCard
-          buddyData={buddyData}
-          onNudge={handleNudge}
-          nudging={nudging}
-          onPress={() => navigation.navigate('UserProfile', { username: buddyData.buddy.username })}
+          key={buddy.id}
+          buddy={buddy}
+          onNudge={() => handleNudge(buddy.id, buddy.display_name)}
+          nudging={!!nudgingIds[buddy.id]}
+          onPress={() => navigation.navigate('UserProfile', { username: buddy.username })}
         />
-      )}
+      ))}
 
       {/* Normal feed */}
       {(

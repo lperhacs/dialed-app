@@ -345,52 +345,56 @@ export default function ProfileScreen({ route, routeUsername, isOwn }) {
         )}
       </View>
 
-      {/* Buddy card */}
+      {/* Buddy card — shows all active buddies */}
       {isSelf && buddyData && (
         <View style={styles.buddyCard}>
           <Ionicons name="people-outline" size={16} color={colors.accent} />
-          {buddyData.buddy ? (
-            <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                <Text style={styles.buddyName}>
-                  Buddy: <Text style={{ color: colors.text }}>{buddyData.buddy.display_name}</Text>
-                </Text>
-                {buddyData.joint_streak > 0 && (
-                  <View style={[
-                    { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10 },
-                    buddyData.joint_streak_at_risk
-                      ? { backgroundColor: 'rgba(245,158,11,0.15)' }
-                      : { backgroundColor: colors.accentDim },
-                  ]}>
-                    <Ionicons
-                      name="flame"
-                      size={11}
-                      color={buddyData.joint_streak_at_risk ? '#f59e0b' : colors.accent}
-                    />
-                    <Text style={{
-                      fontSize: 11, fontWeight: '700',
-                      color: buddyData.joint_streak_at_risk ? '#f59e0b' : colors.accent,
-                    }}>
-                      {buddyData.joint_streak}-day streak
+          {(buddyData.buddies ?? []).length > 0 ? (
+            <View style={{ flex: 1, gap: 8 }}>
+              {(buddyData.buddies ?? []).map(b => (
+                <View key={b.id}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <Text style={styles.buddyName}>
+                      Buddy: <Text style={{ color: colors.text }}>{b.display_name}</Text>
                     </Text>
+                    {b.joint_streak > 0 && (
+                      <View style={[
+                        { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10 },
+                        b.joint_streak_at_risk
+                          ? { backgroundColor: 'rgba(245,158,11,0.15)' }
+                          : { backgroundColor: colors.accentDim },
+                      ]}>
+                        <Ionicons
+                          name="flame"
+                          size={11}
+                          color={b.joint_streak_at_risk ? '#f59e0b' : colors.accent}
+                        />
+                        <Text style={{
+                          fontSize: 11, fontWeight: '700',
+                          color: b.joint_streak_at_risk ? '#f59e0b' : colors.accent,
+                        }}>
+                          {b.joint_streak}-day streak
+                        </Text>
+                      </View>
+                    )}
+                    {b.joint_streak_freeze_used_recently && (
+                      <View style={{
+                        flexDirection: 'row', alignItems: 'center', gap: 3,
+                        paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10,
+                        backgroundColor: colors.accentDim,
+                      }}>
+                        <Ionicons name="snow-outline" size={11} color={colors.accent} />
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: colors.accent }}>
+                          freeze used
+                        </Text>
+                      </View>
+                    )}
                   </View>
-                )}
-                {buddyData.joint_streak_freeze_used_recently && (
-                  <View style={{
-                    flexDirection: 'row', alignItems: 'center', gap: 3,
-                    paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10,
-                    backgroundColor: colors.accentDim,
-                  }}>
-                    <Ionicons name="snow-outline" size={11} color={colors.accent} />
-                    <Text style={{ fontSize: 11, fontWeight: '700', color: colors.accent }}>
-                      freeze used
-                    </Text>
-                  </View>
-                )}
-              </View>
-              <Text style={styles.buddyMeta}>
-                {(buddyData.buddy.habits ?? []).filter(h => h.logged_today > 0).length}/{(buddyData.buddy.habits ?? []).length} habits logged today
-              </Text>
+                  <Text style={styles.buddyMeta}>
+                    {(b.habits ?? []).filter(h => h.logged_today > 0).length}/{(b.habits ?? []).length} habits logged today
+                  </Text>
+                </View>
+              ))}
             </View>
           ) : (
             <Text style={styles.buddyMeta}>No buddy yet - tap "Buddy up" on someone's profile</Text>
