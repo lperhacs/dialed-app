@@ -858,25 +858,29 @@ export default function HabitsScreen() {
 
 
   const load = useCallback(async () => {
-    const { data } = await api.get('/habits');
-    // Multi-reminder is a Pro feature. If a user downgrades, trim each habit
-    // back to its first reminder so the local OS schedule doesn't keep firing
-    // 5x/day after the entitlement lapses. Server still returns the full list,
-    // so we trim client-side for both display and OS sync.
-    let trimmed = data;
-    if (!isPro && Array.isArray(data)) {
-      trimmed = data.map(h => {
-        if (Array.isArray(h.reminders) && h.reminders.length > 1) {
-          return { ...h, reminders: h.reminders.slice(0, 1) };
-        }
-        return h;
-      });
-    }
-    setHabits(trimmed);
-    syncAllHabitReminders(trimmed);
-    if (trimmed.length === 0) {
-      const seen = await AsyncStorage.getItem(HABIT_NUDGE_KEY);
-      if (!seen) setShowNudge(true);
+    try {
+      const { data } = await api.get('/habits');
+      // Multi-reminder is a Pro feature. If a user downgrades, trim each habit
+      // back to its first reminder so the local OS schedule doesn't keep firing
+      // 5x/day after the entitlement lapses. Server still returns the full list,
+      // so we trim client-side for both display and OS sync.
+      let trimmed = data;
+      if (!isPro && Array.isArray(data)) {
+        trimmed = data.map(h => {
+          if (Array.isArray(h.reminders) && h.reminders.length > 1) {
+            return { ...h, reminders: h.reminders.slice(0, 1) };
+          }
+          return h;
+        });
+      }
+      setHabits(trimmed);
+      syncAllHabitReminders(trimmed);
+      if (trimmed.length === 0) {
+        const seen = await AsyncStorage.getItem(HABIT_NUDGE_KEY);
+        if (!seen) setShowNudge(true);
+      }
+    } catch (err) {
+      console.warn('[HabitsScreen] load failed:', err);
     }
   }, [isPro]);
 

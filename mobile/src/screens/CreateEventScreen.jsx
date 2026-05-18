@@ -101,7 +101,7 @@ export default function CreateEventScreen() {
         if (locationLat != null) form.append('latitude', String(locationLat));
         if (locationLng != null) form.append('longitude', String(locationLng));
         form.append('image', { uri: coverPhoto.uri, type: coverPhoto.type, name: coverPhoto.name });
-        await api.post('/events', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+        await api.post('/events', form);
       } else {
         await api.post('/events', {
           title: title.trim(),

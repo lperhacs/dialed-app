@@ -4,6 +4,10 @@ import { Platform } from 'react-native';
 import { API_BASE_URL } from '../theme';
 import { scheduleLogoutNotification } from '../utils/notifications';
 
+// ── Unauthorized handler (registered by AuthContext to avoid circular deps) ───
+let _onUnauthorized = null;
+export function registerUnauthorizedHandler(fn) { _onUnauthorized = fn; }
+
 // ── In-memory GET cache ───────────────────────────────────────────────────────
 // Keyed by full URL. Only GET requests. TTLs in milliseconds.
 const CACHE_TTLS = {
@@ -78,7 +82,7 @@ api.interceptors.response.use(
     if (err.response?.status === 401) {
       await AsyncStorage.multiRemove(['dialed_token', 'dialed_user']);
       scheduleLogoutNotification(); // fire and forget — tells user they were signed out
-      // AuthContext will detect the missing token on next render
+      if (_onUnauthorized) _onUnauthorized();
     }
     return Promise.reject(err);
   }

@@ -56,7 +56,7 @@ function getBulkStreakData(db, userIds) {
 router.get('/global', authMiddleware, (req, res) => {
   const db = getDb();
   const users = db.prepare(
-    'SELECT id, username, display_name, avatar_url FROM users LIMIT 100'
+    'SELECT id, username, display_name, avatar_url FROM users WHERE (is_deactivated IS NULL OR is_deactivated = 0) LIMIT 100'
   ).all();
 
   const streakMap = getBulkStreakData(db, users.map(u => u.id));

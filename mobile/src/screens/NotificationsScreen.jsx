@@ -184,6 +184,7 @@ export default function NotificationsScreen() {
   useEffect(() => {
     api.get('/notifications')
       .then(r => setNotifications(groupNotifications(r.data.notifications)))
+      .catch(() => {})
       .finally(() => setLoading(false));
 
     const markReadTimer = setTimeout(() => {

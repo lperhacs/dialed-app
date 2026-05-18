@@ -283,7 +283,10 @@ router.post('/conversations/:id/messages', authMiddleware, upload.single('image'
   const member = db.prepare(
     'SELECT 1 FROM conversation_participants WHERE conversation_id = ? AND user_id = ?'
   ).get(req.params.id, req.user.id);
-  if (!member) return res.status(403).json({ error: 'Not a participant' });
+  if (!member) {
+    if (req.file) { const fs = require('fs'); fs.unlink(req.file.path, () => {}); }
+    return res.status(403).json({ error: 'Not a participant' });
+  }
 
   // Validate shared content exists before inserting
   if (post_id) {

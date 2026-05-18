@@ -36,7 +36,7 @@ function buildPostQuery(whereClause, userId) {
       (SELECT COUNT(*) FROM cheers WHERE post_id = p.id) as cheer_count,
       h.name as habit_name, h.color as habit_color, h.frequency as habit_frequency
     FROM posts p
-    JOIN users u ON u.id = p.user_id
+    JOIN users u ON u.id = p.user_id AND (u.is_deactivated IS NULL OR u.is_deactivated = 0)
     LEFT JOIN habits h ON h.id = p.habit_id
     ${whereClause}
     ORDER BY p.created_at DESC

@@ -16,10 +16,11 @@ async function runMonthlyHabitReminders() {
   const now = new Date();
   const currentPeriod = getPeriodKey(now, 'monthly'); // e.g. "2026-04"
 
-  // All active monthly habits
+  // All active monthly habits for users who have a push token
   const habits = db.prepare(`
     SELECT h.id, h.name, h.user_id, h.target_count
     FROM habits h
+    JOIN users u ON u.id = h.user_id AND u.push_token IS NOT NULL
     WHERE h.is_active = 1
       AND h.frequency = 'monthly'
   `).all();

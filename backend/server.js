@@ -59,6 +59,14 @@ const otpLimiter = rateLimit({
   message: { error: 'Too many OTP requests, please try again later.' },
 });
 
+const proAdminLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many attempts.' },
+});
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Serve uploads from the same directory the upload middleware writes to
@@ -90,7 +98,7 @@ app.use('/api/buddies',       writeOnly(writeLimiter),  require('./routes/buddie
 app.use('/api/recap',                                   require('./routes/recap'));
 app.use('/api/cron',                                    require('./routes/cron'));
 app.use('/api/analytics',                               require('./routes/analytics'));
-app.use('/api/pro',           writeOnly(writeLimiter),  require('./routes/pro'));
+app.use('/api/pro',           proAdminLimiter,          require('./routes/pro'));
 
 // Health check
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', app: 'Dialed' }));

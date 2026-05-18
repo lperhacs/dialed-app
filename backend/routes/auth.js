@@ -1,6 +1,6 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const { randomInt } = require('crypto');
+const { randomInt, timingSafeEqual } = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../database/db');
 const { generateToken, authMiddleware } = require('../middleware/auth');
@@ -110,19 +110,21 @@ router.post('/login', (req, res) => {
   }
 
   const db = getDb();
-  const user = db.prepare('SELECT * FROM users WHERE username = ? OR email = ?').get(
+  const userRow = db.prepare('SELECT id, username, password_hash, token_version FROM users WHERE username = ? OR email = ?').get(
     username.toLowerCase(),
     username.toLowerCase()
   );
 
-  if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+  if (!userRow || !bcrypt.compareSync(password, userRow.password_hash)) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
-  const { password_hash: _, ...safeUser } = user;
-  const token = generateToken(safeUser);
-  trackEvent(safeUser.id, 'user_login', {}, metaFromReq(req));
-  res.json({ token, user: safeUser });
+  const user = db.prepare(
+    'SELECT id, username, email, display_name, bio, avatar_url, location, rsvp_private, buddy_visibility, email_verified, is_pro, streak_freezes, pro_expires_at, created_at FROM users WHERE id = ?'
+  ).get(userRow.id);
+  const token = generateToken({ id: userRow.id, username: userRow.username, token_version: userRow.token_version });
+  trackEvent(userRow.id, 'user_login', {}, metaFromReq(req));
+  res.json({ token, user });
 });
 
 // GET /api/auth/me
@@ -187,21 +189,20 @@ router.post('/verify-email', authMiddleware, (req, res) => {
     return res.status(400).json({ error: 'Code expired. Please request a new one.' });
   }
 
-  if (record.code !== code.toString().trim()) {
+  const inputBuf = Buffer.from(code.toString().trim().padEnd(10));
+  const storedBuf = Buffer.from(record.code.padEnd(10));
+  if (!timingSafeEqual(inputBuf, storedBuf)) {
     // Atomic increment guarded by attempts < 5 — prevents parallel-request race
     // where two concurrent wrong-code submissions both read attempts=4 and bypass the cap.
     const upd = db.prepare(
       'UPDATE email_verifications SET attempts = attempts + 1 WHERE id = ? AND attempts < 5'
     ).run(record.id);
     if (upd.changes === 0) {
+      // Atomic guard blocked it — attempts was already ≥5.
       db.prepare('DELETE FROM email_verifications WHERE user_id = ?').run(req.user.id);
       return res.status(429).json({ error: 'Too many attempts. Please request a new code.' });
     }
-    const after = db.prepare('SELECT attempts FROM email_verifications WHERE id = ?').get(record.id);
-    if (after && after.attempts >= 5) {
-      db.prepare('DELETE FROM email_verifications WHERE user_id = ?').run(req.user.id);
-      return res.status(429).json({ error: 'Too many attempts. Please request a new code.' });
-    }
+    // Code was wrong but attempts < 5 still — just reject, do not re-read.
     return res.status(400).json({ error: 'Incorrect code.' });
   }
 
@@ -293,20 +294,19 @@ router.post('/reset-password', (req, res) => {
     return genericInvalid();
   }
 
-  if (record.code !== String(code).trim()) {
+  const resetInputBuf = Buffer.from(String(code).trim().padEnd(10));
+  const resetStoredBuf = Buffer.from(record.code.padEnd(10));
+  if (!timingSafeEqual(resetInputBuf, resetStoredBuf)) {
     // Atomic guarded increment — see verify-email for rationale.
     const upd = db.prepare(
       'UPDATE password_resets SET attempts = attempts + 1 WHERE id = ? AND attempts < 5'
     ).run(record.id);
     if (upd.changes === 0) {
+      // Atomic guard blocked it — attempts was already ≥5.
       db.prepare('DELETE FROM password_resets WHERE user_id = ?').run(user.id);
       return res.status(429).json({ error: 'Too many attempts. Please request a new code.' });
     }
-    const after = db.prepare('SELECT attempts FROM password_resets WHERE id = ?').get(record.id);
-    if (after && after.attempts >= 5) {
-      db.prepare('DELETE FROM password_resets WHERE user_id = ?').run(user.id);
-      return res.status(429).json({ error: 'Too many attempts. Please request a new code.' });
-    }
+    // Code was wrong but attempts < 5 still — just reject, do not re-read.
     return genericInvalid();
   }
 
@@ -386,15 +386,7 @@ router.post('/verify-otp', authMiddleware, (req, res) => {
   }
   db.prepare('DELETE FROM phone_otps WHERE phone = ?').run(cleaned);
 
-  // Return a handful of suggested users to follow (contact-matched users would be filtered here
-  // once phone numbers are stored on user profiles)
-  const suggested = db.prepare(`
-    SELECT id, username, display_name, avatar_url FROM users
-    WHERE id != ?
-    ORDER BY created_at DESC LIMIT 10
-  `).all(req.user.id);
-
-  res.json({ verified: true, suggested });
+  res.json({ verified: true });
 });
 
 module.exports = router;

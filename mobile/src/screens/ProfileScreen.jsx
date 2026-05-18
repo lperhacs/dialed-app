@@ -48,29 +48,35 @@ export default function ProfileScreen({ route, routeUsername, isOwn }) {
   const [buddyId, setBuddyId] = useState(null); // buddy row id when pending/active
   const [buddyData, setBuddyData] = useState(null); // for own profile
   const [buddyLoading, setBuddyLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   const isSelf = me?.username === username;
 
   const load = useCallback(async () => {
-    const [p, pp, ph] = await Promise.all([
-      api.get(`/users/${username}`),
-      api.get(`/users/${username}/posts`),
-      api.get(`/users/${username}/habits`),
-    ]);
-    setProfile(p.data);
-    setPosts(pp.data);
-    setHabits(ph.data);
-    setFollowing(p.data.is_following);
-    api.get(`/users/${username}/badges`)
-      .then(r => { setAllBadges(r.data.all || []); setEarnedBadges(r.data.earned || []); })
-      .catch(() => {});
-    // Buddy data
-    if (me?.username === username) {
-      api.get('/buddies').then(r => setBuddyData(r.data)).catch(() => {});
-    } else {
-      api.get(`/buddies/status/${p.data.id}`)
-        .then(r => { setBuddyStatus(r.data.status); setBuddyId(r.data.id || null); })
+    setLoadError(false);
+    try {
+      const [p, pp, ph] = await Promise.all([
+        api.get(`/users/${username}`),
+        api.get(`/users/${username}/posts`),
+        api.get(`/users/${username}/habits`),
+      ]);
+      setProfile(p.data);
+      setPosts(pp.data);
+      setHabits(ph.data);
+      setFollowing(p.data.is_following);
+      api.get(`/users/${username}/badges`)
+        .then(r => { setAllBadges(r.data.all || []); setEarnedBadges(r.data.earned || []); })
         .catch(() => {});
+      // Buddy data
+      if (me?.username === username) {
+        api.get('/buddies').then(r => setBuddyData(r.data)).catch(() => {});
+      } else {
+        api.get(`/buddies/status/${p.data.id}`)
+          .then(r => { setBuddyStatus(r.data.status); setBuddyId(r.data.id || null); })
+          .catch(() => {});
+      }
+    } catch (err) {
+      setLoadError(true);
     }
   }, [username]);
 
@@ -133,19 +139,22 @@ export default function ProfileScreen({ route, routeUsername, isOwn }) {
   };
 
   const toggleFollow = async () => {
+    const prev = following;
     setFollowLoading(true);
+    setFollowing(!prev);
+    setProfile(p => ({ ...p, follower_count: p.follower_count + (prev ? -1 : 1) }));
     try {
-      if (following) {
+      if (prev) {
         await api.delete(`/users/${profile.id}/follow`);
-        setFollowing(false);
-        setProfile(p => ({ ...p, follower_count: p.follower_count - 1 }));
       } else {
         await api.post(`/users/${profile.id}/follow`);
-        setFollowing(true);
-        setProfile(p => ({ ...p, follower_count: p.follower_count + 1 }));
       }
       // Bust the cached profile so a refresh returns fresh is_following state
       invalidateCache(`/users/${username}`);
+    } catch (err) {
+      setFollowing(prev);
+      setProfile(p => ({ ...p, follower_count: p.follower_count + (prev ? 1 : -1) }));
+      Alert.alert('Error', 'Could not update follow status. Please try again.');
     } finally {
       setFollowLoading(false);
     }
@@ -162,7 +171,13 @@ export default function ProfileScreen({ route, routeUsername, isOwn }) {
   if (!profile) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', paddingTop: insets.top }]}>
-        <Text style={{ color: colors.textMuted }}>User not found</Text>
+        {loadError ? (
+          <TouchableOpacity onPress={() => { setLoading(true); load().finally(() => setLoading(false)); }} activeOpacity={0.7}>
+            <Text style={{ color: colors.textMuted, textAlign: 'center' }}>Could not load profile. Tap to retry.</Text>
+          </TouchableOpacity>
+        ) : (
+          <Text style={{ color: colors.textMuted }}>User not found</Text>
+        )}
       </View>
     );
   }
@@ -557,7 +572,7 @@ export default function ProfileScreen({ route, routeUsername, isOwn }) {
         data={listData}
         extraData={[following, followLoading, buddyStatus, buddyLoading, tab]}
         renderItem={renderItem}
-        keyExtractor={item => item.id}
+        keyExtractor={item => String(item.id)}
         ListHeaderComponent={ListHeader}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />}
@@ -705,7 +720,7 @@ function EditProfileModal({ visible, profile, onClose, onSaved }) {
       formData.append('display_name', displayName.trim());
       formData.append('username', username.trim().toLowerCase());
       formData.append('bio', bio);
-      const { data } = await api.put('/users/profile', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+      const { data } = await api.put('/users/profile', formData);
 
       const merged = { ...data, avatar_url: latestAvatarUrl };
       updateUser?.(merged);

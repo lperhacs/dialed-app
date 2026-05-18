@@ -300,9 +300,7 @@ export default function ConversationScreen({ route }) {
           type: 'image/jpeg',
           name: 'photo.jpg',
         });
-        const res = await api.post(`/dm/conversations/${conversationId}/messages`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
+        const res = await api.post(`/dm/conversations/${conversationId}/messages`, formData);
         data = res.data;
       } else {
         const res = await api.post(`/dm/conversations/${conversationId}/messages`, { content });
@@ -332,7 +330,7 @@ export default function ConversationScreen({ route }) {
       <FlatList
         ref={listRef}
         data={messages}
-        keyExtractor={item => item.id}
+        keyExtractor={item => String(item.id)}
         contentContainerStyle={{ padding: spacing.md, gap: 6, paddingBottom: 12 }}
         showsVerticalScrollIndicator={false}
         onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}

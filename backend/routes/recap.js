@@ -15,7 +15,13 @@ router.get('/weekly', authMiddleware, (req, res) => {
   } else {
     bounds = currentIsoWeekBounds();
   }
-  res.json(buildWeeklyRecap(db, req.user.id, bounds.weekStart, bounds.weekEnd));
+  try {
+    const recap = buildWeeklyRecap(db, req.user.id, bounds.weekStart, bounds.weekEnd);
+    res.json(recap);
+  } catch (err) {
+    console.error('[Recap] failed:', err);
+    res.status(500).json({ error: 'Could not generate recap.' });
+  }
 });
 
 module.exports = router;

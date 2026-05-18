@@ -136,6 +136,7 @@ export default function CommentsScreen({ route }) {
   useEffect(() => {
     api.get(`/posts/${postId}/comments`)
       .then(r => setComments(r.data))
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, [postId]);
 

@@ -184,16 +184,24 @@ router.put('/profile', authMiddleware, upload.single('avatar'), (req, res) => {
   const { display_name, bio, featured_habit_id, username, buddy_visibility } = req.body;
   const avatar_url = req.file ? `/uploads/${req.file.filename}` : undefined;
 
+  // Helper: discard the just-uploaded file when a validation error aborts the request
+  const cleanupUpload = () => {
+    if (req.file) fs.unlink(req.file.path, () => {});
+  };
+
   if (display_name !== undefined && display_name.trim().length > 50) {
+    cleanupUpload();
     return res.status(400).json({ error: 'Display name must be 50 characters or fewer' });
   }
   if (bio !== undefined && bio.trim().length > 300) {
+    cleanupUpload();
     return res.status(400).json({ error: 'Bio must be 300 characters or fewer' });
   }
 
   // Validate username format up front (was previously skipped on this legacy route,
   // letting through spaces/emoji/length-1 names that broke search & profile lookups).
   if (username?.trim() && !/^[a-zA-Z0-9_]{3,20}$/.test(username.trim())) {
+    cleanupUpload();
     return res.status(400).json({ error: 'Username must be 3-20 alphanumeric characters or underscores' });
   }
 
@@ -212,7 +220,7 @@ router.put('/profile', authMiddleware, upload.single('avatar'), (req, res) => {
   if (avatar_url) { updates.push('avatar_url = ?'); values.push(avatar_url); }
   if (username?.trim()) {
     const taken = db.prepare('SELECT id FROM users WHERE username = ? AND id != ?').get(username.trim().toLowerCase(), req.user.id);
-    if (taken) return res.status(400).json({ error: 'Username already taken' });
+    if (taken) { cleanupUpload(); return res.status(400).json({ error: 'Username already taken' }); }
     updates.push('username = ?'); values.push(username.trim().toLowerCase());
   }
   if (buddy_visibility !== undefined) {
@@ -403,6 +411,15 @@ router.get('/:username/posts', optionalAuth, (req, res) => {
   if (!user) return res.status(404).json({ error: 'User not found' });
 
   const viewerId = req.user?.id ?? null;
+  const isOwner = viewerId === user.id;
+
+  // Public viewers (unauthenticated or not the profile owner) only see posts
+  // whose linked habit has public visibility (or posts with no habit at all).
+  // The owner always sees all their own posts.
+  const visibilityFilter = isOwner
+    ? ''
+    : 'AND (p.habit_id IS NULL OR h.visibility_missed = \'public\')';
+
   const posts = db.prepare(
     `SELECT p.*, u.username, u.display_name, u.avatar_url,
        (SELECT COUNT(*) FROM likes WHERE post_id = p.id) as like_count,
@@ -412,7 +429,7 @@ router.get('/:username/posts', optionalAuth, (req, res) => {
      FROM posts p
      JOIN users u ON u.id = p.user_id
      LEFT JOIN habits h ON h.id = p.habit_id
-     WHERE p.user_id = ?
+     WHERE p.user_id = ? ${visibilityFilter}
      ORDER BY p.created_at DESC LIMIT 30`
   ).all(viewerId, user.id);
 
@@ -715,7 +732,20 @@ router.post('/me/email/confirm', authMiddleware, (req, res) => {
     db.prepare('DELETE FROM email_verifications WHERE user_id = ?').run(req.user.id);
     return res.status(400).json({ error: 'Code expired. Please restart the process.' });
   }
-  if (record.code !== code.toString()) return res.status(400).json({ error: 'Invalid code' });
+  // Lockout after 5 failed attempts
+  if (record.attempts >= 5) {
+    db.prepare('DELETE FROM email_verifications WHERE user_id = ?').run(req.user.id);
+    return res.status(429).json({ error: 'Too many attempts. Please restart the process.' });
+  }
+  if (record.code !== code.toString()) {
+    // Increment attempt counter; if we've now hit the limit, delete and lock out
+    const upd = db.prepare('UPDATE email_verifications SET attempts = attempts + 1 WHERE id = ? AND attempts < 5').run(record.id);
+    if (upd.changes === 0) {
+      db.prepare('DELETE FROM email_verifications WHERE user_id = ?').run(req.user.id);
+      return res.status(429).json({ error: 'Too many attempts. Please restart the process.' });
+    }
+    return res.status(400).json({ error: 'Invalid code' });
+  }
 
   // Bump token_version to invalidate older tokens after the email change, then issue a fresh one
   // for this client so it doesn't get logged out immediately.

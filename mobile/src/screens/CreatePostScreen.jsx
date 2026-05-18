@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api, { invalidateCache } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
@@ -24,6 +25,7 @@ export default function CreatePostScreen() {
   const navigation = useNavigation();
   const route = useRoute();
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
   const [content, setContent] = useState(route.params?.draft || '');
   const { suggestions: mentionSuggestions, onChangeText: onMentionChangeText, pickMention } = useMentionInput(content, setContent);
   // Multi-image support
@@ -386,7 +388,7 @@ export default function CreatePostScreen() {
       </ScrollView>
 
       {/* Toolbar */}
-      <View style={styles.toolbar}>
+      <View style={[styles.toolbar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
         <TouchableOpacity onPress={showPhotoOptions} style={styles.toolBtn} activeOpacity={0.7}>
           <Ionicons name="image-outline" size={18} color={colors.textMuted} />
           <Text style={styles.toolLabel}>

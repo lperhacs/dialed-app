@@ -58,7 +58,7 @@ router.get('/status', authMiddleware, (req, res) => {
 // POST /api/pro/grant — called by RevenueCat webhook or dev testing
 // Requires server-to-server key: Authorization: Bearer <PRO_SERVER_KEY>
 router.post('/grant', (req, res) => {
-  const key = (req.headers.authorization || '').replace('Bearer ', '');
+  const key = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
   if (!timingSafeStringEqual(key, process.env.PRO_SERVER_KEY)) {
     return res.status(403).json({ error: 'Forbidden' });
   }
@@ -88,7 +88,7 @@ router.post('/grant', (req, res) => {
 
 // POST /api/pro/grant-all — grant annual pro to every user (beta use only)
 router.post('/grant-all', (req, res) => {
-  const key = (req.headers.authorization || '').replace('Bearer ', '');
+  const key = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
   if (!timingSafeStringEqual(key, process.env.PRO_SERVER_KEY)) {
     return res.status(403).json({ error: 'Forbidden' });
   }

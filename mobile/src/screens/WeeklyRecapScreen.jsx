@@ -27,6 +27,7 @@ export default function WeeklyRecapScreen() {
     const url = week ? `/recap/weekly?week=${encodeURIComponent(week)}` : '/recap/weekly';
     api.get(url)
       .then(r => setRecap(r.data))
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, [week]);
 

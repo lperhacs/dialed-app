@@ -16,6 +16,7 @@ import ProfileScreen from '../screens/ProfileScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 import InboxScreen from '../screens/InboxScreen';
 import SearchScreen from '../screens/SearchScreen';
+import EventsScreen from '../screens/EventsScreen';
 
 import { Ionicons } from '@expo/vector-icons';
 import { radius } from '../theme';
@@ -43,6 +44,7 @@ function HomeStackNavigator() {
       <HomeStack.Screen name="Inbox" component={InboxScreen} options={{ headerShown: false }} />
       <HomeStack.Screen name="WeeklyRecap" component={WeeklyRecapScreen} options={{ headerShown: false }} />
       <HomeStack.Screen name="Search" component={SearchScreen} options={{ headerShown: false }} />
+      <HomeStack.Screen name="Events" component={EventsScreen} options={{ headerShown: false }} />
     </HomeStack.Navigator>
   );
 }

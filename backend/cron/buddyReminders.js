@@ -234,7 +234,7 @@ async function runMissedHabitAutoPost() {
       try {
         const alreadyPosted = db.prepare(`
           SELECT 1 FROM posts WHERE user_id = ? AND type = 'missed_habit'
-            AND date(created_at) = date('now')
+            AND created_at > datetime('now', '-24 hours')
         `).get(userId);
 
         if (!alreadyPosted) {

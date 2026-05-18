@@ -132,16 +132,23 @@ router.get('/club/:clubId', authMiddleware, (req, res) => {
 
 // POST /api/events — create an event
 router.post('/', authMiddleware, upload.single('image'), (req, res) => {
+  // Helper: discard the uploaded cover image when a validation error aborts the request
+  const cleanupUpload = () => {
+    if (req.file) { const fs = require('fs'); fs.unlink(req.file.path, () => {}); }
+  };
+
   const { title, description, event_date, event_time, location, is_public, club_id, latitude, longitude } = req.body;
-  if (!title?.trim()) return res.status(400).json({ error: 'Title is required' });
-  if (!event_date) return res.status(400).json({ error: 'Event date is required' });
-  if (title.trim().length > 200) return res.status(400).json({ error: 'Title must be 200 characters or fewer' });
-  if (description && description.length > 2000) return res.status(400).json({ error: 'Description must be 2000 characters or fewer' });
-  if (location && location.trim().length > 200) return res.status(400).json({ error: 'Location must be 200 characters or fewer' });
+  if (!title?.trim()) { cleanupUpload(); return res.status(400).json({ error: 'Title is required' }); }
+  if (!event_date) { cleanupUpload(); return res.status(400).json({ error: 'Event date is required' }); }
+  if (title.trim().length > 200) { cleanupUpload(); return res.status(400).json({ error: 'Title must be 200 characters or fewer' }); }
+  if (description && description.length > 2000) { cleanupUpload(); return res.status(400).json({ error: 'Description must be 2000 characters or fewer' }); }
+  if (location && location.trim().length > 200) { cleanupUpload(); return res.status(400).json({ error: 'Location must be 200 characters or fewer' }); }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(event_date) || isNaN(new Date(event_date).getTime())) {
+    cleanupUpload();
     return res.status(400).json({ error: 'Invalid event date format (YYYY-MM-DD required)' });
   }
   if (event_time && !/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(event_time)) {
+    cleanupUpload();
     return res.status(400).json({ error: 'Invalid event_time format (HH:MM or HH:MM:SS required)' });
   }
 
@@ -154,11 +161,11 @@ router.post('/', authMiddleware, upload.single('image'), (req, res) => {
   // Verify club exists and user is a member
   if (club_id) {
     const club = db.prepare('SELECT id FROM challenges WHERE id = ?').get(club_id);
-    if (!club) return res.status(404).json({ error: 'Club not found' });
+    if (!club) { cleanupUpload(); return res.status(404).json({ error: 'Club not found' }); }
     const membership = db.prepare(
       "SELECT 1 FROM challenge_members WHERE challenge_id = ? AND user_id = ? AND status = 'active'"
     ).get(club_id, req.user.id);
-    if (!membership) return res.status(403).json({ error: 'You must be a member of that club' });
+    if (!membership) { cleanupUpload(); return res.status(403).json({ error: 'You must be a member of that club' }); }
   }
 
   // Idempotency: block duplicate submissions within 10 seconds

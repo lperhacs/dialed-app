@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import api from '../api/client';
+import api, { registerUnauthorizedHandler } from '../api/client';
 import { registerPushToken } from '../utils/notifications';
 
 const AuthContext = createContext(null);
@@ -32,6 +32,10 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
+    // Register 401 handler so the interceptor in client.js can update React
+    // auth state immediately, rather than waiting for the next render cycle.
+    registerUnauthorizedHandler(() => setUser(null));
+
     // Seed user state from storage first (instant), then verify with server
     const init = async () => {
       try {

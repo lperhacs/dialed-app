@@ -142,7 +142,7 @@ export default function InboxScreen() {
       ) : (
         <FlatList
           data={convs}
-          keyExtractor={item => item.id}
+          keyExtractor={item => String(item.id)}
           renderItem={({ item }) => <ConvRow conv={item} />}
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />}
@@ -179,7 +179,7 @@ export default function InboxScreen() {
           </View>
           <FlatList
             data={searchResults}
-            keyExtractor={item => item.id}
+            keyExtractor={item => String(item.id)}
             renderItem={({ item }) => (
               <TouchableOpacity
                 style={styles.userRow}

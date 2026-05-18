@@ -16,7 +16,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   TextInput, Switch, Alert, ActivityIndicator, Modal,
-  KeyboardAvoidingView, Platform,
+  KeyboardAvoidingView, Platform, Image,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -145,9 +145,7 @@ function EditProfileModal({ visible, onClose, user, onSaved }) {
           {/* Avatar */}
           <View style={styles.avatarEditWrap}>
             {avatarUri ? (
-              <View style={[styles.avatarPreview, { backgroundColor: colors.bgHover }]}>
-                <Text style={{ color: colors.textMuted, fontSize: 11 }}>Preview</Text>
-              </View>
+              <Image source={{ uri: avatarUri }} style={styles.avatarPreview} resizeMode="cover" />
             ) : (
               <Avatar user={user} size="xl" />
             )}

@@ -22,7 +22,7 @@ const MIME_EXT = {
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
   filename: (_req, file, cb) => {
-    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    const unique = `${Date.now()}-${require('crypto').randomBytes(16).toString('hex')}`;
     const ext = MIME_EXT[file.mimetype] || '.jpg';
     cb(null, unique + ext);
   },
