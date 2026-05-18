@@ -5,6 +5,10 @@ const helmet = require('helmet');
 const path = require('path');
 
 const app = express();
+// Railway (and most PaaS) sits behind a proxy that sets X-Forwarded-For.
+// Without this, express-rate-limit throws a ValidationError and blocks all
+// rate-limited routes (including /auth/forgot-password).
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3001;
 
 // ── CORS ─────────────────────────────────────────────────────────────────────
