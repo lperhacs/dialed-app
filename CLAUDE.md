@@ -1,6 +1,6 @@
 # Dialed Brain
 *Shared project context for Claude Code and Cowork — update after every session*
-*Last updated: May 7, 2026*
+*Last updated: May 18, 2026*
 
 ## Core retention values
 *The behaviors and feelings that, if present, predict a user sticks. Every feature decision should serve at least one.*
@@ -56,7 +56,7 @@ Think Strava meets a gym buddy.
 ### Infrastructure
 - GitHub — source control
 - Railway — backend + SQLite hosting
-- Expo EAS (local builds only during beta) — mobile build pipeline
+- Expo EAS (cloud builds, EAS Premium) — mobile build pipeline
 - Apple TestFlight — beta distribution
 
 ## Active decisions and rationale
@@ -92,8 +92,7 @@ Think Strava meets a gym buddy.
 - Open to public or remove TestFlight gate
 - Change JWT signing format / payload shape (existing TestFlight tokens would break;
   current tokens use `token_version` for selective invalidation on password change)
-- Use EAS cloud builds (expo.dev) — during beta all builds are local (`eas build --local`).
-  Switch to cloud only when approaching public launch.
+- ~~Use EAS cloud builds (expo.dev) — during beta all builds are local.~~ **Switched to EAS cloud builds May 18, 2026** — EAS Premium active, use `eas build --platform ios --profile production --auto-submit` from `mobile/`.
 
 ## Feature development rules
 - **Build when asked** — if the user asks for a feature, build it immediately. No pushback.
@@ -103,6 +102,12 @@ Think Strava meets a gym buddy.
   Do not ship a feature with known gaps or untested paths.
 
 ## Strategy session log
+### May 13, 2026 — Build 50 (keyboard toolbar fix + photo upload fix + Xcode 26 build fix)
+- **Photo/video toolbar hidden under iOS QuickType bar**: manual `keyboardHeight` paddingBottom approach was unreliable on iOS. Restored `KeyboardAvoidingView` with `behavior="padding"` in CreatePostScreen.
+- **Photos not attaching to posts**: explicit `Content-Type: 'multipart/form-data'` header without a boundary breaks multipart parsing in RN 0.76+ New Architecture. Fixed by removing the explicit header and letting the native layer inject the boundary automatically.
+- **EAS local build failing (Xcode 26 / Apple Clang 17+)**: `fmt` library build error — `call to consteval function ... is not a constant expression`. Root cause: in C++20 mode `__cpp_consteval` is defined, so `fmt/base.h` sets `FMT_USE_CONSTEVAL=1` via the `__cpp_consteval` branch. EAS runs `expo prebuild` which regenerates `ios/` from scratch, so Podfile patches are wiped. Fixed with a `postinstall` npm script (`scripts/patch-fmt-xcode26.js`) that patches `node_modules/react-native/scripts/react_native_pods.rb` to inject a fmt override block inside `react_native_post_install`. This survives the prebuild cycle. The override forces `FMT_USE_CONSTEVAL=0` on `apple_build_version >= 17000000` after the detection ladder runs.
+- **Key lesson**: EAS local builds always run `expo prebuild`, which wipes and regenerates `ios/`. Any iOS-level patch must go through npm postinstall (targeting node_modules) or an Expo config plugin — not direct Podfile edits.
+
 ### May 7, 2026 — Builds 33–34 (audit fixes + photo post bug + carousel dots)
 - Full end-to-end audit run (builds 33–34). Key bugs found and fixed:
 - **Photo posts with habits → 500 server error** (CRITICAL): Mobile was appending both `images` (array) and `image` (single) fields. `upload.array('images')` throws `LIMIT_UNEXPECTED_FILE` on any unexpected field name. Fixed by switching backend to `upload.fields([{name:'images',maxCount:10},{name:'image',maxCount:1}])` with deduplication.
