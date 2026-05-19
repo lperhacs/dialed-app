@@ -98,6 +98,7 @@ app.use('/api/buddies',       writeOnly(writeLimiter),  require('./routes/buddie
 app.use('/api/recap',                                   require('./routes/recap'));
 app.use('/api/cron',                                    require('./routes/cron'));
 app.use('/api/analytics',                               require('./routes/analytics'));
+app.use('/api/waitlist',                                require('./routes/waitlist'));
 app.use('/api/pro',           proAdminLimiter,          require('./routes/pro'));
 
 // Health check

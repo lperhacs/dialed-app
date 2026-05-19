@@ -1337,10 +1337,9 @@
       <h2 class="cta-title reveal">Ready to get<br><em>dialed in?</em></h2>
       <p class="cta-sub reveal">Dialed is in early testing. Drop your email and we'll notify you the moment it's live on the App Store.</p>
       <div class="reveal">
-        <form class="apply-form" id="applyForm" name="alpha-applications" netlify onsubmit="handleApply(event)">
-          <input type="hidden" name="form-name" value="alpha-applications" />
+        <form class="apply-form" id="applyForm" onsubmit="handleApply(event)">
           <input class="apply-input" type="email" name="email" placeholder="your@email.com" required />
-          <button class="apply-btn" type="submit">Notify me when it's live</button>
+          <button class="apply-btn" type="submit" id="applyBtn">Notify me when it's live</button>
         </form>
         <div class="apply-success" id="applySuccess">
           <span style="color:var(--accent); font-size:16px">&#10003;</span>
@@ -1487,9 +1486,23 @@
     document.querySelectorAll('.reveal, .step, .fcard').forEach(el => observer.observe(el));
 
     // Apply form
-    function handleApply(e) {
+    async function handleApply(e) {
       e.preventDefault();
-      document.getElementById('applyForm').style.display = 'none';
+      const form = document.getElementById('applyForm');
+      const btn = document.getElementById('applyBtn');
+      const email = form.querySelector('input[type="email"]').value.trim();
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+      try {
+        await fetch('https://dialed-app-production.up.railway.app/api/waitlist', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+      } catch (_) {
+        // Silently succeed — don't block user if network blips
+      }
+      form.style.display = 'none';
       const success = document.getElementById('applySuccess');
       success.style.display = 'flex';
     }

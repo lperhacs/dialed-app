@@ -196,6 +196,12 @@ CREATE TABLE IF NOT EXISTS phone_otps (
   created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Waitlist (landing page signups)
+CREATE TABLE IF NOT EXISTS waitlist (
+  email      TEXT PRIMARY KEY,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_posts_user_id ON posts(user_id);
 CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts(created_at DESC);
