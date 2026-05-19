@@ -71,12 +71,12 @@ function replaceReminders(db, userId, habitId, times, isPro) {
   return cleaned;
 }
 
-function awardBadges(db, userId, habitId) {
+function awardBadges(db, userId, habitId, tz = null) {
   const logs = db.prepare('SELECT logged_at FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(habitId);
   const habit = db.prepare('SELECT * FROM habits WHERE id = ?').get(habitId);
   if (!habit) return;
 
-  const streak = calculateStreak(logs, habit.frequency, habit.target_count || 1);
+  const streak = calculateStreak(logs, habit.frequency, habit.target_count || 1, tz);
   const totalLogs = logs.length;
   const earned = getEarnedBadges(streak, totalLogs, habit.frequency);
 
@@ -117,8 +117,8 @@ router.get('/', authMiddleware, (req, res) => {
   const enriched = habits.map(h => {
     const target = h.target_count || 1;
     const logs = db.prepare('SELECT logged_at FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(h.id);
-    const streak = calculateStreak(logs, h.frequency, target);
-    const at_risk = isStreakAtRisk(logs, h.frequency, target);
+    const streak = calculateStreak(logs, h.frequency, target, tz);
+    const at_risk = isStreakAtRisk(logs, h.frequency, target, tz);
     const total_logs = logs.length;
     const calendar = buildStreakCalendar(logs, h.frequency, target, 365);
     const currentPeriod = getPeriodKeyTz(new Date(), h.frequency, tz);
@@ -207,9 +207,10 @@ router.get('/:id', authMiddleware, (req, res) => {
   const habit = db.prepare('SELECT * FROM habits WHERE id = ? AND user_id = ?').get(req.params.id, req.user.id);
   if (!habit) return res.status(404).json({ error: 'Habit not found' });
 
+  const tz = req.headers['x-client-timezone'] || null;
   const logs = db.prepare('SELECT * FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(habit.id);
-  const streak = calculateStreak(logs, habit.frequency, habit.target_count || 1);
-  const at_risk = isStreakAtRisk(logs, habit.frequency, habit.target_count || 1);
+  const streak = calculateStreak(logs, habit.frequency, habit.target_count || 1, tz);
+  const at_risk = isStreakAtRisk(logs, habit.frequency, habit.target_count || 1, tz);
   const calendar = buildStreakCalendar(logs, habit.frequency, habit.target_count || 1, 365);
 
   const reminders = getRemindersForHabit(db, habit.id);
@@ -391,13 +392,13 @@ router.post('/:id/log', authMiddleware, (req, res) => {
   }
 
   // Award badges (non-fatal — a badge error must never fail the log)
-  try { awardBadges(db, req.user.id, habit.id); } catch (e) {
+  try { awardBadges(db, req.user.id, habit.id, tz); } catch (e) {
     console.error('[habits] awardBadges failed (non-fatal):', e.message);
   }
 
   const logs = db.prepare('SELECT logged_at FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(habit.id);
-  const streak = calculateStreak(logs, habit.frequency, target);
-  const at_risk = isStreakAtRisk(logs, habit.frequency, target);
+  const streak = calculateStreak(logs, habit.frequency, target, tz);
+  const at_risk = isStreakAtRisk(logs, habit.frequency, target, tz);
   const newPeriodCount = periodCount + 1;
   const goalJustMet = newPeriodCount >= target;
 

@@ -29,7 +29,7 @@ function enrichUser(db, user, viewerId) {
     const habit = db.prepare('SELECT * FROM habits WHERE id = ? AND user_id = ? AND is_active = 1').get(user.featured_habit_id, user.id);
     if (habit) {
       const logs = db.prepare('SELECT logged_at FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(habit.id);
-      const streak = calculateStreak(logs, habit.frequency, habit.target_count || 1);
+      const streak = calculateStreak(logs, habit.frequency, habit.target_count || 1, user.timezone || null);
       featured_streak = { habit_id: habit.id, habit_name: habit.name, streak };
     }
   }
@@ -274,8 +274,10 @@ router.patch('/profile/featured-habit', authMiddleware, (req, res) => {
 // GET /api/users/:username/badges — all earned badges with habit info + all badge defs (for locked view)
 router.get('/:username/badges', optionalAuth, (req, res) => {
   const db = getDb();
-  const user = db.prepare('SELECT id FROM users WHERE username = ?').get(req.params.username);
+  const user = db.prepare('SELECT id, timezone FROM users WHERE username = ?').get(req.params.username);
   if (!user) return res.status(404).json({ error: 'User not found' });
+
+  const tz = req.headers['x-client-timezone'] || user.timezone || null;
 
   // Earned = currently active streak qualifies (not historical)
   const activeHabits = db.prepare(
@@ -285,7 +287,7 @@ router.get('/:username/badges', optionalAuth, (req, res) => {
   const activelyEarned = new Map(); // badge_type -> { habit_name, habit_color }
   for (const habit of activeHabits) {
     const logs = db.prepare('SELECT logged_at FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(habit.id);
-    const streak = calculateStreak(logs, habit.frequency, habit.target_count || 1);
+    const streak = calculateStreak(logs, habit.frequency, habit.target_count || 1, tz);
     for (const def of BADGE_DEFS) {
       if (def.freq && def.freq !== habit.frequency) continue;
       if (def.check(streak) && !activelyEarned.has(def.type)) {
@@ -453,7 +455,7 @@ router.get('/:username/posts', optionalAuth, (req, res) => {
 // GET /api/users/:username/habits
 router.get('/:username/habits', optionalAuth, (req, res) => {
   const db = getDb();
-  const user = db.prepare('SELECT id FROM users WHERE username = ?').get(req.params.username);
+  const user = db.prepare('SELECT id, timezone FROM users WHERE username = ?').get(req.params.username);
   if (!user) return res.status(404).json({ error: 'User not found' });
 
   const isOwner = req.user?.id === user.id;
@@ -479,10 +481,11 @@ router.get('/:username/habits', optionalAuth, (req, res) => {
     return true;
   });
 
+  const tz = req.headers['x-client-timezone'] || user.timezone || null;
   const enriched = habits.map(h => {
     const logs = db.prepare('SELECT logged_at FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(h.id);
-    const streak = calculateStreak(logs, h.frequency, h.target_count || 1);
-    const at_risk = isStreakAtRisk(logs, h.frequency, h.target_count || 1);
+    const streak = calculateStreak(logs, h.frequency, h.target_count || 1, tz);
+    const at_risk = isStreakAtRisk(logs, h.frequency, h.target_count || 1, tz);
     const total_logs = logs.length;
     return { ...h, streak, at_risk, total_logs };
   });

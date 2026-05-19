@@ -46,28 +46,30 @@ function prevPeriodDate(date, frequency) {
   return d;
 }
 
-function calculateStreak(logs, frequency, target_count = 1) {
+function calculateStreak(logs, frequency, target_count = 1, tz = null) {
   if (!logs || logs.length === 0) return 0;
+
+  const key = (d) => getPeriodKeyTz(d, frequency, tz);
 
   const periodCounts = {};
   for (const l of logs) {
-    const key = getPeriodKey(l.logged_at, frequency);
-    periodCounts[key] = (periodCounts[key] || 0) + 1;
+    const k = key(l.logged_at);
+    periodCounts[k] = (periodCounts[k] || 0) + 1;
   }
-  const isComplete = key => (periodCounts[key] || 0) >= target_count;
+  const isComplete = k => (periodCounts[k] || 0) >= target_count;
 
   const now = new Date();
   let checkDate = now;
   let streak = 0;
 
-  const currentPeriod = getPeriodKey(checkDate, frequency);
+  const currentPeriod = key(checkDate);
   if (!isComplete(currentPeriod)) {
     checkDate = prevPeriodDate(checkDate, frequency);
   }
 
   while (true) {
-    const key = getPeriodKey(checkDate, frequency);
-    if (isComplete(key)) {
+    const k = key(checkDate);
+    if (isComplete(k)) {
       streak++;
       checkDate = prevPeriodDate(checkDate, frequency);
     } else {
@@ -78,22 +80,22 @@ function calculateStreak(logs, frequency, target_count = 1) {
   return streak;
 }
 
-function isStreakAtRisk(logs, frequency, target_count = 1) {
+function isStreakAtRisk(logs, frequency, target_count = 1, tz = null) {
   if (!logs || logs.length === 0) return false;
 
   const now = new Date();
-  const currentPeriod = getPeriodKey(now, frequency);
+  const currentPeriod = getPeriodKeyTz(now, frequency, tz);
 
   const periodCounts = {};
   for (const l of logs) {
-    const key = getPeriodKey(l.logged_at, frequency);
-    periodCounts[key] = (periodCounts[key] || 0) + 1;
+    const k = getPeriodKeyTz(l.logged_at, frequency, tz);
+    periodCounts[k] = (periodCounts[k] || 0) + 1;
   }
 
   if ((periodCounts[currentPeriod] || 0) >= target_count) return false;
 
   const prevDate = prevPeriodDate(now, frequency);
-  const prevPeriod = getPeriodKey(prevDate, frequency);
+  const prevPeriod = getPeriodKeyTz(prevDate, frequency, tz);
   return (periodCounts[prevPeriod] || 0) >= target_count;
 }
 
