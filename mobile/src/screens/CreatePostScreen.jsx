@@ -321,7 +321,7 @@ export default function CreatePostScreen() {
             <Text style={[styles.habitTagText, { color: selectedHabit.color }]}>
               {selectedHabit.name}
             </Text>
-            {habitDay ? <Text style={[styles.habitTagText, { color: selectedHabit.color }]}> · Day {habitDay}</Text> : null}
+            {habitDay ? <Text style={[styles.habitTagText, { color: selectedHabit.color }]}> · {selectedHabit.frequency === 'weekly' ? 'Week' : selectedHabit.frequency === 'monthly' ? 'Month' : 'Day'} {habitDay}</Text> : null}
             <TouchableOpacity onPress={() => { setHabitId(''); setHabitDay(''); }} style={{ marginLeft: 'auto' }} hitSlop={8}>
               <Ionicons name="close" size={14} color={colors.textMuted} />
             </TouchableOpacity>

@@ -149,11 +149,13 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
 
   const isPublicHabit = !habit.visibility_missed || (habit.visibility_missed !== 'private' && habit.visibility_missed !== 'buddy');
 
+  const periodLabel = habit.frequency === 'weekly' ? 'Week' : habit.frequency === 'monthly' ? 'Month' : 'Day';
+
   const navigateToPost = (day, ms) => {
     navigation.navigate('CreatePost', {
       draft: ms
-        ? `Day ${ms.day} of ${habit.name} - ${ms.label}!`
-        : day ? `Day ${day} of ${habit.name}.` : `Logged ${habit.name} today.`,
+        ? `${periodLabel} ${ms.day} of ${habit.name} - ${ms.label}!`
+        : day ? `${periodLabel} ${day} of ${habit.name}.` : `Logged ${habit.name} today.`,
       habit_id: habit.id,
       habit_day: ms?.day ?? day,
       habit_name: habit.name,
