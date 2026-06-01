@@ -10,10 +10,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import api from '../api/client';
 import { radius, spacing } from '../theme';
 import { useTheme } from '../context/ThemeContext';
+import { parseServerDate } from '../utils/datetime';
 
 function formatDate(d) {
   if (!d) return '∞';
-  return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return parseServerDate(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function ClubCard({ club, onUpdate, onDelete }) {
@@ -25,7 +26,7 @@ function ClubCard({ club, onUpdate, onDelete }) {
   const [memberCount, setMemberCount] = useState(club.member_count);
 
   const days = club.end_date
-    ? Math.ceil((new Date(club.end_date) - Date.now()) / 86400000)
+    ? Math.ceil((parseServerDate(club.end_date) - Date.now()) / 86400000)
     : null;
 
   const isPrivate = club.visibility === 'private';

@@ -8,9 +8,10 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import api from '../api/client';
 import { radius, spacing } from '../theme';
 import { useTheme } from '../context/ThemeContext';
+import { parseServerDate } from '../utils/datetime';
 
 function fmt(dateStr) {
-  return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return parseServerDate(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 export default function WeeklyRecapScreen() {

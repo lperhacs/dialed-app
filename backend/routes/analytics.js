@@ -128,17 +128,21 @@ router.get('/summary', analyticsLimiter, adminOnly, (req, res) => {
     SELECT date(logged_at) as day, COUNT(*) as count
     FROM habit_logs
     WHERE logged_at >= date('now', '-14 days')
+      AND (note IS NULL OR note NOT IN ('[freeze]', '[restore]'))
     GROUP BY day
     ORDER BY day ASC
   `).all();
 
-  // Retention proxy: users who logged a habit today who also logged 7 days ago
+  // Retention proxy: users who logged a habit today who also logged 7 days ago.
+  // Exclude synthetic freeze/restore logs so they don't fake organic engagement.
   const retainedUsers = db.prepare(`
     SELECT COUNT(DISTINCT a.user_id) as c
     FROM habit_logs a
     JOIN habit_logs b ON a.user_id = b.user_id
     WHERE date(a.logged_at) = date('now')
       AND date(b.logged_at) = date('now', '-7 days')
+      AND (a.note IS NULL OR a.note NOT IN ('[freeze]', '[restore]'))
+      AND (b.note IS NULL OR b.note NOT IN ('[freeze]', '[restore]'))
   `).get().c;
 
   res.json({
@@ -163,7 +167,7 @@ router.get('/funnel', analyticsLimiter, adminOnly, (req, res) => {
   ).get().c;
 
   const loggedHabit = db.prepare(
-    'SELECT COUNT(DISTINCT user_id) as c FROM habit_logs'
+    "SELECT COUNT(DISTINCT user_id) as c FROM habit_logs WHERE note IS NULL OR note NOT IN ('[freeze]', '[restore]')"
   ).get().c;
 
   const postedContent = db.prepare(

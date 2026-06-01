@@ -169,14 +169,22 @@ router.post('/restore-streak', authMiddleware, (req, res) => {
   ).get(habit_id);
   if (!lastLog) return res.status(400).json({ error: 'No logs to restore from' });
 
-  const { getPeriodKey } = require('../utils/streaks');
+  const { getPeriodKeyTz } = require('../utils/streaks');
   const { v4: uuidv4 } = require('uuid');
   const tz = req.headers['x-client-timezone'];
+
+  // SQLite datetime strings have no 'Z' marker; force UTC so the instant is
+  // correct regardless of server timezone before converting to user-local.
+  const lastLogUtc = (() => {
+    const s = String(lastLog.logged_at);
+    const iso = s.includes('T') ? s : s.replace(' ', 'T');
+    return new Date(/[zZ]$|[+-]\d{2}:?\d{2}$/.test(iso) ? iso : iso + 'Z');
+  })();
 
   // Get today's date string in user's local timezone
   const now = new Date();
   const todayLocal = now.toLocaleDateString('en-CA', { timeZone: tz || 'UTC' });
-  const lastLocal = new Date(lastLog.logged_at).toLocaleDateString('en-CA', { timeZone: tz || 'UTC' });
+  const lastLocal = lastLogUtc.toLocaleDateString('en-CA', { timeZone: tz || 'UTC' });
 
   const RESTORATION_LIMITS = { daily: 3, weekly: 2, monthly: 1 };
   const maxMissed = RESTORATION_LIMITS[habit.frequency] || 3;
@@ -204,16 +212,16 @@ router.post('/restore-streak', authMiddleware, (req, res) => {
       missedDates.push(yest.toISOString());
     }
   } else if (habit.frequency === 'weekly') {
-    // Count missed ISO weeks between last log and today
-    const currentWeek = getPeriodKey(now, 'weekly');
-    const lastWeek = getPeriodKey(new Date(lastLog.logged_at), 'weekly');
+    // Count missed ISO weeks between last log and today (user-local)
+    const currentWeek = getPeriodKeyTz(now, 'weekly', tz);
+    const lastWeek = getPeriodKeyTz(lastLogUtc, 'weekly', tz);
     if (currentWeek === lastWeek) return res.status(400).json({ error: 'Streak is not broken' });
     // Walk back week by week from last week before current, filling missed ones
     let check = new Date(now);
     check.setUTCDate(check.getUTCDate() - 7); // start from last week
     const missedWeeks = [];
     while (true) {
-      const wk = getPeriodKey(check, 'weekly');
+      const wk = getPeriodKeyTz(check, 'weekly', tz);
       if (wk === lastWeek) break;
       missedWeeks.push(new Date(check));
       check.setUTCDate(check.getUTCDate() - 7);

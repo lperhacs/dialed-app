@@ -105,17 +105,18 @@ async function runDailyHabitReminders() {
       ({ c: periodCount } = db.prepare(`
         SELECT COUNT(*) as c FROM habit_logs
         WHERE habit_id = ? AND strftime('%Y-%m-%d', logged_at) = ?
+          AND (note IS NULL OR note != '[freeze]')
       `).get(habit.id, periodKey));
     } else {
       // Weekly: count all logs in the user's current ISO week. Pull the last
       // 14 days of logs and bucket them in JS using the same getPeriodKeyTz
       // function so the dedup and the count agree (#7, #25).
       const recent = db.prepare(`
-        SELECT logged_at FROM habit_logs
+        SELECT logged_at, note FROM habit_logs
         WHERE habit_id = ? AND logged_at >= date('now', '-21 days')
       `).all(habit.id);
       periodCount = recent.filter(l =>
-        getPeriodKeyTz(l.logged_at, 'weekly', tz) === periodKey
+        l.note !== '[freeze]' && getPeriodKeyTz(l.logged_at, 'weekly', tz) === periodKey
       ).length;
     }
 
@@ -136,11 +137,11 @@ async function runDailyHabitReminders() {
 
     // Calculate current streak from the last 90 days of logs
     const recentLogs = db.prepare(`
-      SELECT logged_at FROM habit_logs
+      SELECT logged_at, note FROM habit_logs
       WHERE habit_id = ? AND logged_at >= date('now', '-90 days')
       ORDER BY logged_at DESC
     `).all(habit.id);
-    const streak = calculateStreak(recentLogs, habit.frequency, target);
+    const streak = calculateStreak(recentLogs, habit.frequency, target, tz);
 
     const streakLine = streak > 0
       ? ` You're on a ${streak}-${habit.frequency === 'weekly' ? 'week' : 'day'} streak.`

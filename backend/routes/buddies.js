@@ -53,10 +53,10 @@ function computeJointStreak(db, pair, userIdA, userIdB) {
   ).get(userIdA, userIdB);
   const freezeQuota = (proRow?.a_pro ? 1 : 0) + (proRow?.b_pro ? 1 : 0);
   const aDays = db.prepare(
-    "SELECT DISTINCT date(logged_at) as d FROM habit_logs WHERE user_id = ? AND logged_at >= date('now', '-400 days')"
+    "SELECT DISTINCT date(logged_at) as d FROM habit_logs WHERE user_id = ? AND logged_at >= date('now', '-400 days') AND (note IS NULL OR note != '[freeze]')"
   ).all(userIdA).map(r => r.d);
   const bDaysSet = new Set(db.prepare(
-    "SELECT DISTINCT date(logged_at) as d FROM habit_logs WHERE user_id = ? AND logged_at >= date('now', '-400 days')"
+    "SELECT DISTINCT date(logged_at) as d FROM habit_logs WHERE user_id = ? AND logged_at >= date('now', '-400 days') AND (note IS NULL OR note != '[freeze]')"
   ).all(userIdB).map(r => r.d));
 
   const jointSet = new Set(aDays.filter(d => bDaysSet.has(d)));
@@ -212,8 +212,8 @@ router.get('/', authMiddleware, (req, res) => {
 
   const myHabits = db.prepare(`
     SELECT h.id, h.name, h.color, h.frequency,
-      (SELECT COUNT(*) FROM habit_logs WHERE habit_id = h.id AND date(logged_at) = date('now')) as logged_today,
-      (SELECT COUNT(*) FROM habit_logs WHERE habit_id = h.id) as total_logs
+      (SELECT COUNT(*) FROM habit_logs WHERE habit_id = h.id AND date(logged_at) = date('now') AND (note IS NULL OR note != '[freeze]')) as logged_today,
+      (SELECT COUNT(*) FROM habit_logs WHERE habit_id = h.id AND (note IS NULL OR note != '[freeze]')) as total_logs
     FROM habits h WHERE h.user_id = ? AND h.is_active = 1 ORDER BY h.created_at ASC
   `).all(userId);
 
@@ -221,8 +221,8 @@ router.get('/', authMiddleware, (req, res) => {
   const buddies = activeBuddies.map(buddy => {
     const buddyHabits = db.prepare(`
       SELECT h.id, h.name, h.color, h.frequency, h.visibility_missed,
-        (SELECT COUNT(*) FROM habit_logs WHERE habit_id = h.id AND date(logged_at) = date('now')) as logged_today,
-        (SELECT COUNT(*) FROM habit_logs WHERE habit_id = h.id) as total_logs
+        (SELECT COUNT(*) FROM habit_logs WHERE habit_id = h.id AND date(logged_at) = date('now') AND (note IS NULL OR note != '[freeze]')) as logged_today,
+        (SELECT COUNT(*) FROM habit_logs WHERE habit_id = h.id AND (note IS NULL OR note != '[freeze]')) as total_logs
       FROM habits h WHERE h.user_id = ? AND h.is_active = 1
         AND h.visibility_missed != 'private'
       ORDER BY h.created_at ASC

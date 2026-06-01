@@ -12,6 +12,7 @@ import Avatar from '../components/Avatar';
 import ForwardModal from '../components/ForwardModal';
 import { radius, spacing, API_BASE_URL } from '../theme';
 import { useTheme } from '../context/ThemeContext';
+import { parseServerDate } from '../utils/datetime';
 
 function friendsGoingText(names, count) {
   if (!count) return null;
@@ -23,13 +24,13 @@ function friendsGoingText(names, count) {
 }
 
 function formatEventDate(d) {
-  return new Date(d).toLocaleDateString('en-US', {
+  return parseServerDate(d).toLocaleDateString('en-US', {
     weekday: 'short', month: 'short', day: 'numeric',
   });
 }
 
 function formatEventDateShort(d) {
-  const date = new Date(d);
+  const date = parseServerDate(d);
   return {
     day: date.toLocaleDateString('en-US', { day: 'numeric' }),
     month: date.toLocaleDateString('en-US', { month: 'short' }).toUpperCase(),

@@ -116,6 +116,11 @@ app.use((err, _req, res, _next) => {
 app.listen(PORT, () => {
   console.log(`\n🔥 Dialed API running on http://localhost:${PORT}\n`);
 
+  // Event-loop stall watchdog — restarts the process if it hangs (see May 28
+  // incident: a silent freeze that Railway's ON_FAILURE policy never caught).
+  const { startWatchdog } = require('./utils/watchdog');
+  startWatchdog();
+
   // Schedule monthly habit reminders.
   // Runs daily at 09:00 UTC — the dedup logic in runMonthlyHabitReminders
   // ensures each user gets at most one push per habit per calendar month.

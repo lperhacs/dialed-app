@@ -36,6 +36,7 @@ async function runMonthlyHabitReminders() {
       FROM habit_logs
       WHERE habit_id = ?
         AND strftime('%Y-%m', logged_at) = ?
+        AND (note IS NULL OR note != '[freeze]')
     `).get(habit.id, currentPeriod);
 
     if (periodCount >= target) continue; // already done for the month

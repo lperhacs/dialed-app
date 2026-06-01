@@ -15,6 +15,12 @@ function getBulkStreakData(db, userIds) {
 
   const placeholders = userIds.map(() => '?').join(',');
 
+  // Each user's streak must be computed in that user's own timezone.
+  const tzRows = db.prepare(
+    `SELECT id, timezone FROM users WHERE id IN (${placeholders})`
+  ).all(...userIds);
+  const tzByUser = new Map(tzRows.map(r => [r.id, r.timezone || null]));
+
   const habits = db.prepare(
     `SELECT id, user_id, frequency, target_count FROM habits WHERE user_id IN (${placeholders}) AND is_active = 1`
   ).all(...userIds);
@@ -27,7 +33,7 @@ function getBulkStreakData(db, userIds) {
   const habitPlaceholders = habitIds.map(() => '?').join(',');
 
   const logs = db.prepare(
-    `SELECT habit_id, logged_at FROM habit_logs WHERE habit_id IN (${habitPlaceholders}) ORDER BY logged_at DESC`
+    `SELECT habit_id, logged_at, note FROM habit_logs WHERE habit_id IN (${habitPlaceholders}) ORDER BY logged_at DESC`
   ).all(...habitIds);
 
   // Group logs by habit_id
@@ -42,7 +48,7 @@ function getBulkStreakData(db, userIds) {
 
   for (const habit of habits) {
     const habitLogs = logsByHabit.get(habit.id) || [];
-    const streak = calculateStreak(habitLogs, habit.frequency, habit.target_count || 1);
+    const streak = calculateStreak(habitLogs, habit.frequency, habit.target_count || 1, tzByUser.get(habit.user_id) || null);
     const entry = result.get(habit.user_id);
     if (streak > entry.max_streak) entry.max_streak = streak;
     entry.total_logs += habitLogs.length;
@@ -104,7 +110,7 @@ router.get('/challenges/:id', authMiddleware, (req, res) => {
   }
 
   const members = db.prepare(
-    `SELECT u.id, u.username, u.display_name, u.avatar_url
+    `SELECT u.id, u.username, u.display_name, u.avatar_url, u.timezone
      FROM challenge_members cm JOIN users u ON u.id = cm.user_id
      WHERE cm.challenge_id = ?`
   ).all(req.params.id);
@@ -125,7 +131,7 @@ router.get('/challenges/:id', authMiddleware, (req, res) => {
   if (habitIds.length) {
     const habitPlaceholders = habitIds.map(() => '?').join(',');
     const logs = db.prepare(
-      `SELECT habit_id, logged_at FROM habit_logs WHERE habit_id IN (${habitPlaceholders}) ORDER BY logged_at DESC`
+      `SELECT habit_id, logged_at, note FROM habit_logs WHERE habit_id IN (${habitPlaceholders}) ORDER BY logged_at DESC`
     ).all(...habitIds);
     for (const log of logs) {
       if (!logsByHabit.has(log.habit_id)) logsByHabit.set(log.habit_id, []);
@@ -137,8 +143,9 @@ router.get('/challenges/:id', authMiddleware, (req, res) => {
     .map(m => {
       const habitId = linkMap.get(m.id);
       const habitLogs = habitId ? (logsByHabit.get(habitId) || []) : [];
-      const streak = habitId ? calculateStreak(habitLogs, challenge.frequency) : 0;
-      return { ...m, streak, total_logs: habitLogs.length };
+      const streak = habitId ? calculateStreak(habitLogs, challenge.frequency, 1, m.timezone || null) : 0;
+      const { timezone, ...member } = m;
+      return { ...member, streak, total_logs: habitLogs.length };
     })
     .sort((a, b) => b.streak - a.streak || b.total_logs - a.total_logs)
     .map((m, i) => ({ ...m, rank: i + 1 }));

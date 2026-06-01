@@ -28,7 +28,7 @@ function enrichUser(db, user, viewerId) {
   if (user.featured_habit_id) {
     const habit = db.prepare('SELECT * FROM habits WHERE id = ? AND user_id = ? AND is_active = 1').get(user.featured_habit_id, user.id);
     if (habit) {
-      const logs = db.prepare('SELECT logged_at FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(habit.id);
+      const logs = db.prepare('SELECT logged_at, note FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(habit.id);
       const streak = calculateStreak(logs, habit.frequency, habit.target_count || 1, user.timezone || null);
       featured_streak = { habit_id: habit.id, habit_name: habit.name, streak };
     }
@@ -64,7 +64,8 @@ function enrichUser(db, user, viewerId) {
     if (activeBuddy) buddy_info = activeBuddy;
   }
 
-  return { ...user, follower_count: followerCount, following_count: followingCount, post_count: postCount, is_following, badges, featured_streak, buddy_info, buddy_visibility: buddyVisibility };
+  const { timezone, ...safeUser } = user;
+  return { ...safeUser, follower_count: followerCount, following_count: followingCount, post_count: postCount, is_following, badges, featured_streak, buddy_info, buddy_visibility: buddyVisibility };
 }
 
 // GET /api/users/recommended  — people to follow during onboarding
@@ -169,7 +170,7 @@ router.get('/search', optionalAuth, (req, res) => {
 router.get('/:username', optionalAuth, (req, res) => {
   const db = getDb();
   const user = db.prepare(
-    'SELECT id, username, display_name, bio, avatar_url, featured_habit_id, buddy_visibility, created_at FROM users WHERE username = ?'
+    'SELECT id, username, display_name, bio, avatar_url, featured_habit_id, buddy_visibility, created_at, timezone FROM users WHERE username = ?'
   ).get(req.params.username);
 
   if (!user) return res.status(404).json({ error: 'User not found' });
@@ -277,7 +278,8 @@ router.get('/:username/badges', optionalAuth, (req, res) => {
   const user = db.prepare('SELECT id, timezone FROM users WHERE username = ?').get(req.params.username);
   if (!user) return res.status(404).json({ error: 'User not found' });
 
-  const tz = req.headers['x-client-timezone'] || user.timezone || null;
+  // Streak belongs to the profile owner — compute in the owner's tz, not the viewer's.
+  const tz = user.timezone || req.headers['x-client-timezone'] || null;
 
   // Earned = currently active streak qualifies (not historical)
   const activeHabits = db.prepare(
@@ -286,7 +288,7 @@ router.get('/:username/badges', optionalAuth, (req, res) => {
 
   const activelyEarned = new Map(); // badge_type -> { habit_name, habit_color }
   for (const habit of activeHabits) {
-    const logs = db.prepare('SELECT logged_at FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(habit.id);
+    const logs = db.prepare('SELECT logged_at, note FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(habit.id);
     const streak = calculateStreak(logs, habit.frequency, habit.target_count || 1, tz);
     for (const def of BADGE_DEFS) {
       if (def.freq && def.freq !== habit.frequency) continue;
@@ -481,9 +483,10 @@ router.get('/:username/habits', optionalAuth, (req, res) => {
     return true;
   });
 
-  const tz = req.headers['x-client-timezone'] || user.timezone || null;
+  // Streak belongs to the profile owner — compute in the owner's tz, not the viewer's.
+  const tz = user.timezone || req.headers['x-client-timezone'] || null;
   const enriched = habits.map(h => {
-    const logs = db.prepare('SELECT logged_at FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(h.id);
+    const logs = db.prepare('SELECT logged_at, note FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(h.id);
     const streak = calculateStreak(logs, h.frequency, h.target_count || 1, tz);
     const at_risk = isStreakAtRisk(logs, h.frequency, h.target_count || 1, tz);
     const total_logs = logs.length;
@@ -877,7 +880,7 @@ router.delete('/me', authMiddleware, (req, res) => {
     db.prepare('DELETE FROM users WHERE id = ?').run(id);
     db.exec('COMMIT');
   } catch (err) {
-    db.exec('ROLLBACK');
+    try { db.exec('ROLLBACK'); } catch (_) {}
     console.error('[delete-account] failed:', err.message);
     return res.status(500).json({ error: 'Could not delete account. Please try again.' });
   }

@@ -11,6 +11,7 @@ import api from '../api/client';
 import Avatar from '../components/Avatar';
 import { radius, spacing } from '../theme';
 import { useTheme } from '../context/ThemeContext';
+import { parseServerDate } from '../utils/datetime';
 
 const HISTORY_KEY = 'dialed_search_history';
 const MAX_HISTORY = 10;
@@ -53,7 +54,7 @@ async function clearHistory() {
 }
 
 function timeUntil(dateStr) {
-  const d = new Date(dateStr);
+  const d = parseServerDate(dateStr);
   const now = new Date();
   const diff = Math.floor((d - now) / (1000 * 60 * 60 * 24));
   if (diff < 0) return 'Past';

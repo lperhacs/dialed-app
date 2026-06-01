@@ -9,9 +9,10 @@ import api from '../api/client';
 import Avatar from './Avatar';
 import { radius, spacing } from '../theme';
 import { useTheme } from '../context/ThemeContext';
+import { parseServerDate } from '../utils/datetime';
 
 function formatEventDate(d) {
-  return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return parseServerDate(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function EventPreview({ event }) {

@@ -51,15 +51,17 @@ function currentIsoWeekBounds() {
 // Build the recap object for a given user + week. Reused by the route AND the
 // weekly recap push cron, so both reads see identical numbers.
 function buildWeeklyRecap(db, userId, weekStart, weekEnd) {
+  const owner = db.prepare('SELECT timezone FROM users WHERE id = ?').get(userId);
+  const tz = (owner && owner.timezone) || null;
   const habits = db.prepare('SELECT * FROM habits WHERE user_id = ? AND is_active = 1').all(userId);
 
   const habitSummary = habits.map(h => {
     const logsThisWeek = db.prepare(
-      "SELECT COUNT(*) as c FROM habit_logs WHERE habit_id = ? AND date(logged_at) >= ? AND date(logged_at) <= ?"
+      "SELECT COUNT(*) as c FROM habit_logs WHERE habit_id = ? AND date(logged_at) >= ? AND date(logged_at) <= ? AND (note IS NULL OR note != '[freeze]')"
     ).get(h.id, weekStart, weekEnd).c;
 
-    const allLogs = db.prepare('SELECT logged_at FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(h.id);
-    const streak = calculateStreak(allLogs, h.frequency);
+    const allLogs = db.prepare('SELECT logged_at, note FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(h.id);
+    const streak = calculateStreak(allLogs, h.frequency, h.target_count || 1, tz);
     const expected = h.frequency === 'daily' ? 7 : 1;
 
     return {
@@ -75,7 +77,7 @@ function buildWeeklyRecap(db, userId, weekStart, weekEnd) {
   });
 
   const total_logs = db.prepare(
-    "SELECT COUNT(*) as c FROM habit_logs WHERE user_id = ? AND date(logged_at) >= ? AND date(logged_at) <= ?"
+    "SELECT COUNT(*) as c FROM habit_logs WHERE user_id = ? AND date(logged_at) >= ? AND date(logged_at) <= ? AND (note IS NULL OR note != '[freeze]')"
   ).get(userId, weekStart, weekEnd).c;
 
   const total_cheers = db.prepare(

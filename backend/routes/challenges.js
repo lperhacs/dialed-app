@@ -249,7 +249,7 @@ router.get('/:id', optionalAuth, (req, res) => {
 
   if (canSeeMembers) {
     const rows = db.prepare(
-      `SELECT u.id, u.username, u.display_name, u.avatar_url, cm.joined_at
+      `SELECT u.id, u.username, u.display_name, u.avatar_url, u.timezone, cm.joined_at
        FROM challenge_members cm JOIN users u ON u.id = cm.user_id
        WHERE cm.challenge_id = ? AND cm.status = 'active'`
     ).all(req.params.id);
@@ -258,10 +258,11 @@ router.get('/:id', optionalAuth, (req, res) => {
       const link = db.prepare('SELECT habit_id FROM challenge_habit_links WHERE challenge_id = ? AND user_id = ?').get(req.params.id, m.id);
       let streak = 0;
       if (link) {
-        const logs = db.prepare('SELECT logged_at FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(link.habit_id);
-        streak = calculateStreak(logs, challenge.frequency);
+        const logs = db.prepare('SELECT logged_at, note FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(link.habit_id);
+        streak = calculateStreak(logs, challenge.frequency, 1, m.timezone || null);
       }
-      return { ...m, streak };
+      const { timezone, ...member } = m;
+      return { ...member, streak };
     });
   }
 

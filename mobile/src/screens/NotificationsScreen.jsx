@@ -11,6 +11,7 @@ import Avatar from '../components/Avatar';
 import { API_BASE_URL, radius, spacing } from '../theme';
 import { useTheme } from '../context/ThemeContext';
 import { timeAgo } from '../utils/timeAgo';
+import { parseServerDate } from '../utils/datetime';
 
 const TYPE_ICONS = {
   follow:           { icon: 'person-add',       bg: '#3b82f6' },
@@ -58,7 +59,7 @@ function groupNotifications(notifications = []) {
 
   const today = [], thisWeek = [], earlier = [];
   for (const n of notifications) {
-    const d = new Date(n.created_at);
+    const d = parseServerDate(n.created_at);
     if (d >= todayStart) today.push(n);
     else if (d >= weekStart) thisWeek.push(n);
     else earlier.push(n);

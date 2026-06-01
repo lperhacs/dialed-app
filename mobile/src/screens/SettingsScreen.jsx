@@ -28,6 +28,7 @@ import { useTheme } from '../context/ThemeContext';
 import { usePro } from '../context/ProContext';
 import Avatar from '../components/Avatar';
 import { radius, spacing } from '../theme';
+import { parseServerDate } from '../utils/datetime';
 
 const CAL_OPTIONS = [7, 30, 90, 180, 365];
 const CAL_LABELS  = { 7: '7d', 30: '30d', 90: '90d', 180: '180d', 365: '1yr' };
@@ -536,7 +537,7 @@ export default function SettingsScreen() {
                   <Text style={styles.rowLabel}>Dialed Pro</Text>
                   {proExpiresAt && (
                     <Text style={[styles.rowDetail, { fontSize: 12 }]}>
-                      Renews {new Date(proExpiresAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      Renews {parseServerDate(proExpiresAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                     </Text>
                   )}
                 </View>

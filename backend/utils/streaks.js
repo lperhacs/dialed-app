@@ -46,24 +46,39 @@ function prevPeriodDate(date, frequency) {
   return d;
 }
 
+// A streak freeze "bridges" a missed period: it keeps the streak alive but the
+// frozen period itself does NOT count as a streak day. So 31 days → miss →
+// freeze → next log = 32 (not 33). Freeze logs are tagged with note '[freeze]'.
+const FREEZE_NOTE = '[freeze]';
+
 function calculateStreak(logs, frequency, target_count = 1, tz = null) {
   if (!logs || logs.length === 0) return 0;
 
   const key = (d) => getPeriodKeyTz(d, frequency, tz);
 
-  const periodCounts = {};
+  // Count real logs and freeze (bridge) logs per period separately.
+  const realCounts = {};
+  const freezeCounts = {};
   for (const l of logs) {
     const k = key(l.logged_at);
-    periodCounts[k] = (periodCounts[k] || 0) + 1;
+    if (l.note === FREEZE_NOTE) {
+      freezeCounts[k] = (freezeCounts[k] || 0) + 1;
+    } else {
+      realCounts[k] = (realCounts[k] || 0) + 1;
+    }
   }
-  const isComplete = k => (periodCounts[k] || 0) >= target_count;
+  // A period is "complete" (counts toward the streak) only with enough REAL
+  // logs. A period with no real logs but a freeze is "bridged": it doesn't
+  // break the streak, but it doesn't add to the count either.
+  const isComplete = k => (realCounts[k] || 0) >= target_count;
+  const isBridged = k => !isComplete(k) && (freezeCounts[k] || 0) >= 1;
 
   const now = new Date();
   let checkDate = now;
   let streak = 0;
 
-  const currentPeriod = key(checkDate);
-  if (!isComplete(currentPeriod)) {
+  // Don't penalize for the current period not being logged yet.
+  if (!isComplete(key(checkDate))) {
     checkDate = prevPeriodDate(checkDate, frequency);
   }
 
@@ -71,6 +86,9 @@ function calculateStreak(logs, frequency, target_count = 1, tz = null) {
     const k = key(checkDate);
     if (isComplete(k)) {
       streak++;
+      checkDate = prevPeriodDate(checkDate, frequency);
+    } else if (isBridged(k)) {
+      // Freeze covers this period — keep the streak alive without counting it.
       checkDate = prevPeriodDate(checkDate, frequency);
     } else {
       break;
@@ -88,6 +106,7 @@ function isStreakAtRisk(logs, frequency, target_count = 1, tz = null) {
 
   const periodCounts = {};
   for (const l of logs) {
+    if (l.note === FREEZE_NOTE) continue; // freeze bridges, doesn't count as a real log
     const k = getPeriodKeyTz(l.logged_at, frequency, tz);
     periodCounts[k] = (periodCounts[k] || 0) + 1;
   }
@@ -99,10 +118,11 @@ function isStreakAtRisk(logs, frequency, target_count = 1, tz = null) {
   return (periodCounts[prevPeriod] || 0) >= target_count;
 }
 
-function buildStreakCalendar(logs, frequency, target_count = 1, days = 365) {
+function buildStreakCalendar(logs, frequency, target_count = 1, days = 365, tz = null) {
   const periodCounts = {};
   for (const l of logs) {
-    const key = getPeriodKey(l.logged_at, frequency);
+    if (l.note === FREEZE_NOTE) continue; // freeze bridges, doesn't count as a real log
+    const key = getPeriodKeyTz(l.logged_at, frequency, tz);
     periodCounts[key] = (periodCounts[key] || 0) + 1;
   }
 
@@ -113,7 +133,7 @@ function buildStreakCalendar(logs, frequency, target_count = 1, days = 365) {
     for (let i = days - 1; i >= 0; i--) {
       const d = new Date(now);
       d.setUTCDate(d.getUTCDate() - i);
-      const key = getPeriodKey(d, frequency);
+      const key = getPeriodKeyTz(d, frequency, tz);
       calendar.push({ key, count: Math.min(periodCounts[key] || 0, 1), target: 1 });
     }
     return calendar;
@@ -124,7 +144,7 @@ function buildStreakCalendar(logs, frequency, target_count = 1, days = 365) {
   const buckets = [];
   let checkDate = new Date(now);
   for (let i = 0; i < numPeriods; i++) {
-    const key = getPeriodKey(checkDate, frequency);
+    const key = getPeriodKeyTz(checkDate, frequency, tz);
     buckets.unshift({ key, count: Math.min(periodCounts[key] || 0, target_count), target: target_count });
     checkDate = prevPeriodDate(checkDate, frequency);
   }

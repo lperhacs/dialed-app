@@ -19,6 +19,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useBadges } from '../context/BadgeContext';
 
 import { timeAgo } from '../utils/timeAgo';
+import { parseServerDate } from '../utils/datetime';
 
 function SharedEventPreview({ event }) {
   const { colors } = useTheme();
@@ -29,7 +30,7 @@ function SharedEventPreview({ event }) {
       <Text style={styles.sharedLabel}>Event</Text>
       <Text style={styles.sharedTitle}>{event.title}</Text>
       <Text style={styles.sharedMeta}>
-        {new Date(event.event_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+        {parseServerDate(event.event_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
         {event.event_time ? `  ${event.event_time}` : ''}
       </Text>
       {event.location ? <Text style={styles.sharedMeta}>{event.location}</Text> : null}

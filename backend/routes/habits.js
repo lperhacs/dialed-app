@@ -65,14 +65,14 @@ function replaceReminders(db, userId, habitId, times, isPro) {
       .run(cleaned[0] || null, habitId);
     db.exec('COMMIT');
   } catch (e) {
-    db.exec('ROLLBACK');
+    try { db.exec('ROLLBACK'); } catch (_) {}
     throw e;
   }
   return cleaned;
 }
 
 function awardBadges(db, userId, habitId, tz = null) {
-  const logs = db.prepare('SELECT logged_at FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(habitId);
+  const logs = db.prepare('SELECT logged_at, note FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(habitId);
   const habit = db.prepare('SELECT * FROM habits WHERE id = ?').get(habitId);
   if (!habit) return;
 
@@ -116,17 +116,18 @@ router.get('/', authMiddleware, (req, res) => {
   const tz = req.headers['x-client-timezone'] || null;
   const enriched = habits.map(h => {
     const target = h.target_count || 1;
-    const logs = db.prepare('SELECT logged_at FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(h.id);
+    const logs = db.prepare('SELECT logged_at, note FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(h.id);
     const streak = calculateStreak(logs, h.frequency, target, tz);
     const at_risk = isStreakAtRisk(logs, h.frequency, target, tz);
-    const total_logs = logs.length;
-    const calendar = buildStreakCalendar(logs, h.frequency, target, 365);
+    const total_logs = logs.filter(l => l.note !== '[freeze]').length;
+    const calendar = buildStreakCalendar(logs, h.frequency, target, 365, tz);
     const currentPeriod = getPeriodKeyTz(new Date(), h.frequency, tz);
     const todayKey = getPeriodKeyTz(new Date(), 'daily', tz);
     // Count distinct days within the current period — for weekly/monthly with
     // target_count > 1 this means "X days per week", not "X logs per week".
     const periodDays = new Set();
     for (const l of logs) {
+      if (l.note === '[freeze]') continue; // freeze bridges, doesn't count as a real log
       if (getPeriodKeyTz(l.logged_at, h.frequency, tz) === currentPeriod) {
         periodDays.add(getPeriodKeyTz(l.logged_at, 'daily', tz));
       }
@@ -211,7 +212,7 @@ router.get('/:id', authMiddleware, (req, res) => {
   const logs = db.prepare('SELECT * FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(habit.id);
   const streak = calculateStreak(logs, habit.frequency, habit.target_count || 1, tz);
   const at_risk = isStreakAtRisk(logs, habit.frequency, habit.target_count || 1, tz);
-  const calendar = buildStreakCalendar(logs, habit.frequency, habit.target_count || 1, 365);
+  const calendar = buildStreakCalendar(logs, habit.frequency, habit.target_count || 1, 365, tz);
 
   const reminders = getRemindersForHabit(db, habit.id);
   res.json({ ...habit, streak, at_risk, total_logs: logs.length, calendar, recent_logs: logs.slice(0, 10), reminders });
@@ -358,12 +359,14 @@ router.post('/:id/log', authMiddleware, (req, res) => {
   db.exec('BEGIN IMMEDIATE');
   try {
     const recentLogs = db.prepare(
-      `SELECT logged_at FROM habit_logs WHERE habit_id = ? AND logged_at >= date('now', ?)`
+      `SELECT logged_at, note FROM habit_logs WHERE habit_id = ? AND logged_at >= date('now', ?)`
     ).all(habit.id, lookback);
     // Count distinct days within the current period (one log per day rule).
     // For weekly with target=5, this means "5 different days this week".
+    // Freeze (bridge) logs are excluded — they don't count toward the target.
     const periodDays = new Set();
     for (const l of recentLogs) {
+      if (l.note === '[freeze]') continue;
       if (getPeriodKeyTz(l.logged_at, habit.frequency, tz) === today) {
         periodDays.add(getPeriodKeyTz(l.logged_at, 'daily', tz));
       }
@@ -381,7 +384,7 @@ router.post('/:id/log', authMiddleware, (req, res) => {
     }
     db.exec('COMMIT');
   } catch (e) {
-    db.exec('ROLLBACK');
+    try { db.exec('ROLLBACK'); } catch (_) {}
     throw e;
   }
   if (!inserted) {
@@ -396,7 +399,7 @@ router.post('/:id/log', authMiddleware, (req, res) => {
     console.error('[habits] awardBadges failed (non-fatal):', e.message);
   }
 
-  const logs = db.prepare('SELECT logged_at FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(habit.id);
+  const logs = db.prepare('SELECT logged_at, note FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(habit.id);
   const streak = calculateStreak(logs, habit.frequency, target, tz);
   const at_risk = isStreakAtRisk(logs, habit.frequency, target, tz);
   const newPeriodCount = periodCount + 1;
@@ -433,9 +436,13 @@ router.delete('/:id/log', authMiddleware, (req, res) => {
   // Find the most recent log in the current period
   const lookback = habit.frequency === 'daily' ? '-2 days' : habit.frequency === 'weekly' ? '-8 days' : '-32 days';
   const recentLogs = db.prepare(
-    `SELECT id, logged_at FROM habit_logs WHERE habit_id = ? AND logged_at >= datetime('now', ?) ORDER BY logged_at DESC`
+    `SELECT id, logged_at, note FROM habit_logs WHERE habit_id = ? AND logged_at >= datetime('now', ?) ORDER BY logged_at DESC`
   ).all(habit.id, lookback);
-  const todayLog = recentLogs.find(l => getPeriodKeyTz(l.logged_at, habit.frequency, tz) === currentPeriod);
+  // Only undo a real user log — never a synthetic freeze/restore log.
+  const todayLog = recentLogs.find(l =>
+    l.note !== '[freeze]' && l.note !== '[restore]' &&
+    getPeriodKeyTz(l.logged_at, habit.frequency, tz) === currentPeriod
+  );
 
   if (!todayLog) return res.status(404).json({ error: 'No log found for current period' });
 

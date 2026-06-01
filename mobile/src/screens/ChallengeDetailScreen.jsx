@@ -16,16 +16,17 @@ import MentionSuggestions from '../components/MentionSuggestions';
 import useMentionInput from '../hooks/useMentionInput';
 import { radius, spacing } from '../theme';
 import { useTheme } from '../context/ThemeContext';
+import { parseServerDate } from '../utils/datetime';
 
 function formatDate(d) {
   if (!d) return '∞';
-  const parsed = new Date(d);
-  if (isNaN(parsed.getTime())) return '∞';
+  const parsed = parseServerDate(d);
+  if (!parsed || isNaN(parsed.getTime())) return '∞';
   return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 function formatTime(iso) {
-  const d = new Date(iso);
+  const d = parseServerDate(iso);
   const now = new Date();
   const diffMs = now - d;
   const diffMins = Math.floor(diffMs / 60000);
@@ -46,7 +47,7 @@ function friendsGoingText(names, count) {
 }
 
 function formatEventDate(d) {
-  return new Date(d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  return parseServerDate(d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function ForwardedEventCard({ event, currentUser, onDelete }) {
@@ -555,7 +556,7 @@ export default function ChallengeDetailScreen({ route }) {
   const canChat = isActiveMember;
 
   const days = challenge.end_date
-    ? Math.ceil((new Date(challenge.end_date) - Date.now()) / 86400000)
+    ? Math.ceil((parseServerDate(challenge.end_date) - Date.now()) / 86400000)
     : null;
 
   const sorted = [...(challenge.members || [])].sort((a, b) => b.streak - a.streak);
