@@ -132,6 +132,7 @@ app.listen(PORT, () => {
   const { runBuddyAccountabilityReminders, runMissedHabitAutoPost } = require('./cron/buddyReminders');
   const { runWeeklyRecap } = require('./cron/weeklyRecap');
   const { runJointStreakAtRisk } = require('./cron/jointStreakAtRisk');
+  const { runFirstWeekScaffolding } = require('./cron/firstWeekScaffolding');
 
   // Daily habit reminders — runs hourly. The reminder logic itself decides
   // per-user whether to send a "morning" (9am local) or "evening" (7pm local)
@@ -168,8 +169,9 @@ app.listen(PORT, () => {
   }, { timezone: 'UTC' });
   console.log('[Cron] daily DB backup scheduler started (03:00 UTC, 7-day rolling)');
 
-  // Buddy accountability — runs every hour, fires for users where it's currently 5pm local time
-  cron.schedule('0 * * * *', () => {
+  // Buddy accountability — runs every hour, fires for users where it's currently 5pm local time.
+  // Staggered to :10 so the 5 hourly jobs don't all hit single-threaded SQLite at minute 0.
+  cron.schedule('10 * * * *', () => {
     runBuddyAccountabilityReminders().catch(err =>
       console.error('[Cron] buddy-accountability-reminders failed:', err)
     );
@@ -185,8 +187,8 @@ app.listen(PORT, () => {
   console.log('[Cron] missed-habit auto-post scheduler started (00:30 UTC)');
 
   // Weekly recap — runs hourly, fires for users where it's currently Sunday
-  // 9am local. Per-user dedup via reference_id = ISO week token.
-  cron.schedule('0 * * * *', () => {
+  // 9am local. Per-user dedup via reference_id = ISO week token. Staggered to :20.
+  cron.schedule('20 * * * *', () => {
     runWeeklyRecap().catch(err =>
       console.error('[Cron] weekly-recap failed:', err)
     );
@@ -194,11 +196,21 @@ app.listen(PORT, () => {
   console.log('[Cron] weekly recap scheduler started (hourly, fires at 9am Sunday local)');
 
   // Joint streak at-risk — hourly, fires at 8pm local for users whose joint
-  // streak is alive but today isn't yet a joint day.
-  cron.schedule('0 * * * *', () => {
+  // streak is alive but today isn't yet a joint day. Staggered to :30.
+  cron.schedule('30 * * * *', () => {
     runJointStreakAtRisk().catch(err =>
       console.error('[Cron] joint-streak-at-risk failed:', err)
     );
   }, { timezone: 'UTC' });
-  console.log('[Cron] joint streak at-risk scheduler started (hourly, fires at 8pm local)\n');
+  console.log('[Cron] joint streak at-risk scheduler started (hourly, fires at 8pm local)');
+
+  // First-week scaffolding — hourly. Fires Day 1/2/3 onboarding nudges at noon
+  // local and grants a one-time first-miss streak insurance at 11am local for
+  // users still in their first week. Staggered to :40.
+  cron.schedule('40 * * * *', () => {
+    runFirstWeekScaffolding().catch(err =>
+      console.error('[Cron] first-week-scaffolding failed:', err)
+    );
+  }, { timezone: 'UTC' });
+  console.log('[Cron] first-week scaffolding scheduler started (hourly: noon nudge, 11am insurance)\n');
 });

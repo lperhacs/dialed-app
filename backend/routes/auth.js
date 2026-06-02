@@ -189,8 +189,10 @@ router.post('/verify-email', authMiddleware, (req, res) => {
     return res.status(400).json({ error: 'Code expired. Please request a new one.' });
   }
 
-  const inputBuf = Buffer.from(code.toString().trim().padEnd(10));
-  const storedBuf = Buffer.from(record.code.padEnd(10));
+  // slice(0,10) before padEnd so an over-length input can't produce a longer
+  // buffer than storedBuf — timingSafeEqual throws on unequal-length buffers.
+  const inputBuf = Buffer.from(code.toString().trim().slice(0, 10).padEnd(10));
+  const storedBuf = Buffer.from(record.code.slice(0, 10).padEnd(10));
   if (!timingSafeEqual(inputBuf, storedBuf)) {
     // Atomic increment guarded by attempts < 5 — prevents parallel-request race
     // where two concurrent wrong-code submissions both read attempts=4 and bypass the cap.
@@ -294,8 +296,10 @@ router.post('/reset-password', (req, res) => {
     return genericInvalid();
   }
 
-  const resetInputBuf = Buffer.from(String(code).trim().padEnd(10));
-  const resetStoredBuf = Buffer.from(record.code.padEnd(10));
+  // slice(0,10) before padEnd so an over-length input can't produce a longer
+  // buffer than resetStoredBuf — timingSafeEqual throws on unequal-length buffers.
+  const resetInputBuf = Buffer.from(String(code).trim().slice(0, 10).padEnd(10));
+  const resetStoredBuf = Buffer.from(record.code.slice(0, 10).padEnd(10));
   if (!timingSafeEqual(resetInputBuf, resetStoredBuf)) {
     // Atomic guarded increment — see verify-email for rationale.
     const upd = db.prepare(

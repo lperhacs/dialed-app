@@ -256,26 +256,38 @@ function getDb() {
     // SQLite can't ALTER constraints, so we rebuild the table if needed.
     const habitCheckRow = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='habits'").get();
     if (habitCheckRow && habitCheckRow.sql && !habitCheckRow.sql.includes("'buddy'")) {
+      // PRAGMA foreign_keys is a no-op inside a transaction, so toggle it OFF
+      // outside the BEGIN/COMMIT. The DROP/RENAME steps run inside a transaction
+      // so a crash mid-rebuild can't leave the habits table dropped (data loss):
+      // the whole rebuild either commits or rolls back atomically.
       db.exec('PRAGMA foreign_keys = OFF');
-      db.exec('DROP TABLE IF EXISTS habits_new');
-      db.exec(`
-        CREATE TABLE habits_new (
-          id            TEXT PRIMARY KEY,
-          user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-          name          TEXT NOT NULL,
-          description   TEXT DEFAULT '',
-          frequency     TEXT NOT NULL CHECK(frequency IN ('daily','weekly','monthly')),
-          visibility_missed TEXT NOT NULL DEFAULT 'public' CHECK(visibility_missed IN ('public','friends','private','buddy')),
-          color         TEXT DEFAULT '#f97316',
-          is_active     INTEGER DEFAULT 1,
-          created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
-          reminder_time TEXT DEFAULT NULL,
-          target_count  INTEGER NOT NULL DEFAULT 1
-        )
-      `);
-      db.exec('INSERT INTO habits_new SELECT id, user_id, name, description, frequency, visibility_missed, color, is_active, created_at, reminder_time, target_count FROM habits');
-      db.exec('DROP TABLE habits');
-      db.exec('ALTER TABLE habits_new RENAME TO habits');
+      try {
+        db.exec('BEGIN IMMEDIATE');
+        db.exec('DROP TABLE IF EXISTS habits_new');
+        db.exec(`
+          CREATE TABLE habits_new (
+            id            TEXT PRIMARY KEY,
+            user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            name          TEXT NOT NULL,
+            description   TEXT DEFAULT '',
+            frequency     TEXT NOT NULL CHECK(frequency IN ('daily','weekly','monthly')),
+            visibility_missed TEXT NOT NULL DEFAULT 'public' CHECK(visibility_missed IN ('public','friends','private','buddy')),
+            color         TEXT DEFAULT '#f97316',
+            is_active     INTEGER DEFAULT 1,
+            created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+            reminder_time TEXT DEFAULT NULL,
+            target_count  INTEGER NOT NULL DEFAULT 1
+          )
+        `);
+        db.exec('INSERT INTO habits_new SELECT id, user_id, name, description, frequency, visibility_missed, color, is_active, created_at, reminder_time, target_count FROM habits');
+        db.exec('DROP TABLE habits');
+        db.exec('ALTER TABLE habits_new RENAME TO habits');
+        db.exec('COMMIT');
+      } catch (err) {
+        db.exec('ROLLBACK');
+        db.exec('PRAGMA foreign_keys = ON');
+        throw err;
+      }
       db.exec('PRAGMA foreign_keys = ON');
     }
 

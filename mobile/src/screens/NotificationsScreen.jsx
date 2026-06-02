@@ -27,6 +27,10 @@ const TYPE_ICONS = {
   buddy_nudge:         { icon: 'notifications',     bg: '#34d399' },
   buddy_5pm_reminder:  { icon: 'alarm',             bg: '#14b8a6' },
   buddy_nudge_reminder:{ icon: 'notifications',     bg: '#14b8a6' },
+  buddy_logged:        { icon: 'flame',             bg: '#14b8a6' },
+  joint_streak_at_risk:{ icon: 'flame',             bg: '#f59e0b' },
+  first_week_nudge:    { icon: 'sparkles',          bg: '#34d399' },
+  streak_insurance:    { icon: 'shield-checkmark',  bg: '#3b82f6' },
   weekly_recap:        { icon: 'stats-chart',       bg: '#10b981' },
   club_event:          { icon: 'calendar',           bg: '#8b5cf6' },
 };
@@ -73,6 +77,8 @@ function groupNotifications(notifications = []) {
 }
 
 function NotifAvatar({ notif }) {
+  const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const { icon, bg } = TYPE_ICONS[notif.type] || { icon: 'notifications-outline', bg: '#6b7280' };
   return (
     <View style={styles.avatarWrap}>
@@ -89,6 +95,7 @@ function NotifAvatar({ notif }) {
 
 function FollowBackButton({ notif }) {
   const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const [following, setFollowing] = useState(!!notif.is_following_back);
   const [loading, setLoading] = useState(false);
 
@@ -121,8 +128,8 @@ function FollowBackButton({ notif }) {
       ]}
     >
       {loading
-        ? <ActivityIndicator size="small" color={following ? colors.textMuted : '#0a0a0a'} />
-        : <Text style={[styles.followBtnText, following && { color: colors.textMuted }]}>
+        ? <ActivityIndicator size="small" color={following ? colors.textMuted : colors.bg} />
+        : <Text style={[styles.followBtnText, { color: following ? colors.textMuted : colors.bg }]}>
             {following ? 'Following' : 'Follow back'}
           </Text>
       }
@@ -132,6 +139,7 @@ function FollowBackButton({ notif }) {
 
 function NotifItem({ notif, onPress, onAvatarPress }) {
   const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const { name, action } = buildParts(notif);
   const postImageUrl = resolvePostImage(notif.post_image);
   const showThumbnail = postImageUrl && (notif.type === 'like' || notif.type === 'comment' || notif.type === 'cheer');
@@ -177,6 +185,7 @@ function NotifItem({ notif, onPress, onAvatarPress }) {
 
 export default function NotificationsScreen() {
   const { colors } = useTheme();
+  const styles = makeStyles(colors);
   const navigation = useNavigation();
   const { refresh: refreshBadges } = useBadges();
   const [notifications, setNotifications] = useState([]);
@@ -222,7 +231,7 @@ export default function NotificationsScreen() {
   return (
     <FlatList
       data={notifications}
-      keyExtractor={(item, i) => item._header ? `h-${item.title}` : item.id}
+      keyExtractor={(item, i) => item._header ? `h-${item.title}` : String(item.id)}
       renderItem={({ item }) => {
         if (item._header) {
           return (
@@ -245,7 +254,8 @@ export default function NotificationsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors) {
+  return StyleSheet.create({
   list: { flex: 1 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   sectionHeader: {
@@ -257,7 +267,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 0.5,
-    textTransform: 'uppercase',
   },
   item: {
     flexDirection: 'row',
@@ -268,7 +277,7 @@ const styles = StyleSheet.create({
   },
   itemUnread: {
     borderLeftWidth: 2,
-    borderLeftColor: '#34d399',
+    borderLeftColor: colors.accent,
     paddingLeft: spacing.lg - 2,
   },
   avatarWrap: {
@@ -286,7 +295,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1.5,
-    borderColor: 'transparent',
+    borderColor: colors.bg,
   },
   textBlock: {
     flex: 1,
@@ -307,13 +316,13 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 6,
-    backgroundColor: '#1f1f1f',
+    backgroundColor: colors.bgHover,
   },
   dot: {
     width: 7,
     height: 7,
     borderRadius: 3.5,
-    backgroundColor: '#34d399',
+    backgroundColor: colors.accent,
     flexShrink: 0,
   },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 60 },
@@ -322,7 +331,7 @@ const styles = StyleSheet.create({
   followBtn: {
     paddingHorizontal: 14,
     paddingVertical: 7,
-    borderRadius: 20,
+    borderRadius: radius.md,
     minWidth: 96,
     alignItems: 'center',
     justifyContent: 'center',
@@ -330,6 +339,6 @@ const styles = StyleSheet.create({
   followBtnText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#0a0a0a',
   },
-});
+  });
+}

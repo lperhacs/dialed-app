@@ -70,8 +70,18 @@ export default function RootNavigator() {
     return <OnboardingNavigator onDone={finishOnboarding} />;
   }
 
+  // A freshly-registered user is logged in but not yet email-verified. Rather
+  // than have RegisterScreen imperatively navigate to VerifyEmail right after
+  // login() (which races the unauth→authed stack swap), the authed stack just
+  // picks VerifyEmail as its initial route. Verified users land on MainTabs as
+  // usual, and VerifyEmail stays reachable from the Home banner via goBack.
+  const authedInitialRoute = user && !user.email_verified ? 'VerifyEmail' : 'MainTabs';
+
   return (
-    <Stack.Navigator screenOptions={headerOptions}>
+    <Stack.Navigator
+      screenOptions={headerOptions}
+      initialRouteName={user ? authedInitialRoute : 'Login'}
+    >
       {!user ? (
         // ─── Auth screens ────────────────────────────────────────────────
         <>
@@ -105,7 +115,7 @@ export default function RootNavigator() {
           <Stack.Screen
             name="Comments"
             component={CommentsScreen}
-            options={{ title: 'Comments' }}
+            options={{ title: 'Comments', headerBackTitle: 'Back' }}
           />
 
           <Stack.Screen

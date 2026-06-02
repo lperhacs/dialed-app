@@ -1,6 +1,6 @@
 # Dialed Brain
 *Shared project context for Claude Code and Cowork — update after every session*
-*Last updated: May 18, 2026*
+*Last updated: June 2, 2026*
 
 ## Core retention values
 *The behaviors and feelings that, if present, predict a user sticks. Every feature decision should serve at least one.*
@@ -102,6 +102,59 @@ Think Strava meets a gym buddy.
   Do not ship a feature with known gaps or untested paths.
 
 ## Strategy session log
+### June 2, 2026 — Audit fixes + retention features (Build 55)
+- Ran a full line-by-line audit, then fixed the genuine issues AND shipped a set of
+  retention features the user wanted. Process note: an interim misread of "don't push"
+  led to features being temporarily stripped, then fully restored from the session
+  transcript — net state is all features present + audit fixes.
+- **Audit bug fixes**: `auth.js` verify-email/reset-password now `slice(0,10)` before
+  `padEnd` so an over-length code can't make `timingSafeEqual` throw on unequal buffers;
+  `db.js` habits-table rebuild wrapped in `BEGIN IMMEDIATE` with `PRAGMA foreign_keys`
+  toggled OUTSIDE the txn (no-op inside); `posts.js` cleans up written upload files on
+  validation error / 500 and on post delete (unlink `/uploads/*`).
+- **Features shipped**: first-week scaffolding cron (`cron/firstWeekScaffolding.js`,
+  hourly @ :40 — Day 1/2/3 noon nudges + one-time first-miss streak insurance at 11am
+  local); Home buddy-suggestion prompt + one-tap quick-log strip (`HomeScreen.jsx`);
+  `GET /buddies/suggestions` (warm candidates from shared challenges, plan-limit aware);
+  buddy-logged "your turn" push in `POST /habits/:id/log` (deduped per buddy per local
+  day, fired after response); profile `buddy_info` joint-streak enrichment (`users.js`
+  via `computeJointStreak`); analytics `/funnel` buddy attach-rate + week-one activation
+  metrics. Notification icons added for `buddy_logged`, `joint_streak_at_risk`,
+  `first_week_nudge` (sparkles), `streak_insurance` (shield-checkmark).
+- **Design fixes**: removed all remaining `textTransform:'uppercase'` per design rules;
+  Comments back-arrow label fixed (`headerBackTitle:'Back'`, was showing "MainTabs").
+- Deployed: backend pushed to Railway; Build 55 via EAS cloud + auto-submit to TestFlight.
+
+### June 1, 2026 — Build 54 (timezone standardization + streak-freeze double-count fix)
+- **Timezone standardization**: all streak math, period counts, and displayed
+  timestamps now resolve in the user's timezone instead of UTC. Resolution rules:
+  requester's `x-client-timezone` header for own habits; profile OWNER's stored
+  `users.timezone` for viewing others; per-user stored tz for crons/leaderboards/recap.
+  `getPeriodKeyTz` (en-CA locale → YYYY-MM-DD, ISO week for weekly) is the tz-aware
+  period key. Mobile: new `parseServerDate` util (mobile/src/utils/datetime.js) renders
+  post/comment/DM/event/recap times in local tz — SQLite datetimes have no 'Z' marker,
+  so bare datetimes are forced to UTC before display (a 2h-old post was showing "just now").
+- **Streak reset + bridge-only freeze**: miss a day → streak resets to Day 1; a freeze
+  (synthetic `[freeze]` habit_log) BRIDGES the gap but does NOT count as a streak day
+  (31 → miss → freeze → next log = 32, not 33). `calculateStreak` rewritten note-aware.
+- **Freeze double-count leak (audit, 4 parallel agents)**: `[freeze]` (and backdated
+  `[restore]`) logs were inflating many `habit_logs` COUNT queries. Fixed across:
+  isStreakAtRisk/buildStreakCalendar, GET /habits totals, recap totals, reminder crons
+  (daily/monthly/buddy), joint buddy streak (computeJointStreak), buddy-card
+  logged_today/total_logs, undo-log (now only removes a real user log), and analytics
+  (D7 retention proxy, log trend, activation funnel — exclude synthetic logs so they
+  don't fake organic engagement, which was contaminating the retention signal).
+- **SQL gotcha**: `note != '[freeze]'` silently drops NULL-note rows (NULL comparison →
+  NULL, not true), which would exclude ALL real logs. Used `(note IS NULL OR note != ...)`.
+- **pro.js restore-streak**: weekly gap check made tz-aware (was UTC `getPeriodKey`);
+  UTC-safe parse of `lastLog.logged_at` before tz conversion.
+- **Watchdog shipped**: worker-thread + SharedArrayBuffer stall detector
+  (utils/watchdog.js + watchdogWorker.js) — `process.exit(1)` if main-loop lag > 120s,
+  so Railway's ON_FAILURE restart recovers from event-loop hangs (which restart policy
+  alone can't catch since the process never exits on a hang).
+- Deployed: backend auto-deployed to Railway; Build 54 (autoIncrement 53→54) built via
+  EAS cloud + auto-submitted to TestFlight.
+
 ### May 13, 2026 — Build 50 (keyboard toolbar fix + photo upload fix + Xcode 26 build fix)
 - **Photo/video toolbar hidden under iOS QuickType bar**: manual `keyboardHeight` paddingBottom approach was unreliable on iOS. Restored `KeyboardAvoidingView` with `behavior="padding"` in CreatePostScreen.
 - **Photos not attaching to posts**: explicit `Content-Type: 'multipart/form-data'` header without a boundary breaks multipart parsing in RN 0.76+ New Architecture. Fixed by removing the explicit header and letting the native layer inject the boundary automatically.

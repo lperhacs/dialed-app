@@ -120,8 +120,8 @@ function CreateTabButton() {
 
   // Fan items: angle in degrees from the positive x-axis, radius from button center
   const FAN_ITEMS = [
-    { type: 'post',  label: 'Post',  icon: '✏️', color: colors.accent, angle: 130, radius: 100 },
-    { type: 'event', label: 'Event', icon: '📅', color: '#5B6EF5',     angle: 50,  radius: 100 },
+    { type: 'post',  label: 'Post',  icon: 'create', color: colors.accent, angle: 130, radius: 100 },
+    { type: 'event', label: 'Event', icon: 'calendar', color: '#5B6EF5',     angle: 50,  radius: 100 },
   ];
 
   const rotateAnim   = useRef(new Animated.Value(0)).current; // kept for potential future use
@@ -198,7 +198,7 @@ Animated.timing(backdropAnim, { toValue, duration: toOpen ? 200 : 160, useNative
                 activeOpacity={0.85}
               >
                 <View style={[styles.fanCircle, { backgroundColor: item.color }]}>
-                  <Text style={styles.fanIcon}>{item.icon}</Text>
+                  <Ionicons name={item.icon} size={22} color="#fff" />
                 </View>
                 <Text style={styles.fanLabel}>{item.label}</Text>
               </TouchableOpacity>

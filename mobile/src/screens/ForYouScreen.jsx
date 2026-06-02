@@ -152,15 +152,18 @@ export default function ForYouScreen() {
     const posts = postsRes.data;
     const groups = groupsRes.data;
 
-    // Intersperse groups card every 5 posts + one random club injection
+    // Deterministic "surprise" position + club pick, seeded off the feed itself
+    // so a refresh/refocus doesn't reshuffle and jump the scroll position.
+    const seed = (posts[0]?.id ?? 0) + posts.length;
+    // Intersperse groups card every 5 posts + one stable club injection
     const feed = [];
-    const randomClubPos = posts.length > 3 ? Math.floor(Math.random() * (posts.length - 2)) + 1 : -1;
+    const randomClubPos = posts.length > 3 ? (seed % (posts.length - 2)) + 1 : -1;
     posts.forEach((post, i) => {
       feed.push({ type: 'post', id: post.id, data: post });
 
-      // Random single-club injection at a surprise position
+      // Stable single-club injection at a surprise position
       if (i === randomClubPos && groups.length > 0) {
-        const randomClub = groups[Math.floor(Math.random() * groups.length)];
+        const randomClub = groups[seed % groups.length];
         feed.push({ type: 'groups', id: `random-club-${i}`, data: [randomClub] });
       }
 
@@ -250,7 +253,7 @@ function makeStyles(colors) {
     alignSelf: 'flex-start',
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: radius.pill,
+    borderRadius: radius.sm,
     borderWidth: 1,
   },
   habitTagText: { fontSize: 12, fontWeight: '600' },
@@ -276,7 +279,7 @@ function makeStyles(colors) {
     paddingVertical: spacing.xxl,
     backgroundColor: colors.bgCard,
   },
-  groupsHeading: { fontSize: 20, fontWeight: '900', color: colors.text, marginBottom: 4, letterSpacing: -0.5 },
+  groupsHeading: { fontSize: 20, fontWeight: '700', color: colors.text, marginBottom: 4, letterSpacing: -0.5 },
   groupsSub: { fontSize: 13, color: colors.textMuted, marginBottom: 24 },
   groupsList: { gap: 12 },
   groupRow: {
@@ -295,7 +298,7 @@ function makeStyles(colors) {
   groupJoinBtn: {
     paddingHorizontal: 14,
     paddingVertical: 7,
-    borderRadius: radius.pill,
+    borderRadius: radius.sm,
     borderWidth: 1.5,
     borderColor: colors.accent,
   },

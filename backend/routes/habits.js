@@ -77,7 +77,7 @@ function awardBadges(db, userId, habitId, tz = null) {
   if (!habit) return;
 
   const streak = calculateStreak(logs, habit.frequency, habit.target_count || 1, tz);
-  const totalLogs = logs.length;
+  const totalLogs = logs.filter(l => l.note !== '[freeze]' && l.note !== '[restore]').length;
   const earned = getEarnedBadges(streak, totalLogs, habit.frequency);
 
   for (const badge of earned) {
@@ -119,7 +119,7 @@ router.get('/', authMiddleware, (req, res) => {
     const logs = db.prepare('SELECT logged_at, note FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(h.id);
     const streak = calculateStreak(logs, h.frequency, target, tz);
     const at_risk = isStreakAtRisk(logs, h.frequency, target, tz);
-    const total_logs = logs.filter(l => l.note !== '[freeze]').length;
+    const total_logs = logs.filter(l => l.note !== '[freeze]' && l.note !== '[restore]').length;
     const calendar = buildStreakCalendar(logs, h.frequency, target, 365, tz);
     const currentPeriod = getPeriodKeyTz(new Date(), h.frequency, tz);
     const todayKey = getPeriodKeyTz(new Date(), 'daily', tz);
@@ -127,7 +127,7 @@ router.get('/', authMiddleware, (req, res) => {
     // target_count > 1 this means "X days per week", not "X logs per week".
     const periodDays = new Set();
     for (const l of logs) {
-      if (l.note === '[freeze]') continue; // freeze bridges, doesn't count as a real log
+      if (l.note === '[freeze]' || l.note === '[restore]') continue; // synthetic logs bridge gaps, don't count as real logs
       if (getPeriodKeyTz(l.logged_at, h.frequency, tz) === currentPeriod) {
         periodDays.add(getPeriodKeyTz(l.logged_at, 'daily', tz));
       }
@@ -215,7 +215,8 @@ router.get('/:id', authMiddleware, (req, res) => {
   const calendar = buildStreakCalendar(logs, habit.frequency, habit.target_count || 1, 365, tz);
 
   const reminders = getRemindersForHabit(db, habit.id);
-  res.json({ ...habit, streak, at_risk, total_logs: logs.length, calendar, recent_logs: logs.slice(0, 10), reminders });
+  const total_logs = logs.filter(l => l.note !== '[freeze]' && l.note !== '[restore]').length;
+  res.json({ ...habit, streak, at_risk, total_logs, calendar, recent_logs: logs.slice(0, 10), reminders });
 });
 
 // PUT /api/habits/:id
@@ -366,7 +367,7 @@ router.post('/:id/log', authMiddleware, (req, res) => {
     // Freeze (bridge) logs are excluded — they don't count toward the target.
     const periodDays = new Set();
     for (const l of recentLogs) {
-      if (l.note === '[freeze]') continue;
+      if (l.note === '[freeze]' || l.note === '[restore]') continue;
       if (getPeriodKeyTz(l.logged_at, habit.frequency, tz) === today) {
         periodDays.add(getPeriodKeyTz(l.logged_at, 'daily', tz));
       }
@@ -416,6 +417,58 @@ router.post('/:id/log', authMiddleware, (req, res) => {
   }, metaFromReq(req));
 
   res.status(201).json({ logged: true, streak, at_risk, total_logs: logs.length, period_count: newPeriodCount, logged_today: true, target_count: target, goal_met: goalJustMet, milestone });
+
+  // Reciprocity loop (#9): nudge the user's active buddies that they just logged
+  // — "Sarah just logged, your turn." Fire-and-forget AFTER the response so it
+  // never adds latency to the log request. Rate-limited to one nudge per buddy
+  // per sender per user-local day so logging 5 habits doesn't blast 5 pushes.
+  try {
+    const senderName =
+      db.prepare('SELECT display_name FROM users WHERE id = ?').get(req.user.id)?.display_name || 'Your buddy';
+    const buddies = db.prepare(`
+      SELECT CASE WHEN b.requester_id = ? THEN b.recipient_id ELSE b.requester_id END as buddy_id
+      FROM buddies b
+      WHERE (b.requester_id = ? OR b.recipient_id = ?) AND b.status = 'active'
+    `).all(req.user.id, req.user.id, req.user.id);
+
+    if (buddies.length) {
+      const localDate = getPeriodKeyTz(new Date(), 'daily', tz);
+      const dedupRef = `${req.user.id}:${localDate}`;
+      const body = `${senderName} just logged — your turn. Keep your streak going.`;
+
+      for (const { buddy_id } of buddies) {
+        let alreadyNudged;
+        db.exec('BEGIN IMMEDIATE');
+        try {
+          alreadyNudged = db.prepare(`
+            SELECT 1 FROM notifications
+            WHERE user_id = ? AND type = 'buddy_logged' AND reference_id = ?
+          `).get(buddy_id, dedupRef);
+          if (!alreadyNudged) {
+            // Insert the dedup row BEFORE sending so a push failure can't
+            // double-send on a later log.
+            db.prepare(
+              "INSERT INTO notifications (id, user_id, type, from_user_id, reference_id, message) VALUES (?, ?, 'buddy_logged', ?, ?, ?)"
+            ).run(uuidv4(), buddy_id, req.user.id, dedupRef, body);
+          }
+          db.exec('COMMIT');
+        } catch (e) {
+          try { db.exec('ROLLBACK'); } catch (_) {}
+          alreadyNudged = true; // skip push on error
+        }
+
+        if (!alreadyNudged) {
+          sendPush(buddy_id, {
+            title: `${senderName} just logged`,
+            body,
+            data: { type: 'buddy_logged', userId: req.user.id },
+          }, 'buddy');
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[habits] buddy-logged nudge failed (non-fatal):', e.message);
+  }
 });
 
 // DELETE /api/habits/:id/log — undo the most recent log for the current period

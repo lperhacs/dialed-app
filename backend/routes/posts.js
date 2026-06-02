@@ -1,9 +1,33 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const { randomUUID } = require('crypto');
 const { getDb } = require('../database/db');
 const { authMiddleware, optionalAuth } = require('../middleware/auth');
 const upload = require('../middleware/upload');
+const { UPLOAD_DIR } = upload;
+
+// Best-effort unlink of uploaded files. Used to clean up images that multer
+// already wrote to disk when a request later fails validation, and to remove a
+// post's stored images on delete — otherwise the upload dir leaks orphans.
+function unlinkUploads(paths) {
+  for (const p of paths) {
+    if (!p) continue;
+    fs.unlink(p, err => {
+      if (err && err.code !== 'ENOENT') {
+        console.warn('[posts] failed to unlink orphan upload:', p, err.message);
+      }
+    });
+  }
+}
+
+// Map a stored "/uploads/<filename>" URL back to its absolute disk path,
+// guarding against path traversal by stripping to the basename.
+function uploadUrlToPath(url) {
+  if (!url || typeof url !== 'string' || !url.startsWith('/uploads/')) return null;
+  return path.join(UPLOAD_DIR, path.basename(url));
+}
 const { sendPush } = require('../utils/push');
 const { trackEvent, metaFromReq } = require('../utils/analytics');
 const { calculateStreak } = require('../utils/streaks');
@@ -325,6 +349,15 @@ router.post('/', authMiddleware, postUpload, (req, res) => {
   const imageNames = new Set(fromImages.map(f => f.filename));
   const imageFiles = [...fromImages, ...fromImage.filter(f => !imageNames.has(f.filename))];
 
+  // Every file multer wrote to disk for this request. If the request fails
+  // validation below (or the DB insert throws), unlink these so they don't
+  // orphan in the upload dir.
+  const writtenPaths = [...fromImages, ...fromImage].map(f => f.path);
+  const cleanupAndReturn = (status, body) => {
+    unlinkUploads(writtenPaths);
+    return res.status(status).json(body);
+  };
+
   // Collect video URLs: prefer the JSON array field; fall back to the legacy
   // single video_url field so older mobile builds keep working.
   let videoUrls = [];
@@ -340,25 +373,25 @@ router.post('/', authMiddleware, postUpload, (req, res) => {
   }
 
   if (!content && imageFiles.length === 0 && videoUrls.length === 0) {
-    return res.status(400).json({ error: 'Post must have content, image, or video' });
+    return cleanupAndReturn(400, { error: 'Post must have content, image, or video' });
   }
-  if (content && content.length > 2000) return res.status(400).json({ error: 'Post content must be 2000 characters or fewer' });
+  if (content && content.length > 2000) return cleanupAndReturn(400, { error: 'Post content must be 2000 characters or fewer' });
 
   // Validate all video URLs
   for (const vurl of videoUrls) {
     try {
       const parsed = new URL(vurl);
       if (!['http:', 'https:'].includes(parsed.protocol)) {
-        return res.status(400).json({ error: 'Invalid video URL' });
+        return cleanupAndReturn(400, { error: 'Invalid video URL' });
       }
     } catch {
-      return res.status(400).json({ error: 'Invalid video URL' });
+      return cleanupAndReturn(400, { error: 'Invalid video URL' });
     }
   }
 
   if (habit_id) {
     const habit = db.prepare('SELECT id FROM habits WHERE id = ? AND user_id = ?').get(habit_id, req.user.id);
-    if (!habit) return res.status(400).json({ error: 'Invalid habit' });
+    if (!habit) return cleanupAndReturn(400, { error: 'Invalid habit' });
   }
 
   // Back-compat: write the first image and first video into the legacy columns
@@ -388,7 +421,7 @@ router.post('/', authMiddleware, postUpload, (req, res) => {
   } catch (err) {
     try { db.exec('ROLLBACK'); } catch (_) {}
     console.error('[posts] create failed:', err.message, err.stack);
-    return res.status(500).json({ error: 'Failed to create post' });
+    return cleanupAndReturn(500, { error: 'Failed to create post' });
   }
 
   const post = db.prepare(
@@ -414,7 +447,16 @@ router.delete('/:id', authMiddleware, (req, res) => {
   if (!post) return res.status(404).json({ error: 'Post not found' });
   if (post.user_id !== req.user.id) return res.status(403).json({ error: 'Not authorized' });
 
+  // Gather this post's stored image files (legacy column + post_media rows)
+  // before deleting the rows, so we can unlink them from disk afterward.
+  // Videos are external URLs, not local uploads, so they're left alone.
+  const mediaRows = db.prepare("SELECT url FROM post_media WHERE post_id = ? AND type = 'image'").all(req.params.id);
+  const filePaths = [post.image_url, ...mediaRows.map(m => m.url)]
+    .map(uploadUrlToPath)
+    .filter(Boolean);
+
   db.prepare('DELETE FROM posts WHERE id = ?').run(req.params.id);
+  unlinkUploads(filePaths);
   res.json({ deleted: true });
 });
 

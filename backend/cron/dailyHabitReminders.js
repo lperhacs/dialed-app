@@ -53,7 +53,7 @@ async function runDailyHabitReminders() {
 
   // All active daily + weekly habits with their owner's push token + tz
   const habits = db.prepare(`
-    SELECT h.id, h.name, h.user_id, h.frequency, h.target_count,
+    SELECT h.id, h.name, h.user_id, h.frequency, h.target_count, h.visibility_missed,
            u.push_token, u.notify_prefs, u.timezone
     FROM habits h
     JOIN users u ON u.id = h.user_id
@@ -61,6 +61,19 @@ async function runDailyHabitReminders() {
       AND h.frequency IN ('daily', 'weekly')
       AND u.push_token IS NOT NULL
   `).all();
+
+  // Cache per-user "has an active buddy?" so the loss-aversion copy can name the
+  // social stake without re-querying for every habit a user owns.
+  const buddyCache = new Map();
+  const hasActiveBuddy = (userId) => {
+    if (buddyCache.has(userId)) return buddyCache.get(userId);
+    const row = db.prepare(
+      "SELECT 1 FROM buddies WHERE (requester_id = ? OR recipient_id = ?) AND status = 'active' LIMIT 1"
+    ).get(userId, userId);
+    const has = !!row;
+    buddyCache.set(userId, has);
+    return has;
+  };
 
   let sent = 0;
 
@@ -96,29 +109,19 @@ async function runDailyHabitReminders() {
     // the user's local date. For weekly, we approximate using the same ISO
     // week boundary in UTC — close enough for reminder purposes since logs
     // are stored in UTC and the week boundary differs by at most a few hours.
-    let periodCount;
-    if (habit.frequency === 'daily') {
-      // For daily, compare against the user's local date string. Logs are
-      // stored as UTC; we count logs whose own user-local date matches today.
-      // Approximation: use the local date directly against logged_at (UTC) —
-      // this is what the existing app does and is acceptable for reminders.
-      ({ c: periodCount } = db.prepare(`
-        SELECT COUNT(*) as c FROM habit_logs
-        WHERE habit_id = ? AND strftime('%Y-%m-%d', logged_at) = ?
-          AND (note IS NULL OR note != '[freeze]')
-      `).get(habit.id, periodKey));
-    } else {
-      // Weekly: count all logs in the user's current ISO week. Pull the last
-      // 14 days of logs and bucket them in JS using the same getPeriodKeyTz
-      // function so the dedup and the count agree (#7, #25).
-      const recent = db.prepare(`
-        SELECT logged_at, note FROM habit_logs
-        WHERE habit_id = ? AND logged_at >= date('now', '-21 days')
-      `).all(habit.id);
-      periodCount = recent.filter(l =>
-        l.note !== '[freeze]' && getPeriodKeyTz(l.logged_at, 'weekly', tz) === periodKey
-      ).length;
-    }
+    // Pull recent logs and bucket them in JS using getPeriodKeyTz so the count
+    // resolves in the USER'S timezone (a late-evening local log no longer falls
+    // on the wrong UTC day). Synthetic [freeze]/[restore] logs are excluded so
+    // they can't suppress a real reminder.
+    const lookbackDays = habit.frequency === 'daily' ? '-3 days' : '-21 days';
+    const recent = db.prepare(`
+      SELECT logged_at, note FROM habit_logs
+      WHERE habit_id = ? AND logged_at >= date('now', ?)
+    `).all(habit.id, lookbackDays);
+    const periodCount = recent.filter(l =>
+      (l.note === null || (l.note !== '[freeze]' && l.note !== '[restore]')) &&
+      getPeriodKeyTz(l.logged_at, habit.frequency, tz) === periodKey
+    ).length;
 
     if (periodCount >= target) continue; // already done this period
 
@@ -147,17 +150,29 @@ async function runDailyHabitReminders() {
       ? ` You're on a ${streak}-${habit.frequency === 'weekly' ? 'week' : 'day'} streak.`
       : '';
 
+    // Loss-aversion: name the social stake when the user has a buddy who'd see
+    // the miss (habit not private-from-buddy).
+    const buddyStake = hasActiveBuddy(habit.user_id) && habit.visibility_missed !== 'private';
+    const buddyLine = buddyStake ? ' Your buddy will see if you miss.' : '';
+
     let title, body;
     if (window === 'morning') {
       title = 'Good morning';
       body = habit.frequency === 'daily'
         ? `Log "${habit.name}" today.${streakLine}`
         : `Don't forget "${habit.name}" this week.${streakLine}`;
+    } else if (streak > 0) {
+      // Evening, streak alive — lead with the specific number you stand to lose.
+      const unit = habit.frequency === 'weekly' ? 'week' : 'day';
+      title = `Don't lose your ${streak}-${unit} streak`;
+      body = habit.frequency === 'daily'
+        ? `Your ${streak}-day "${habit.name}" streak ends at midnight if you don't log.${buddyLine}`
+        : `Log "${habit.name}" before the week ends to keep your ${streak}-week streak.${buddyLine}`;
     } else {
       title = 'Stay Dialed';
       body = habit.frequency === 'daily'
-        ? `Log "${habit.name}" before midnight.${streakLine} Don't break it.`
-        : `You haven't logged "${habit.name}" yet this week.${streakLine ? streakLine + ' Don\'t break it.' : ''}`;
+        ? `Log "${habit.name}" before midnight.${buddyLine}`
+        : `You haven't logged "${habit.name}" yet this week.${buddyLine}`;
     }
 
     // Persist the in-app notification BEFORE the push send. sendPush is

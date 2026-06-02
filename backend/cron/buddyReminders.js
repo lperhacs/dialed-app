@@ -72,7 +72,7 @@ async function runBuddyAccountabilityReminders() {
       const unlogged = db.prepare(`
         SELECT h.id, h.name FROM habits h
         WHERE h.user_id = ? AND h.is_active = 1 AND h.frequency = 'daily'
-          AND (SELECT COUNT(*) FROM habit_logs WHERE habit_id = h.id AND strftime('%Y-%m-%d', logged_at) = ? AND (note IS NULL OR note != '[freeze]')) = 0
+          AND (SELECT COUNT(*) FROM habit_logs WHERE habit_id = h.id AND strftime('%Y-%m-%d', logged_at) = ? AND (note IS NULL OR note NOT IN ('[freeze]', '[restore]'))) = 0
       `).all(u.id, localDate);
 
       if (unlogged.length === 0) continue;
@@ -217,6 +217,7 @@ async function runMissedHabitAutoPost() {
             SELECT COUNT(*) FROM habit_logs
             WHERE habit_id = h.id
               AND strftime('%Y-%m-%d', logged_at) = ?
+              AND (note IS NULL OR note NOT IN ('[freeze]', '[restore]'))
           ) = 0
       `).all(userId, yesterdayLocal);
 

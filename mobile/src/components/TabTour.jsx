@@ -237,7 +237,7 @@ function ClubsIllustration({ colors }) {
 
   return (
     <View style={[il.card, { backgroundColor: colors.bgCard, borderColor: colors.borderSubtle }]}>
-      <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.7, marginBottom: 14 }}>
+      <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textMuted, letterSpacing: 0.7, marginBottom: 14 }}>
         Morning Run Club
       </Text>
       {rows.map((row, i) => (

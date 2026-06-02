@@ -89,10 +89,10 @@ export default function WeeklyRecapScreen() {
         </View>
 
         {/* Habit breakdown */}
-        {recap.habits.length > 0 && (
+        {(recap.habits || []).length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Habits this week</Text>
-            {recap.habits.map(h => (
+            {(recap.habits || []).map(h => (
               <View key={h.habit_id} style={styles.habitRow}>
                 <View style={[styles.habitDot, { backgroundColor: h.habit_color }]} />
                 <View style={{ flex: 1 }}>

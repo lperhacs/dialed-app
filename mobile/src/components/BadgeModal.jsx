@@ -140,7 +140,6 @@ function makeStyles(colors) {
       fontSize: 11,
       fontWeight: '700',
       color: colors.textMuted,
-      textTransform: 'uppercase',
       letterSpacing: 0.8,
       marginTop: 16,
       marginBottom: 4,

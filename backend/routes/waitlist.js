@@ -1,10 +1,42 @@
 'use strict';
 const express = require('express');
+const crypto = require('crypto');
 const router = express.Router();
 const { getDb } = require('../database/db');
+const { rateLimit } = require('express-rate-limit');
+
+// Throttle the public, unauthenticated signup endpoint so it can't be used to
+// flood the DB or amplify the outbound webhook.
+const waitlistLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many signups, please try again later.' },
+});
+
+// Constant-time compare so the admin key can't be recovered via response timing.
+function timingSafeStringEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || !b) return false;
+  const aBuf = Buffer.from(a);
+  const bBuf = Buffer.from(b);
+  if (aBuf.length !== bBuf.length) return false;
+  return crypto.timingSafeEqual(aBuf, bBuf);
+}
+
+// Escape a value for safe CSV output. Defends against formula/CSV injection:
+// a leading =,+,-,@ (or tab/CR) is neutralized with a leading apostrophe, and
+// any field containing a comma, quote, or newline is wrapped in quotes with
+// embedded quotes doubled.
+function csvField(value) {
+  let s = value == null ? '' : String(value);
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+  if (/[",\n\r]/.test(s)) s = '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
 
 // POST /api/waitlist — save a waitlist email from the landing page
-router.post('/', (req, res) => {
+router.post('/', waitlistLimiter, (req, res) => {
   const { email } = req.body || {};
   if (!email || typeof email !== 'string') {
     return res.status(400).json({ error: 'Email required' });
@@ -40,8 +72,9 @@ router.post('/', (req, res) => {
 // GET /api/waitlist/export.csv — download all waitlist emails as CSV
 // Protected by x-analytics-key header (same key used for JS error admin endpoint)
 router.get('/export.csv', (req, res) => {
-  const key = req.headers['x-analytics-key'];
-  if (!key || key !== process.env.ANALYTICS_KEY) {
+  const adminKey = process.env.ANALYTICS_KEY;
+  if (!adminKey) return res.status(503).json({ error: 'Export not configured' });
+  if (!timingSafeStringEqual(req.headers['x-analytics-key'], adminKey)) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
@@ -50,7 +83,7 @@ router.get('/export.csv', (req, res) => {
 
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', 'attachment; filename="waitlist.csv"');
-  res.send('email,signed_up_at\n' + rows.map(r => `${r.email},${r.created_at}`).join('\n'));
+  res.send('email,signed_up_at\n' + rows.map(r => `${csvField(r.email)},${csvField(r.created_at)}`).join('\n'));
 });
 
 // GET /api/waitlist/count — public count for social proof display

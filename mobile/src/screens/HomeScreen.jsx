@@ -1,7 +1,7 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View, FlatList, TouchableOpacity, Text, StyleSheet,
-  ActivityIndicator, RefreshControl, Image, Alert,
+  ActivityIndicator, RefreshControl, Image, Alert, ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -103,11 +103,19 @@ export default function HomeScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [buddyData, setBuddyData] = useState(null);
   const [nudgingIds, setNudgingIds] = useState({});
+  const [habits, setHabits] = useState([]);
+  const [loggingId, setLoggingId] = useState(null);
+  const [suggestions, setSuggestions] = useState([]);
+  const [requestingId, setRequestingId] = useState(null);
+  const fetchSeq = useRef(0);
 
   const fetchPosts = useCallback(async (p = 1, t = tab, reset = false) => {
     const endpoint = t === 'following' ? `/posts?page=${p}` : `/posts/explore?page=${p}`;
+    const seq = ++fetchSeq.current;
     try {
       const { data } = await api.get(endpoint);
+      // Ignore responses from superseded requests (rapid tab switches resolve out of order)
+      if (seq !== fetchSeq.current || t !== tab) return;
       if (reset) setPosts(data);
       else setPosts(prev => [...prev, ...data]);
       setHasMore(data.length === 20);
@@ -122,8 +130,44 @@ export default function HomeScreen() {
       setLoading(true);
       fetchPosts(1, tab, true).finally(() => setLoading(false));
       api.get('/buddies').then(r => setBuddyData(r.data)).catch(() => {});
+      api.get('/habits').then(r => setHabits(Array.isArray(r.data) ? r.data : [])).catch(() => {});
+      api.get('/buddies/suggestions')
+        .then(r => setSuggestions(r.data?.can_add ? (r.data.suggestions || []) : []))
+        .catch(() => {});
     }, [tab])
   );
+
+  // One-tap log from Home (value #1: make logging frictionless). Optimistically
+  // marks the habit logged so the chip disappears immediately.
+  const handleQuickLog = async (habit) => {
+    if (loggingId) return;
+    setLoggingId(habit.id);
+    setHabits(prev => prev.map(h => h.id === habit.id ? { ...h, logged_today: true } : h));
+    try {
+      await api.post(`/habits/${habit.id}/log`, { note: '' });
+    } catch (err) {
+      setHabits(prev => prev.map(h => h.id === habit.id ? { ...h, logged_today: false } : h));
+      Alert.alert('Could not log', err.response?.data?.error || 'Try again.');
+    } finally {
+      setLoggingId(null);
+    }
+  };
+
+  // Send a buddy request to a suggested co-participant (value #2). Optimistically
+  // drops them from the list so the card doesn't re-offer someone just asked.
+  const handleSendBuddyRequest = async (userId, name) => {
+    if (requestingId) return;
+    setRequestingId(userId);
+    try {
+      await api.post('/buddies/request', { user_id: userId });
+      setSuggestions(prev => prev.filter(s => s.user_id !== userId));
+      Alert.alert('Request sent', `We let ${name} know you want to be accountability buddies.`);
+    } catch (err) {
+      Alert.alert('Could not send', err.response?.data?.error || 'Try again.');
+    } finally {
+      setRequestingId(null);
+    }
+  };
 
   const handleNudge = async (buddyRowId, displayName) => {
     if (nudgingIds[buddyRowId]) return;
@@ -143,6 +187,10 @@ export default function HomeScreen() {
     await Promise.all([
       fetchPosts(1, tab, true),
       api.get('/buddies').then(r => setBuddyData(r.data)).catch(() => {}),
+      api.get('/habits').then(r => setHabits(Array.isArray(r.data) ? r.data : [])).catch(() => {}),
+      api.get('/buddies/suggestions')
+        .then(r => setSuggestions(r.data?.can_add ? (r.data.suggestions || []) : []))
+        .catch(() => {}),
     ]);
     setRefreshing(false);
   };
@@ -229,6 +277,93 @@ export default function HomeScreen() {
           onPress={() => navigation.navigate('UserProfile', { username: buddy.username })}
         />
       ))}
+
+      {/* Buddy prompt — persistent for unpaired users (value #2). Offers warm
+          suggestions from shared challenges, or a generic CTA when there are none. */}
+      {(buddyData?.buddies?.length ?? 0) === 0 && (
+        <View style={styles.buddyPrompt}>
+          <View style={styles.buddyPromptHeader}>
+            <Ionicons name="people" size={16} color={colors.accent} />
+            <Text style={styles.buddyPromptTitle}>Streaks are stickier with a buddy</Text>
+          </View>
+          {suggestions.length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.buddyPromptRow}
+            >
+              {suggestions.map(s => (
+                <View key={s.user_id} style={styles.suggestCard}>
+                  <TouchableOpacity
+                    onPress={() => navigation.navigate('UserProfile', { username: s.username })}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.suggestName} numberOfLines={1}>{s.display_name}</Text>
+                    <Text style={styles.suggestMeta} numberOfLines={1}>
+                      {s.shared_count > 1 ? `${s.shared_count} shared challenges` : `In "${s.shared_challenge}"`}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.suggestBtn}
+                    onPress={() => handleSendBuddyRequest(s.user_id, s.display_name)}
+                    disabled={requestingId === s.user_id}
+                    activeOpacity={0.85}
+                  >
+                    {requestingId === s.user_id
+                      ? <ActivityIndicator size="small" color={colors.bg} style={{ height: 16 }} />
+                      : <Text style={styles.suggestBtnText}>Pair up</Text>}
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </ScrollView>
+          ) : (
+            <TouchableOpacity
+              style={styles.buddyPromptCta}
+              onPress={() => navigation.navigate('Search')}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.buddyPromptCtaText}>Find a buddy</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
+      {/* One-tap log strip — only the active habits not yet logged today */}
+      {(() => {
+        const todo = habits.filter(h => h.is_active && !h.logged_today);
+        if (todo.length === 0) return null;
+        return (
+          <View style={styles.quickLogWrap}>
+            <Text style={styles.quickLogTitle}>Log today</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.quickLogRow}
+            >
+              {todo.map(h => (
+                <TouchableOpacity
+                  key={h.id}
+                  style={[styles.quickLogChip, { borderColor: h.color || colors.accent }]}
+                  onPress={() => handleQuickLog(h)}
+                  disabled={loggingId === h.id}
+                  activeOpacity={0.8}
+                >
+                  {loggingId === h.id
+                    ? <ActivityIndicator size="small" color={h.color || colors.accent} style={{ width: 16, height: 16 }} />
+                    : <Ionicons name="add-circle" size={16} color={h.color || colors.accent} />}
+                  <Text style={styles.quickLogChipText} numberOfLines={1}>{h.name}</Text>
+                  {h.streak > 0 && (
+                    <View style={styles.quickLogStreak}>
+                      <Ionicons name="flame" size={10} color={colors.accent} />
+                      <Text style={styles.quickLogStreakText}>{h.streak}</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        );
+      })()}
 
       {/* Normal feed */}
       {(
@@ -346,5 +481,86 @@ function makeStyles(colors) {
     backgroundColor: colors.accentDim,
   },
   nudgeBtnText: { fontSize: 12, fontWeight: '600', color: colors.accent },
+  quickLogWrap: {
+    paddingTop: 10,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSubtle,
+    backgroundColor: colors.bgCard,
+  },
+  quickLogTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textMuted,
+    paddingHorizontal: spacing.lg,
+    marginBottom: 8,
+  },
+  quickLogRow: { paddingHorizontal: spacing.lg, gap: 8 },
+  quickLogChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    backgroundColor: colors.bg,
+    maxWidth: 200,
+  },
+  quickLogChipText: { fontSize: 13, fontWeight: '600', color: colors.text, flexShrink: 1 },
+  quickLogStreak: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    backgroundColor: colors.accentDim,
+    borderRadius: 8,
+  },
+  quickLogStreakText: { fontSize: 10, fontWeight: '700', color: colors.accent },
+  buddyPrompt: {
+    paddingTop: 12,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSubtle,
+    backgroundColor: colors.bgCard,
+  },
+  buddyPromptHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: spacing.lg,
+    marginBottom: 10,
+  },
+  buddyPromptTitle: { fontSize: 13, fontWeight: '600', color: colors.text },
+  buddyPromptRow: { paddingHorizontal: spacing.lg, gap: 10 },
+  suggestCard: {
+    width: 160,
+    padding: 12,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    backgroundColor: colors.bg,
+    gap: 10,
+  },
+  suggestName: { fontSize: 14, fontWeight: '600', color: colors.text },
+  suggestMeta: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
+  suggestBtn: {
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderRadius: radius.sm,
+    backgroundColor: colors.accent,
+  },
+  suggestBtnText: { fontSize: 13, fontWeight: '600', color: colors.bg },
+  buddyPromptCta: {
+    marginHorizontal: spacing.lg,
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.accentDimBorder,
+    backgroundColor: colors.accentDim,
+  },
+  buddyPromptCtaText: { fontSize: 13, fontWeight: '600', color: colors.accent },
   });
 }

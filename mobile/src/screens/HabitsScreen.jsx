@@ -134,7 +134,7 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
             try {
               const { data } = await api.post('/pro/restore-streak', { habit_id: habit.id });
               // Reload the habit list so calendar + streak update
-              onLog(habit.id, { streak: lastStreak, at_risk: false, total_logs: habit.total_logs + data.periods_filled, period_count: habit.period_count });
+              onLog(habit.id, { streak: lastStreak, at_risk: false, total_logs: (habit.total_logs || 0) + (data.periods_filled || 0), period_count: habit.period_count || 0 });
               Alert.alert('Streak restored!', `Your ${lastStreak}-day streak is back. ${data.freezes_remaining} freeze${data.freezes_remaining === 1 ? '' : 's'} remaining.`);
             } catch (err) {
               Alert.alert('Error', err.response?.data?.error || 'Could not restore streak.');
@@ -256,9 +256,10 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
           ? ` · ${periodCount}/${target} days ${periodNoun}`
           : '';
         const disabled = logging || goalMet || lockedUntilTomorrow;
+        const showCheck = !logging && (goalMet || lockedUntilTomorrow);
         const btnLabel = logging ? 'Logging…'
-          : goalMet ? (target > 1 ? `✓ Done${progressLabel}` : '✓ Logged today')
-          : lockedUntilTomorrow ? `✓ Logged today${progressLabel}`
+          : goalMet ? (target > 1 ? `Done${progressLabel}` : 'Logged today')
+          : lockedUntilTomorrow ? `Logged today${progressLabel}`
           : target > 1 ? `Log today${progressLabel}`
           : 'Log today';
         return (
@@ -268,6 +269,7 @@ function HabitCard({ habit, onLog, onEdit, onDelete, defaultDays = 30 }) {
             disabled={disabled}
             activeOpacity={0.85}
           >
+            {showCheck && <Ionicons name="checkmark" size={15} color={colors.textMuted} style={{ marginRight: 5 }} />}
             <Text style={[styles.logBtnText, disabled && { color: colors.textMuted }]}>
               {btnLabel}
             </Text>
@@ -428,16 +430,16 @@ function TimePicker({ value, onChange }) {
         <View style={styles.timePickerRow}>
           {/* Hour */}
           <View style={styles.timeUnit}>
-            <TouchableOpacity onPress={() => adj('hour', 1)} hitSlop={10}><Text style={styles.timeAdj}>▲</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => adj('hour', 1)} hitSlop={10}><Ionicons name="chevron-up" size={14} color={colors.textMuted} /></TouchableOpacity>
             <Text style={styles.timeValue}>{String(hour % 12 || 12).padStart(2, '0')}</Text>
-            <TouchableOpacity onPress={() => adj('hour', -1)} hitSlop={10}><Text style={styles.timeAdj}>▼</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => adj('hour', -1)} hitSlop={10}><Ionicons name="chevron-down" size={14} color={colors.textMuted} /></TouchableOpacity>
           </View>
           <Text style={styles.timeColon}>:</Text>
           {/* Minute */}
           <View style={styles.timeUnit}>
-            <TouchableOpacity onPress={() => adj('minute', 15)} hitSlop={10}><Text style={styles.timeAdj}>▲</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => adj('minute', 15)} hitSlop={10}><Ionicons name="chevron-up" size={14} color={colors.textMuted} /></TouchableOpacity>
             <Text style={styles.timeValue}>{String(minute).padStart(2, '0')}</Text>
-            <TouchableOpacity onPress={() => adj('minute', -15)} hitSlop={10}><Text style={styles.timeAdj}>▼</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => adj('minute', -15)} hitSlop={10}><Ionicons name="chevron-down" size={14} color={colors.textMuted} /></TouchableOpacity>
           </View>
           {/* AM/PM */}
           <TouchableOpacity
@@ -546,15 +548,15 @@ function RemindersField({ reminders, onChange, isPro, onUpgradePress }) {
       {picking && (
         <View style={[styles.timePickerRow, { marginTop: 4, marginBottom: 10 }]}>
           <View style={styles.timeUnit}>
-            <TouchableOpacity onPress={() => adj('hour', 1)} hitSlop={10}><Text style={styles.timeAdj}>▲</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => adj('hour', 1)} hitSlop={10}><Ionicons name="chevron-up" size={14} color={colors.textMuted} /></TouchableOpacity>
             <Text style={styles.timeValue}>{String(draftHour % 12 || 12).padStart(2, '0')}</Text>
-            <TouchableOpacity onPress={() => adj('hour', -1)} hitSlop={10}><Text style={styles.timeAdj}>▼</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => adj('hour', -1)} hitSlop={10}><Ionicons name="chevron-down" size={14} color={colors.textMuted} /></TouchableOpacity>
           </View>
           <Text style={styles.timeColon}>:</Text>
           <View style={styles.timeUnit}>
-            <TouchableOpacity onPress={() => adj('minute', 15)} hitSlop={10}><Text style={styles.timeAdj}>▲</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => adj('minute', 15)} hitSlop={10}><Ionicons name="chevron-up" size={14} color={colors.textMuted} /></TouchableOpacity>
             <Text style={styles.timeValue}>{String(draftMinute).padStart(2, '0')}</Text>
-            <TouchableOpacity onPress={() => adj('minute', -15)} hitSlop={10}><Text style={styles.timeAdj}>▼</Text></TouchableOpacity>
+            <TouchableOpacity onPress={() => adj('minute', -15)} hitSlop={10}><Ionicons name="chevron-down" size={14} color={colors.textMuted} /></TouchableOpacity>
           </View>
           <TouchableOpacity
             style={styles.ampmBtn}
@@ -1144,7 +1146,7 @@ function makeStyles(colors) {
     restoreBannerTextPro: { flex: 1, fontSize: 12, fontWeight: '500', color: colors.accent },
     restoreBannerTextFree: { flex: 1, fontSize: 12, fontWeight: '500', color: '#a78bfa' },
 
-    logBtn: { borderRadius: radius.sm, paddingVertical: 10, alignItems: 'center' },
+    logBtn: { flexDirection: 'row', borderRadius: radius.sm, paddingVertical: 10, alignItems: 'center', justifyContent: 'center' },
     logBtnDisabled: { opacity: 0.6 },
     logBtnText: { color: colors.bg, fontWeight: '600', fontSize: 14 },
 

@@ -141,7 +141,9 @@ function MessageBubble({ msg, isMe, showSender }) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
   const [viewerVisible, setViewerVisible] = useState(false);
-  const fullImageUrl = msg.image_url ? `${API_BASE_URL}${msg.image_url}` : null;
+  const fullImageUrl = msg.image_url
+    ? (msg.image_url.startsWith('http') ? msg.image_url : `${API_BASE_URL}${msg.image_url}`)
+    : null;
 
   return (
     <View style={[styles.bubbleRow, isMe && styles.bubbleRowMe]}>
@@ -211,7 +213,7 @@ export default function ConversationScreen({ route }) {
         </TouchableOpacity>
       ),
     });
-  }, [title, isMuted]);
+  }, [title, isMuted, colors]);
 
   useEffect(() => {
     Promise.all([

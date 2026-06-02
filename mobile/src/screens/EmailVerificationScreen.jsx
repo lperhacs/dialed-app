@@ -30,8 +30,13 @@ export default function EmailVerificationScreen({ navigation, route }) {
   const timerRef = useRef(null);
 
   useEffect(() => {
-    setTimeout(() => inputRef.current?.focus(), 400);
-    return () => clearInterval(timerRef.current);
+    const focusTimer = setTimeout(() => inputRef.current?.focus(), 400);
+    // Clear both the focus timeout and the cooldown interval on unmount so
+    // neither fires (and triggers a setState) after the screen is gone.
+    return () => {
+      clearTimeout(focusTimer);
+      clearInterval(timerRef.current);
+    };
   }, []);
 
   const startCooldown = () => {

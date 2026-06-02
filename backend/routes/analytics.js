@@ -178,6 +178,49 @@ router.get('/funnel', analyticsLimiter, adminOnly, (req, res) => {
     'SELECT COUNT(DISTINCT follower_id) as c FROM follows'
   ).get().c;
 
+  // Buddy attach rate — distinct users in an ACTIVE pair where BOTH sides have
+  // logged at least one real habit (a "mutually-logging" buddy, the strongest
+  // D30 predictor). Denominator is all registered users.
+  const buddyMutual = db.prepare(`
+    SELECT COUNT(*) as c FROM (
+      SELECT DISTINCT p.uid FROM (
+        SELECT requester_id AS uid, recipient_id AS other FROM buddies WHERE status = 'active'
+        UNION ALL
+        SELECT recipient_id AS uid, requester_id AS other FROM buddies WHERE status = 'active'
+      ) p
+      WHERE EXISTS (
+        SELECT 1 FROM habit_logs hl WHERE hl.user_id = p.uid
+          AND (hl.note IS NULL OR hl.note NOT IN ('[freeze]', '[restore]'))
+      ) AND EXISTS (
+        SELECT 1 FROM habit_logs hl WHERE hl.user_id = p.other
+          AND (hl.note IS NULL OR hl.note NOT IN ('[freeze]', '[restore]'))
+      )
+    )
+  `).get().c;
+  const buddyAttachRate = registered > 0 ? Math.round((buddyMutual / registered) * 100) : 0;
+
+  // Week-one activation — of users whose account is old enough to have completed
+  // their first week, how many logged a real habit on ≥3 distinct days within the
+  // first 7 days (proxy for "hit a 3-day streak in week one", value #4).
+  const weekOneEligible = db.prepare(
+    "SELECT COUNT(*) as c FROM users WHERE created_at <= datetime('now', '-7 days')"
+  ).get().c;
+  const weekOneActivated = db.prepare(`
+    SELECT COUNT(*) as c FROM (
+      SELECT u.id, COUNT(DISTINCT date(hl.logged_at)) as days
+      FROM users u
+      JOIN habit_logs hl ON hl.user_id = u.id
+        AND hl.logged_at >= u.created_at
+        AND hl.logged_at < datetime(u.created_at, '+7 days')
+        AND (hl.note IS NULL OR hl.note NOT IN ('[freeze]', '[restore]'))
+      WHERE u.created_at <= datetime('now', '-7 days')
+      GROUP BY u.id
+      HAVING days >= 3
+    )
+  `).get().c;
+  const weekOneActivationRate = weekOneEligible > 0
+    ? Math.round((weekOneActivated / weekOneEligible) * 100) : 0;
+
   res.json({
     funnel: [
       { step: 'Registered', count: registered },
@@ -186,6 +229,15 @@ router.get('/funnel', analyticsLimiter, adminOnly, (req, res) => {
       { step: 'Made first post', count: postedContent },
       { step: 'Followed someone', count: followedSomeone },
     ],
+    buddy: {
+      mutually_logging_users: buddyMutual,
+      attach_rate_pct: buddyAttachRate,
+    },
+    week_one: {
+      eligible_users: weekOneEligible,
+      activated_3plus_log_days: weekOneActivated,
+      activation_rate_pct: weekOneActivationRate,
+    },
   });
 });
 

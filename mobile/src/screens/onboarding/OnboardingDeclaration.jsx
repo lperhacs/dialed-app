@@ -183,10 +183,10 @@ export default function OnboardingDeclaration({ navigation }) {
 
             <View style={styles.form}>
               {[
-                { field: 'display_name', label: 'NAME', placeholder: 'Alex Rivera', auto: 'words' },
-                { field: 'username', label: 'USERNAME', placeholder: 'alex_rn', auto: 'none' },
-                { field: 'email', label: 'EMAIL', placeholder: 'alex@example.com', auto: 'none', keyboard: 'email-address' },
-                { field: 'password', label: 'PASSWORD', placeholder: 'At least 6 characters', secure: true },
+                { field: 'display_name', label: 'Name', placeholder: 'Alex Rivera', auto: 'words' },
+                { field: 'username', label: 'Username', placeholder: 'alex_rn', auto: 'none' },
+                { field: 'email', label: 'Email', placeholder: 'alex@example.com', auto: 'none', keyboard: 'email-address' },
+                { field: 'password', label: 'Password', placeholder: 'At least 6 characters', secure: true },
               ].map(({ field, label, placeholder, auto, keyboard, secure }) => (
                 <View key={field} style={styles.field}>
                   <Text style={styles.fieldLabel}>{label}</Text>
@@ -240,7 +240,7 @@ function makeStyles(colors) { return StyleSheet.create({
   section: { flex: 1 },
   backRow: { marginBottom: 8 },
   backText: { fontSize: 14, color: colors.textMuted },
-  stepIndicator: { fontSize: 12, fontWeight: '600', color: colors.textDim, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 },
+  stepIndicator: { fontSize: 12, fontWeight: '600', color: colors.textDim, letterSpacing: 0.8, marginBottom: 10 },
   headline: { fontSize: 26, fontWeight: '800', color: colors.text, lineHeight: 32, marginBottom: 24 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 },
   chip: {
@@ -262,13 +262,13 @@ function makeStyles(colors) { return StyleSheet.create({
     backgroundColor: colors.accentDim, borderWidth: 1, borderColor: colors.accentDimBorder,
     borderRadius: radius.sm, padding: 14, marginBottom: 24,
   },
-  commitmentLabel: { fontSize: 11, fontWeight: '700', color: colors.accent, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 },
+  commitmentLabel: { fontSize: 11, fontWeight: '700', color: colors.accent, letterSpacing: 0.8, marginBottom: 8 },
   commitmentRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
   commitmentDot: { width: 8, height: 8, borderRadius: 4, flexShrink: 0 },
   commitmentHabit: { fontSize: 16, fontWeight: '700', color: colors.text },
   form: { gap: 14 },
   field: { gap: 5 },
-  fieldLabel: { fontSize: 11, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
+  fieldLabel: { fontSize: 11, fontWeight: '700', color: colors.textMuted, letterSpacing: 0.8 },
   btn: { backgroundColor: colors.accent, borderRadius: radius.pill, paddingVertical: 15, alignItems: 'center', marginTop: 8 },
   btnDisabled: { opacity: 0.4 },
   btnText: { color: 'white', fontSize: 16, fontWeight: '700' },

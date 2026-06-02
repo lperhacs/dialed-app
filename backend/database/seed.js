@@ -3,6 +3,18 @@ const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('./db');
 
+// Destructive guard — seed.js DELETEs every table. It must never run against a
+// production database. Refuse unless NODE_ENV !== 'production' AND the caller
+// explicitly opts in with SEED_CONFIRM=yes.
+if (process.env.NODE_ENV === 'production') {
+  console.error('✋ Refusing to seed: NODE_ENV is "production". Seeding would wipe all live data.');
+  process.exit(1);
+}
+if (process.env.SEED_CONFIRM !== 'yes') {
+  console.error('✋ Refusing to seed: this DELETEs every table. Re-run with SEED_CONFIRM=yes to confirm.');
+  process.exit(1);
+}
+
 const db = getDb();
 
 console.log('🌱 Seeding Dialed database...\n');

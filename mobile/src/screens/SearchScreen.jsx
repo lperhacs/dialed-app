@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   ActivityIndicator, SectionList, FlatList,
@@ -152,6 +152,7 @@ export default function SearchScreen() {
   const [events, setEvents] = useState([]);
   const [clubs, setClubs] = useState([]);
   const [history, setHistory] = useState([]);
+  const searchSeq = useRef(0);
 
   // Load history when screen focuses
   useFocusEffect(useCallback(() => {
@@ -166,12 +167,15 @@ export default function SearchScreen() {
       return;
     }
     const timer = setTimeout(async () => {
+      const seq = ++searchSeq.current;
       setLoading(true);
       const [pRes, eRes, cRes] = await Promise.allSettled([
         api.get(`/users/search?q=${encodeURIComponent(q)}`),
         api.get(`/events/search?q=${encodeURIComponent(q)}`),
         api.get(`/clubs/search?q=${encodeURIComponent(q)}`),
       ]);
+      // Drop stale responses so a slow earlier query can't overwrite newer results
+      if (seq !== searchSeq.current) return;
       setPeople(pRes.status === 'fulfilled' ? pRes.value.data : []);
       setEvents(eRes.status === 'fulfilled' ? eRes.value.data : []);
       setClubs(cRes.status === 'fulfilled' ? cRes.value.data : []);
@@ -283,7 +287,7 @@ export default function SearchScreen() {
         ) : (
           <SectionList
             sections={sections}
-            keyExtractor={item => item.id}
+            keyExtractor={(item, index) => `${item.type || 'item'}-${String(item.id)}-${index}`}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 40 }}
             renderSectionHeader={({ section }) => (

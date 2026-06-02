@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   ActivityIndicator, RefreshControl, Modal, TextInput, Pressable, Alert,
@@ -70,6 +70,8 @@ export default function InboxScreen() {
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [starting, setStarting] = useState(false);
+  const searchTimer = useRef(null);
+  const searchSeq = useRef(0);
 
   const load = useCallback(async () => {
     const { data } = await api.get('/dm/inbox');
@@ -87,18 +89,23 @@ export default function InboxScreen() {
     setRefreshing(false);
   };
 
-  const onSearchChange = async (text) => {
+  const onSearchChange = (text) => {
     setSearchQuery(text);
-    if (text.length < 2) { setSearchResults([]); return; }
+    clearTimeout(searchTimer.current);
+    if (text.length < 2) { setSearchResults([]); setSearching(false); return; }
     setSearching(true);
-    try {
-      const { data } = await api.get(`/users/search?q=${encodeURIComponent(text)}`);
-      setSearchResults(data);
-    } catch {
-      setSearchResults([]);
-    } finally {
-      setSearching(false);
-    }
+    searchTimer.current = setTimeout(async () => {
+      const seq = ++searchSeq.current;
+      try {
+        const { data } = await api.get(`/users/search?q=${encodeURIComponent(text)}`);
+        if (seq !== searchSeq.current) return;
+        setSearchResults(data);
+      } catch {
+        if (seq === searchSeq.current) setSearchResults([]);
+      } finally {
+        if (seq === searchSeq.current) setSearching(false);
+      }
+    }, 350);
   };
 
   const startConversation = async (user) => {

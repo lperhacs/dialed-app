@@ -57,7 +57,7 @@ function buildWeeklyRecap(db, userId, weekStart, weekEnd) {
 
   const habitSummary = habits.map(h => {
     const logsThisWeek = db.prepare(
-      "SELECT COUNT(*) as c FROM habit_logs WHERE habit_id = ? AND date(logged_at) >= ? AND date(logged_at) <= ? AND (note IS NULL OR note != '[freeze]')"
+      "SELECT COUNT(*) as c FROM habit_logs WHERE habit_id = ? AND date(logged_at) >= ? AND date(logged_at) <= ? AND (note IS NULL OR note NOT IN ('[freeze]', '[restore]'))"
     ).get(h.id, weekStart, weekEnd).c;
 
     const allLogs = db.prepare('SELECT logged_at, note FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(h.id);
@@ -77,7 +77,7 @@ function buildWeeklyRecap(db, userId, weekStart, weekEnd) {
   });
 
   const total_logs = db.prepare(
-    "SELECT COUNT(*) as c FROM habit_logs WHERE user_id = ? AND date(logged_at) >= ? AND date(logged_at) <= ? AND (note IS NULL OR note != '[freeze]')"
+    "SELECT COUNT(*) as c FROM habit_logs WHERE user_id = ? AND date(logged_at) >= ? AND date(logged_at) <= ? AND (note IS NULL OR note NOT IN ('[freeze]', '[restore]'))"
   ).get(userId, weekStart, weekEnd).c;
 
   const total_cheers = db.prepare(

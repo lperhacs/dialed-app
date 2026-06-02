@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useHeaderHeight } from '@react-navigation/elements';
+import { Ionicons } from '@expo/vector-icons';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import Avatar from '../components/Avatar';
@@ -59,7 +60,11 @@ function CommentLikeBtn({ comment, postId }) {
 
   return (
     <TouchableOpacity onPress={toggle} style={styles.likeBtn} activeOpacity={0.7} hitSlop={8}>
-      <Text style={[styles.likeIcon, liked && { color: colors.accent }]}>{liked ? '🧡' : '🤍'}</Text>
+      <Ionicons
+        name={liked ? 'heart' : 'heart-outline'}
+        size={15}
+        color={liked ? colors.accent : colors.textMuted}
+      />
       {likeCount > 0 && <Text style={[styles.likeCount, liked && { color: colors.accent }]}>{likeCount}</Text>}
     </TouchableOpacity>
   );
@@ -237,7 +242,7 @@ export default function CommentsScreen({ route }) {
       ) : (
         <FlatList
           data={comments}
-          keyExtractor={item => item.id}
+          keyExtractor={item => String(item.id)}
           ListHeaderComponent={PostHeader}
           renderItem={({ item }) => (
             <CommentItem

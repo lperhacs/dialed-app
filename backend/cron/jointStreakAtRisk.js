@@ -99,7 +99,7 @@ async function runJointStreakAtRisk() {
         `).get(u.id, dedupRef);
         if (already) continue;
 
-        const body = `Log today to keep your ${joint.streak}-day streak with ${u.buddyName} alive!`;
+        const body = `Your ${joint.streak}-day streak with ${u.buddyName} ends at midnight. Log now so you both don't lose it.`;
 
         // Insert dedup row BEFORE the push so a push failure still records the send.
         db.prepare(
@@ -107,7 +107,7 @@ async function runJointStreakAtRisk() {
         ).run(uuidv4(), u.id, dedupRef, body);
 
         await sendPush(u.id, {
-          title: 'Your streak is at risk',
+          title: `Don't lose your ${joint.streak}-day streak`,
           body,
           data: { type: 'joint_streak_at_risk', buddyName: u.buddyName, streak: joint.streak },
         }, 'buddy');

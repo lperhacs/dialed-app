@@ -58,29 +58,46 @@ export default function LeaderboardScreen() {
   const [selectedChallenge, setSelectedChallenge] = useState(null);
   const [challengeBoard, setChallengeBoard] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
+    let active = true;
     setLoading(true);
+    setError(false);
     setData([]);
     if (tab === 'friends') {
-      api.get('/leaderboard/friends').then(r => setData(r.data)).finally(() => setLoading(false));
+      api.get('/leaderboard/friends')
+        .then(r => { if (active) setData(r.data); })
+        .catch(() => { if (active) setError(true); })
+        .finally(() => { if (active) setLoading(false); });
     } else if (tab === 'global') {
-      api.get('/leaderboard/global').then(r => setData(r.data)).finally(() => setLoading(false));
+      api.get('/leaderboard/global')
+        .then(r => { if (active) setData(r.data); })
+        .catch(() => { if (active) setError(true); })
+        .finally(() => { if (active) setLoading(false); });
     } else {
-      api.get('/leaderboard/challenges').then(r => {
-        setMyChallenges(r.data);
-        if (r.data.length > 0 && !selectedChallenge) setSelectedChallenge(r.data[0].id);
-        setLoading(false);
-      });
+      api.get('/leaderboard/challenges')
+        .then(r => {
+          if (!active) return;
+          setMyChallenges(r.data);
+          if (r.data?.length > 0 && !selectedChallenge) setSelectedChallenge(r.data[0].id);
+        })
+        .catch(() => { if (active) setError(true); })
+        .finally(() => { if (active) setLoading(false); });
     }
+    return () => { active = false; };
   }, [tab]);
 
   useEffect(() => {
     if (tab === 'clubs' && selectedChallenge) {
+      let active = true;
       setLoading(true);
+      setError(false);
       api.get(`/leaderboard/challenges/${selectedChallenge}`)
-        .then(r => setChallengeBoard(r.data))
-        .finally(() => setLoading(false));
+        .then(r => { if (active) setChallengeBoard(r.data); })
+        .catch(() => { if (active) setError(true); })
+        .finally(() => { if (active) setLoading(false); });
+      return () => { active = false; };
     }
   }, [selectedChallenge, tab]);
 
@@ -123,6 +140,11 @@ export default function LeaderboardScreen() {
 
       {loading ? (
         <View style={styles.center}><ActivityIndicator color={colors.accent} size="large" /></View>
+      ) : error ? (
+        <View style={styles.empty}>
+          <Text style={styles.emptyTitle}>Could not load</Text>
+          <Text style={styles.emptyText}>Something went wrong. Pull down or switch tabs to retry.</Text>
+        </View>
       ) : listData.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No data yet</Text>

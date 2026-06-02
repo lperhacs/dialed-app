@@ -48,8 +48,13 @@ export default function RegisterScreen({ navigation }) {
     setLoading(true);
     try {
       const { data } = await api.post('/auth/register', form);
+      // login() flips RootNavigator from the unauth stack to the authed stack,
+      // which unmounts THIS screen's navigator. Imperatively navigating right
+      // after login() races that swap (the target stack may not be mounted yet).
+      // Instead the authed stack picks VerifyEmail as its initial route when the
+      // freshly-registered user isn't email-verified yet (see RootNavigator), so
+      // we don't navigate from here.
       await login(data.token, data.user);
-      navigation.navigate('VerifyEmail', { email: form.email });
     } catch (err) {
       Alert.alert('Registration failed', err.response?.data?.error || 'Something went wrong.');
     } finally {

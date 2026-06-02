@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   Modal, TextInput, ScrollView, Alert, ActivityIndicator,
@@ -24,6 +24,13 @@ function ClubCard({ club, onUpdate, onDelete }) {
   const [loading, setLoading] = useState(false);
   const [memberStatus, setMemberStatus] = useState(club.memberStatus);
   const [memberCount, setMemberCount] = useState(club.member_count);
+
+  // FlatList re-uses the same component instance per club id, so useState's
+  // initializer doesn't re-run on prop change. Sync to props after a refresh.
+  useEffect(() => {
+    setMemberStatus(club.memberStatus);
+    setMemberCount(club.member_count);
+  }, [club.memberStatus, club.member_count]);
 
   const days = club.end_date
     ? Math.ceil((parseServerDate(club.end_date) - Date.now()) / 86400000)
@@ -114,8 +121,18 @@ function ClubCard({ club, onUpdate, onDelete }) {
       <View style={styles.cardFooter}>
         <Text style={styles.cardStat}>{memberCount} members</Text>
         <Text style={styles.cardStat}>{formatDate(club.start_date)} → {formatDate(club.end_date)}</Text>
-        {memberStatus === 'active' && <Text style={{ color: colors.green, fontSize: 12, fontWeight: '600' }}>✓ Joined</Text>}
-        {memberStatus === 'pending' && <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: '600' }}>⏳ Pending</Text>}
+        {memberStatus === 'active' && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+            <Ionicons name="checkmark-circle" size={13} color={colors.green} />
+            <Text style={{ color: colors.green, fontSize: 12, fontWeight: '600' }}>Joined</Text>
+          </View>
+        )}
+        {memberStatus === 'pending' && (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+            <Ionicons name="time-outline" size={13} color={colors.textMuted} />
+            <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: '600' }}>Pending</Text>
+          </View>
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -160,10 +177,10 @@ function CreateModal({ visible, onClose, onCreated }) {
 
         <ScrollView contentContainerStyle={{ padding: spacing.lg, gap: 16 }} keyboardShouldPersistTaps="handled">
           {[
-            { f: 'name', label: 'CLUB NAME', placeholder: 'Morning Run Club' },
-            { f: 'description', label: 'DESCRIPTION', placeholder: 'What is this club about?', multi: true },
-            { f: 'start_date', label: 'START DATE', placeholder: 'YYYY-MM-DD' },
-            { f: 'end_date', label: 'END DATE (optional)', placeholder: 'YYYY-MM-DD' },
+            { f: 'name', label: 'Club name', placeholder: 'Morning Run Club' },
+            { f: 'description', label: 'Description', placeholder: 'What is this club about?', multi: true },
+            { f: 'start_date', label: 'Start date', placeholder: 'YYYY-MM-DD' },
+            { f: 'end_date', label: 'End date (optional)', placeholder: 'YYYY-MM-DD' },
           ].map(({ f, label, placeholder, multi }) => (
             <View key={f} style={{ gap: 5 }}>
               <Text style={styles.fieldLabel}>{label}</Text>
@@ -180,7 +197,7 @@ function CreateModal({ visible, onClose, onCreated }) {
           ))}
 
           <View style={{ gap: 5 }}>
-            <Text style={styles.fieldLabel}>FREQUENCY</Text>
+            <Text style={styles.fieldLabel}>Frequency</Text>
             <View style={styles.segRow}>
               {['daily', 'weekly', 'monthly'].map(fq => (
                 <TouchableOpacity
@@ -197,7 +214,7 @@ function CreateModal({ visible, onClose, onCreated }) {
           </View>
 
           <View style={{ gap: 5 }}>
-            <Text style={styles.fieldLabel}>VISIBILITY</Text>
+            <Text style={styles.fieldLabel}>Visibility</Text>
             <View style={styles.segRow}>
               {[
                 { value: 'public', label: 'Public' },
@@ -247,7 +264,7 @@ function SuggestedCard({ club }) {
 
   const joinLabel = () => {
     if (joining) return '…';
-    if (status === 'active') return '✓ Joined';
+    if (status === 'active') return 'Joined';
     if (status === 'pending') return 'Pending';
     return isPrivate ? 'Request' : 'Join';
   };
@@ -376,7 +393,7 @@ export default function ClubsScreen() {
       ) : (
         <FlatList
           data={displayList}
-          keyExtractor={item => item.id}
+          keyExtractor={item => String(item.id)}
           renderItem={({ item }) => (
             <ClubCard
               club={item}

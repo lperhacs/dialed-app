@@ -77,17 +77,26 @@ router.post('/grant', (req, res) => {
     ? new Date(now.getFullYear() + 1, now.getMonth(), now.getDate()).toISOString()
     : new Date(now.getFullYear(), now.getMonth() + 1, now.getDate()).toISOString();
 
-  // Grant 3 streak freezes per grant (monthly refresh handled by billing cycle)
+  // Refresh streak freezes to the 3-per-cycle allotment. Use MAX so a renewal
+  // never *reduces* a balance that legitimately exceeds 3 (e.g. promo grants),
+  // and the fixed cap means a re-grant can't inflate the balance past the
+  // allotment — so repeated grants can't farm extra freezes.
   db.prepare(
-    'UPDATE users SET is_pro = 1, pro_expires_at = ?, streak_freezes = 3 WHERE id = ?'
+    'UPDATE users SET is_pro = 1, pro_expires_at = ?, streak_freezes = MAX(COALESCE(streak_freezes, 0), 3) WHERE id = ?'
   ).run(expiresAt, user_id);
 
   trackEvent(user_id, 'pro_granted', { plan }, {});
   res.json({ granted: true, expires_at: expiresAt });
 });
 
-// POST /api/pro/grant-all — grant annual pro to every user (beta use only)
+// POST /api/pro/grant-all — grant annual pro to every user (beta use only).
+// Double-gated: requires the server key AND the ENABLE_GRANT_ALL=true env flag,
+// so a leaked/guessed key alone can't mass-grant Pro in production. Leave the
+// flag unset in prod; set it only for the brief beta window when needed.
 router.post('/grant-all', (req, res) => {
+  if (process.env.ENABLE_GRANT_ALL !== 'true') {
+    return res.status(404).json({ error: 'Not found' });
+  }
   const key = (req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
   if (!timingSafeStringEqual(key, process.env.PRO_SERVER_KEY)) {
     return res.status(403).json({ error: 'Forbidden' });
@@ -95,7 +104,7 @@ router.post('/grant-all', (req, res) => {
   const db = getDb();
   const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
   const { changes } = db.prepare(
-    'UPDATE users SET is_pro = 1, pro_expires_at = ?, streak_freezes = 3 WHERE is_pro = 0 OR pro_expires_at < ?'
+    'UPDATE users SET is_pro = 1, pro_expires_at = ?, streak_freezes = MAX(COALESCE(streak_freezes, 0), 3) WHERE is_pro = 0 OR pro_expires_at < ?'
   ).run(expiresAt, new Date().toISOString());
   res.json({ granted: changes, expires_at: expiresAt });
 });

@@ -313,7 +313,7 @@ function makeStyles(colors) {
     paddingVertical: 12, alignItems: 'center',
   },
   fbBtnText: { color: '#1877f2', fontWeight: '700', fontSize: 14 },
-  sectionLabel: { fontSize: 13, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 10 },
+  sectionLabel: { fontSize: 13, fontWeight: '700', color: colors.textMuted, letterSpacing: 0.6, marginBottom: 10 },
   emptyText: { fontSize: 14, color: colors.textDim, textAlign: 'center', paddingVertical: 20 },
   userRow: {
     flexDirection: 'row', alignItems: 'center', gap: 10,

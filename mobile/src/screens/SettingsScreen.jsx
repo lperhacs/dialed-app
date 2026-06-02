@@ -12,7 +12,7 @@
  *  7. Appearance         - dark / light mode
  *  8. Account            - change email, change password, deactivate, delete
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   TextInput, Switch, Alert, ActivityIndicator, Modal,
@@ -107,19 +107,19 @@ function EditProfileModal({ visible, onClose, user, onSaved }) {
     setSaving(true);
     try {
       // Save avatar separately as base64 (persists across Railway redeploys, unlike /uploads files)
-      let latestUser = null;
       if (avatarBase64) {
         const dataUrl = `data:image/jpeg;base64,${avatarBase64}`;
-        const r = await api.patch('/users/me/avatar', { avatar_data: dataUrl });
-        latestUser = r.data;
+        await api.patch('/users/me/avatar', { avatar_data: dataUrl });
       }
       // Save text fields as JSON (no multipart)
-      const { data } = await api.put('/users/profile', {
+      await api.put('/users/profile', {
         display_name: form.display_name.trim(),
         username: form.username.trim().toLowerCase(),
         bio: form.bio.trim(),
       });
-      onSaved({ ...data, avatar_url: latestUser?.avatar_url ?? data.avatar_url });
+      // onSaved just triggers a refresh() of the auth user — the merged payload
+      // it used to receive was discarded, so don't bother building it.
+      onSaved();
       onClose();
     } catch (err) {
       Alert.alert('Error', err.response?.data?.error || 'Could not save changes.');
@@ -156,8 +156,8 @@ function EditProfileModal({ visible, onClose, user, onSaved }) {
           </View>
 
           {[
-            { field: 'display_name', label: 'NAME', placeholder: 'Alex Rivera', auto: 'words' },
-            { field: 'username', label: 'USERNAME', placeholder: 'alex_rn' },
+            { field: 'display_name', label: 'Name', placeholder: 'Alex Rivera', auto: 'words' },
+            { field: 'username', label: 'Username', placeholder: 'alex_rn' },
           ].map(({ field, label, placeholder, auto }) => (
             <View key={field} style={styles.field}>
               <Text style={styles.fieldLabel}>{label}</Text>
@@ -175,7 +175,7 @@ function EditProfileModal({ visible, onClose, user, onSaved }) {
 
           <View style={styles.field}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <Text style={styles.fieldLabel}>BIO</Text>
+              <Text style={styles.fieldLabel}>Bio</Text>
               <Text style={[styles.fieldLabel, { color: form.bio.length > 140 ? colors.red : colors.textDim }]}>
                 {form.bio.length}/160
               </Text>
@@ -238,9 +238,9 @@ function ChangePasswordModal({ visible, onClose }) {
         </View>
         <View style={{ padding: spacing.lg, gap: 14 }}>
           {[
-            { field: 'current', label: 'CURRENT PASSWORD' },
-            { field: 'next', label: 'NEW PASSWORD' },
-            { field: 'confirm', label: 'CONFIRM NEW PASSWORD' },
+            { field: 'current', label: 'Current password' },
+            { field: 'next', label: 'New password' },
+            { field: 'confirm', label: 'Confirm new password' },
           ].map(({ field, label }) => (
             <View key={field} style={styles.field}>
               <Text style={styles.fieldLabel}>{label}</Text>
@@ -333,11 +333,11 @@ function ChangeEmailModal({ visible, onClose, currentEmail, onEmailChanged }) {
           <View style={{ padding: spacing.lg, gap: 14 }}>
             <Text style={styles.rowDetail}>Current: {currentEmail}</Text>
             <View style={styles.field}>
-              <Text style={styles.fieldLabel}>NEW EMAIL</Text>
+              <Text style={styles.fieldLabel}>New email</Text>
               <TextInput style={styles.input} value={email} onChangeText={setEmail} placeholder="new@example.com" placeholderTextColor={colors.textDim} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} />
             </View>
             <View style={styles.field}>
-              <Text style={styles.fieldLabel}>CONFIRM WITH PASSWORD</Text>
+              <Text style={styles.fieldLabel}>Confirm with password</Text>
               <TextInput style={styles.input} value={password} onChangeText={setPassword} placeholder="Your current password" placeholderTextColor={colors.textDim} secureTextEntry autoCapitalize="none" />
             </View>
             <Text style={[styles.rowDetail, { fontSize: 12 }]}>
@@ -350,7 +350,7 @@ function ChangeEmailModal({ visible, onClose, currentEmail, onEmailChanged }) {
               Enter the 6-digit code we sent to <Text style={{ fontWeight: '700' }}>{email.toLowerCase()}</Text>. Code expires in 10 minutes.
             </Text>
             <View style={styles.field}>
-              <Text style={styles.fieldLabel}>VERIFICATION CODE</Text>
+              <Text style={styles.fieldLabel}>Verification code</Text>
               <TextInput style={styles.input} value={code} onChangeText={setCode} placeholder="123456" placeholderTextColor={colors.textDim} keyboardType="number-pad" autoCapitalize="none" maxLength={6} />
             </View>
             <TouchableOpacity onPress={() => setStep('enter')} disabled={saving}>
@@ -401,8 +401,12 @@ export default function SettingsScreen() {
   const [deletePassword, setDeletePassword] = useState('');
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  // Load stored preferences
+  // Load stored preferences ONCE. Re-running on every refresh() would clobber
+  // any in-progress local edits the user hasn't saved yet, so guard with a ref.
+  const prefsInitialized = useRef(false);
   useEffect(() => {
+    if (prefsInitialized.current) return;
+    prefsInitialized.current = true;
     Promise.all([
       AsyncStorage.getItem(CAL_DEFAULT_KEY),
       AsyncStorage.getItem('dialed_notify_prefs'),
@@ -410,9 +414,14 @@ export default function SettingsScreen() {
     ]).then(([cal, notifyStr, vis]) => {
       if (cal) setCalDefault(Number(cal));
       if (notifyStr) {
-        const p = JSON.parse(notifyStr);
-        setNotifyPrefs(prev => ({ ...prev, ...p }));
-        if (p.nudgeTime) setNudgeTime(p.nudgeTime);
+        // A corrupt AsyncStorage value must not reject the whole chain.
+        try {
+          const p = JSON.parse(notifyStr);
+          setNotifyPrefs(prev => ({ ...prev, ...p }));
+          if (p.nudgeTime) setNudgeTime(p.nudgeTime);
+        } catch {
+          // ignore malformed stored prefs; fall back to defaults
+        }
       }
       if (vis) setDefaultVisibility(vis);
     });

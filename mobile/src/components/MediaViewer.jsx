@@ -65,15 +65,16 @@ export default function MediaViewer({
   onClose,
 }) {
   const items = buildMedia(media, imageUrl, videoUrl);
-  const [currentIndex, setCurrentIndex] = useState(startIndex);
+  const safeIndex = Math.min(Math.max(0, startIndex), Math.max(0, items.length - 1));
+  const [currentIndex, setCurrentIndex] = useState(safeIndex);
   const flatRef = useRef(null);
 
   // When startIndex changes (e.g. user taps different carousel item), reset
   React.useEffect(() => {
     if (visible) {
-      setCurrentIndex(startIndex);
+      setCurrentIndex(safeIndex);
     }
-  }, [visible, startIndex]);
+  }, [visible, safeIndex]);
 
   const onViewableItemsChanged = useRef(({ viewableItems }) => {
     if (viewableItems.length > 0) {
@@ -114,7 +115,7 @@ export default function MediaViewer({
           showsHorizontalScrollIndicator={false}
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig}
-          initialScrollIndex={startIndex}
+          initialScrollIndex={safeIndex}
           getItemLayout={(_, index) => ({
             length: SCREEN_W,
             offset: SCREEN_W * index,

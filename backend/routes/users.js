@@ -54,14 +54,32 @@ function enrichUser(db, user, viewerId) {
   })();
 
   if (canSeeBuddy) {
-    const activeBuddy = db.prepare(`
-      SELECT u.id, u.username, u.display_name, u.avatar_url
+    const pair = db.prepare(`
+      SELECT b.*,
+        CASE WHEN b.requester_id = ? THEN b.recipient_id ELSE b.requester_id END as buddy_user_id,
+        u.username, u.display_name, u.avatar_url
       FROM buddies b
       JOIN users u ON u.id = CASE WHEN b.requester_id = ? THEN b.recipient_id ELSE b.requester_id END
       WHERE (b.requester_id = ? OR b.recipient_id = ?) AND b.status = 'active'
+      ORDER BY b.created_at ASC
       LIMIT 1
-    `).get(user.id, user.id, user.id);
-    if (activeBuddy) buddy_info = activeBuddy;
+    `).get(user.id, user.id, user.id, user.id);
+    if (pair) {
+      // Joint streak is computed on-the-fly and surfaced on ANY profile (not just
+      // your own) so a buddy pairing is a public, visible commitment.
+      const { computeJointStreak } = require('./buddies');
+      const joint = computeJointStreak(db, pair, user.id, pair.buddy_user_id);
+      buddy_info = {
+        id: pair.buddy_user_id,
+        username: pair.username,
+        display_name: pair.display_name,
+        avatar_url: pair.avatar_url,
+        joint_streak: joint.streak,
+        joint_streak_alive_today: joint.alive_today,
+        joint_streak_at_risk: joint.at_risk,
+        joint_streak_freeze_used_recently: joint.freeze_used_recently,
+      };
+    }
   }
 
   const { timezone, ...safeUser } = user;
@@ -489,7 +507,7 @@ router.get('/:username/habits', optionalAuth, (req, res) => {
     const logs = db.prepare('SELECT logged_at, note FROM habit_logs WHERE habit_id = ? ORDER BY logged_at DESC').all(h.id);
     const streak = calculateStreak(logs, h.frequency, h.target_count || 1, tz);
     const at_risk = isStreakAtRisk(logs, h.frequency, h.target_count || 1, tz);
-    const total_logs = logs.length;
+    const total_logs = logs.filter(l => l.note !== '[freeze]' && l.note !== '[restore]').length;
     return { ...h, streak, at_risk, total_logs };
   });
 

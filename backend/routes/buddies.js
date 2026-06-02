@@ -53,10 +53,10 @@ function computeJointStreak(db, pair, userIdA, userIdB) {
   ).get(userIdA, userIdB);
   const freezeQuota = (proRow?.a_pro ? 1 : 0) + (proRow?.b_pro ? 1 : 0);
   const aDays = db.prepare(
-    "SELECT DISTINCT date(logged_at) as d FROM habit_logs WHERE user_id = ? AND logged_at >= date('now', '-400 days') AND (note IS NULL OR note != '[freeze]')"
+    "SELECT DISTINCT date(logged_at) as d FROM habit_logs WHERE user_id = ? AND logged_at >= date('now', '-400 days') AND (note IS NULL OR note NOT IN ('[freeze]', '[restore]'))"
   ).all(userIdA).map(r => r.d);
   const bDaysSet = new Set(db.prepare(
-    "SELECT DISTINCT date(logged_at) as d FROM habit_logs WHERE user_id = ? AND logged_at >= date('now', '-400 days') AND (note IS NULL OR note != '[freeze]')"
+    "SELECT DISTINCT date(logged_at) as d FROM habit_logs WHERE user_id = ? AND logged_at >= date('now', '-400 days') AND (note IS NULL OR note NOT IN ('[freeze]', '[restore]'))"
   ).all(userIdB).map(r => r.d));
 
   const jointSet = new Set(aDays.filter(d => bDaysSet.has(d)));
@@ -212,8 +212,8 @@ router.get('/', authMiddleware, (req, res) => {
 
   const myHabits = db.prepare(`
     SELECT h.id, h.name, h.color, h.frequency,
-      (SELECT COUNT(*) FROM habit_logs WHERE habit_id = h.id AND date(logged_at) = date('now') AND (note IS NULL OR note != '[freeze]')) as logged_today,
-      (SELECT COUNT(*) FROM habit_logs WHERE habit_id = h.id AND (note IS NULL OR note != '[freeze]')) as total_logs
+      (SELECT COUNT(*) FROM habit_logs WHERE habit_id = h.id AND date(logged_at) = date('now') AND (note IS NULL OR note NOT IN ('[freeze]', '[restore]'))) as logged_today,
+      (SELECT COUNT(*) FROM habit_logs WHERE habit_id = h.id AND (note IS NULL OR note NOT IN ('[freeze]', '[restore]'))) as total_logs
     FROM habits h WHERE h.user_id = ? AND h.is_active = 1 ORDER BY h.created_at ASC
   `).all(userId);
 
@@ -221,8 +221,8 @@ router.get('/', authMiddleware, (req, res) => {
   const buddies = activeBuddies.map(buddy => {
     const buddyHabits = db.prepare(`
       SELECT h.id, h.name, h.color, h.frequency, h.visibility_missed,
-        (SELECT COUNT(*) FROM habit_logs WHERE habit_id = h.id AND date(logged_at) = date('now') AND (note IS NULL OR note != '[freeze]')) as logged_today,
-        (SELECT COUNT(*) FROM habit_logs WHERE habit_id = h.id AND (note IS NULL OR note != '[freeze]')) as total_logs
+        (SELECT COUNT(*) FROM habit_logs WHERE habit_id = h.id AND date(logged_at) = date('now') AND (note IS NULL OR note NOT IN ('[freeze]', '[restore]'))) as logged_today,
+        (SELECT COUNT(*) FROM habit_logs WHERE habit_id = h.id AND (note IS NULL OR note NOT IN ('[freeze]', '[restore]'))) as total_logs
       FROM habits h WHERE h.user_id = ? AND h.is_active = 1
         AND h.visibility_missed != 'private'
       ORDER BY h.created_at ASC
@@ -271,6 +271,44 @@ router.get('/', authMiddleware, (req, res) => {
     joint_streak_freeze_quota: first?.joint_streak_freeze_quota ?? 0,
     pending_requests: pending,
   });
+});
+
+// GET /api/buddies/suggestions — people to pair with, sourced from challenges
+// the user already shares (value #2: a buddy is the strongest D30 predictor;
+// challenge co-participants are warm, in-context candidates). Excludes anyone
+// who's already an active/pending buddy. `can_add` tells the client whether the
+// user still has room under their plan limit so the prompt can be hidden once
+// they're at capacity.
+router.get('/suggestions', authMiddleware, (req, res) => {
+  const db = getDb();
+  const userId = req.user.id;
+
+  const me = db.prepare('SELECT is_pro FROM users WHERE id = ?').get(userId);
+  const limit = me?.is_pro ? PRO_BUDDY_LIMIT : FREE_BUDDY_LIMIT;
+  const activeCount = getActiveBuddyCount(db, userId);
+  const canAdd = activeCount < limit;
+
+  const suggestions = db.prepare(`
+    SELECT u.id as user_id, u.username, u.display_name, u.avatar_url,
+           COUNT(DISTINCT cm2.challenge_id) as shared_count,
+           MAX(c.name) as shared_challenge
+    FROM challenge_members cm1
+    JOIN challenge_members cm2
+      ON cm2.challenge_id = cm1.challenge_id AND cm2.user_id != cm1.user_id
+    JOIN challenges c ON c.id = cm1.challenge_id
+    JOIN users u ON u.id = cm2.user_id
+    WHERE cm1.user_id = ? AND cm1.status = 'active' AND cm2.status = 'active'
+      AND cm2.user_id NOT IN (
+        SELECT CASE WHEN requester_id = ? THEN recipient_id ELSE requester_id END
+        FROM buddies
+        WHERE (requester_id = ? OR recipient_id = ?) AND status IN ('active','pending')
+      )
+    GROUP BY u.id
+    ORDER BY shared_count DESC, u.display_name ASC
+    LIMIT 5
+  `).all(userId, userId, userId, userId);
+
+  res.json({ can_add: canAdd, active_count: activeCount, limit, suggestions });
 });
 
 // GET /api/buddies/status/:userId — check buddy status with a specific user
@@ -325,11 +363,26 @@ router.post('/request', authMiddleware, (req, res) => {
   if (existing?.status === 'pending') return res.status(400).json({ error: 'Request already sent' });
   if (existing?.status === 'active') return res.status(400).json({ error: 'Already buddies' });
 
-  // Re-check counts INSIDE a transaction to close the race window where two
-  // concurrent requests both passed the pre-check and would each insert.
+  // Re-check counts AND existing-pair status INSIDE a transaction to close the
+  // race window where two concurrent requests both passed the pre-check, or
+  // where a concurrent accept flipped an existing row to 'active' between the
+  // read above and the write here (an INSERT OR REPLACE would otherwise clobber
+  // the now-active pair back to a fresh 'pending' row, breaking the partnership
+  // and its freeze history).
   const id = uuidv4();
   db.exec('BEGIN IMMEDIATE');
   try {
+    const existingNow = db.prepare(
+      'SELECT * FROM buddies WHERE (requester_id = ? AND recipient_id = ?) OR (requester_id = ? AND recipient_id = ?)'
+    ).get(req.user.id, user_id, user_id, req.user.id);
+    if (existingNow?.status === 'pending') {
+      db.exec('ROLLBACK');
+      return res.status(400).json({ error: 'Request already sent' });
+    }
+    if (existingNow?.status === 'active') {
+      db.exec('ROLLBACK');
+      return res.status(400).json({ error: 'Already buddies' });
+    }
     const myCount = getActiveBuddyCount(db, req.user.id);
     if (myCount >= myLimit) {
       db.exec('ROLLBACK');
@@ -345,8 +398,15 @@ router.post('/request', authMiddleware, (req, res) => {
       db.exec('ROLLBACK');
       return res.status(400).json({ error: 'This user has reached their buddy limit' });
     }
-    db.prepare("INSERT OR REPLACE INTO buddies (id, requester_id, recipient_id, status) VALUES (?, ?, ?, 'pending')")
-      .run(id, req.user.id, user_id);
+    // Only a non-active leftover row (e.g. previously declined/removed) can be
+    // safely replaced here; the active/pending cases already returned above.
+    if (existingNow) {
+      db.prepare("UPDATE buddies SET id = ?, requester_id = ?, recipient_id = ?, status = 'pending', freeze_used_dates = NULL, last_freeze_used_at = NULL WHERE id = ?")
+        .run(id, req.user.id, user_id, existingNow.id);
+    } else {
+      db.prepare("INSERT INTO buddies (id, requester_id, recipient_id, status) VALUES (?, ?, ?, 'pending')")
+        .run(id, req.user.id, user_id);
+    }
     db.exec('COMMIT');
   } catch (e) {
     try { db.exec('ROLLBACK'); } catch { /* already rolled back */ }

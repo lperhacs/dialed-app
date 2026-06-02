@@ -5,3 +5,6 @@ node_modules/
 *.db-wal
 uploads/
 .DS_Store
+
+# iOS build artifacts (EAS local builds)
+*.ipa

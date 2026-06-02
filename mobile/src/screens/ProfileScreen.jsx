@@ -441,9 +441,24 @@ export default function ProfileScreen({ route, routeUsername, isOwn }) {
         >
           <Ionicons name="people-outline" size={16} color={colors.accent} />
           <View style={{ flex: 1 }}>
-            <Text style={styles.buddyName}>
-              Buddy: <Text style={{ color: colors.text }}>{profile.buddy_info.display_name}</Text>
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <Text style={styles.buddyName}>
+                Buddy: <Text style={{ color: colors.text }}>{profile.buddy_info.display_name}</Text>
+              </Text>
+              {profile.buddy_info.joint_streak > 0 && (
+                <View style={[
+                  { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 10 },
+                  profile.buddy_info.joint_streak_at_risk
+                    ? { backgroundColor: 'rgba(245,158,11,0.15)' }
+                    : { backgroundColor: colors.accentDim },
+                ]}>
+                  <Ionicons name="flame" size={11} color={profile.buddy_info.joint_streak_at_risk ? '#f59e0b' : colors.accent} />
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: profile.buddy_info.joint_streak_at_risk ? '#f59e0b' : colors.accent }}>
+                    {profile.buddy_info.joint_streak}-day streak
+                  </Text>
+                </View>
+              )}
+            </View>
             <Text style={styles.buddyMeta}>@{profile.buddy_info.username}</Text>
           </View>
           <Ionicons name="chevron-forward" size={14} color={colors.textDim} />

@@ -170,8 +170,8 @@ function ShareModal({ visible, onClose, postId, post }) {
           {/* Search results / recent convos - shown while searching */}
           {!selectedUser && (
             <FlatList
-              data={results.length > 0 || query.trim() ? results : recentConvos.filter(c => !c.is_group).map(c => c.other)}
-              keyExtractor={item => item?.id}
+              data={(results.length > 0 || query.trim() ? results : recentConvos.filter(c => !c.is_group).map(c => c.other)).filter(Boolean)}
+              keyExtractor={(item, index) => (item?.id != null ? String(item.id) : `item-${index}`)}
               contentContainerStyle={{ padding: spacing.md, gap: 4 }}
               keyboardShouldPersistTaps="handled"
               ListHeaderComponent={
@@ -251,6 +251,8 @@ export default function PostCard({ post, onDelete }) {
   const mediaItems = buildPostMedia(post);
   // Width of a single carousel item — card has horizontal padding spacing.lg on each side
   const CARD_MEDIA_WIDTH = Dimensions.get('window').width - spacing.lg * 2;
+  // Taller 4:5 portrait box so more of the photo is visible and it looks less awkward
+  const CARD_MEDIA_HEIGHT = Math.round(CARD_MEDIA_WIDTH * 1.25);
 
   const toggleCheer = async () => {
     const was = cheered;
@@ -363,7 +365,7 @@ export default function PostCard({ post, onDelete }) {
                   >
                     <Image
                       source={{ uri: item.url }}
-                      style={[styles.image, { width: CARD_MEDIA_WIDTH }]}
+                      style={[styles.image, { width: CARD_MEDIA_WIDTH, height: CARD_MEDIA_HEIGHT }]}
                       resizeMode="cover"
                     />
                   </TouchableOpacity>
@@ -469,7 +471,6 @@ function makeStyles(colors) { return StyleSheet.create({
     borderRadius: radius.sm,
   },
   image: {
-    height: 220,
     borderRadius: radius.sm,
     backgroundColor: colors.bgHover,
   },
@@ -595,7 +596,7 @@ function makeShareStyles(colors) { return StyleSheet.create({
   userName: { fontSize: 14, fontWeight: '700', color: colors.text },
   userHandle: { fontSize: 12, color: colors.textMuted },
   noResults: { fontSize: 14, color: colors.textMuted, textAlign: 'center', paddingTop: 20 },
-  sectionLabel: { fontSize: 11, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8, paddingHorizontal: 4, paddingBottom: 8 },
+  sectionLabel: { fontSize: 11, fontWeight: '700', color: colors.textMuted, letterSpacing: 0.8, paddingHorizontal: 4, paddingBottom: 8 },
   postPreview: {
     margin: 16,
     marginTop: 0,

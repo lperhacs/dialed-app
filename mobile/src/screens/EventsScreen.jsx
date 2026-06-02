@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   Alert, ActivityIndicator, RefreshControl, Image, Linking, Platform,
@@ -48,6 +48,13 @@ function EventFeedCard({ event, currentUser, onDelete, onRsvpToggle }) {
   const [showForward, setShowForward] = useState(false);
   const [showSharePrompt, setShowSharePrompt] = useState(false);
   const isOwner = event.creator_id === currentUser?.id;
+
+  // FlatList re-uses the same card instance per event id, so useState's
+  // initializer doesn't re-run on prop change. Sync to props after a refresh.
+  useEffect(() => {
+    setGoing(event.my_status === 'going');
+    setGoingCount(event.going_count);
+  }, [event.my_status, event.going_count]);
   const dateInfo = formatEventDateShort(event.event_date);
 
   const handleRsvp = async () => {

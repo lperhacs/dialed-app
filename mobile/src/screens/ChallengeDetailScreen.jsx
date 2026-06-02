@@ -87,7 +87,7 @@ function ForwardedEventCard({ event, currentUser, onDelete }) {
     <View style={styles.forwardedCard}>
       {/* Forwarded header - like a forwarded message */}
       <View style={styles.forwardedHeader}>
-        <Text style={styles.forwardedIcon}>↪</Text>
+        <Ionicons name="arrow-redo" size={13} color={colors.accent} />
         <Text style={styles.forwardedLabel}>
           <Text style={styles.forwardedName}>{event.display_name}</Text>
           <Text style={styles.forwardedSub}> shared an event</Text>
@@ -104,8 +104,22 @@ function ForwardedEventCard({ event, currentUser, onDelete }) {
         <Text style={styles.forwardedEventTitle}>{event.title}</Text>
         {event.description ? <Text style={styles.forwardedEventDesc}>{event.description}</Text> : null}
         <View style={styles.forwardedMeta}>
-          <Text style={styles.forwardedMetaText}>📅 {formatEventDate(event.event_date)}{event.event_time ? `  🕐 ${event.event_time}` : ''}</Text>
-          {event.location ? <Text style={styles.forwardedMetaText}>📍 {event.location}</Text> : null}
+          <View style={styles.forwardedMetaRow}>
+            <Ionicons name="calendar-outline" size={13} color={colors.textMuted} />
+            <Text style={styles.forwardedMetaText}>{formatEventDate(event.event_date)}</Text>
+            {event.event_time ? (
+              <>
+                <Ionicons name="time-outline" size={13} color={colors.textMuted} style={{ marginLeft: 6 }} />
+                <Text style={styles.forwardedMetaText}>{event.event_time}</Text>
+              </>
+            ) : null}
+          </View>
+          {event.location ? (
+            <View style={styles.forwardedMetaRow}>
+              <Ionicons name="location-outline" size={13} color={colors.textMuted} />
+              <Text style={styles.forwardedMetaText}>{event.location}</Text>
+            </View>
+          ) : null}
         </View>
         {event.friends_going_count > 0 && (
           <View style={styles.friendsGoing}>
@@ -127,7 +141,8 @@ function ForwardedEventCard({ event, currentUser, onDelete }) {
               disabled={loading}
               activeOpacity={0.8}
             >
-              <Text style={[styles.forwardedRsvpText, going && { color: '#fff' }]}>{going ? '✓ Going' : 'RSVP'}</Text>
+              {going && <Ionicons name="checkmark" size={14} color="#fff" style={{ marginRight: 4 }} />}
+              <Text style={[styles.forwardedRsvpText, going && { color: '#fff' }]}>{going ? 'Going' : 'RSVP'}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -179,14 +194,20 @@ function MemberRow({ member, rank, currentUserId }) {
   const styles = makeStyles(colors);
   const navigation = useNavigation();
   const isMe = member.id === currentUserId;
-  const rankEmojis = { 1: '🥇', 2: '🥈', 3: '🥉' };
+  const medalColors = { 1: '#f1c40f', 2: '#b0b6bd', 3: '#cd7f32' };
   return (
     <TouchableOpacity
       style={[styles.memberRow, isMe && styles.memberRowMe]}
       onPress={() => navigation.navigate('UserProfile', { username: member.username })}
       activeOpacity={0.8}
     >
-      <Text style={styles.rankNum}>{rankEmojis[rank] || `#${rank}`}</Text>
+      {medalColors[rank] ? (
+        <View style={styles.rankNum}>
+          <Ionicons name="medal" size={18} color={medalColors[rank]} />
+        </View>
+      ) : (
+        <Text style={styles.rankNum}>{`#${rank}`}</Text>
+      )}
       <Avatar user={member} size="sm" />
       <View style={{ flex: 1 }}>
         <Text style={styles.memberName}>
@@ -244,7 +265,7 @@ function RequestRow({ request, challengeId, onApprove, onReject }) {
           <Text style={styles.approveBtnText}>{loading ? '…' : 'Approve'}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.rejectBtn} onPress={reject} disabled={loading} activeOpacity={0.8}>
-          <Text style={styles.rejectBtnText}>✕</Text>
+          <Ionicons name="close" size={16} color={colors.textMuted} />
         </TouchableOpacity>
       </View>
     </View>
@@ -422,7 +443,7 @@ function ChatTab({ challengeId, insets }) {
           disabled={!text.trim() || sending}
           activeOpacity={0.8}
         >
-          <Text style={styles.sendBtnText}>→</Text>
+          <Ionicons name="arrow-forward" size={18} color="#fff" />
         </TouchableOpacity>
       </View>
 
@@ -456,7 +477,7 @@ export default function ChallengeDetailScreen({ route }) {
   const [pendingRequests, setPendingRequests] = useState([]);
   const [showForwardClub, setShowForwardClub] = useState(false);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     api.get(`/clubs/${id}`)
       .then(r => {
         setChallenge(r.data);
@@ -471,7 +492,7 @@ export default function ChallengeDetailScreen({ route }) {
       })
       .finally(() => setLoading(false));
     api.get('/habits').then(r => setHabits(r.data.filter(h => h.is_active))).catch(() => {});
-  }, [id]);
+  }, [id]));
 
   const handleDeleteClub = () => {
     Alert.alert(
@@ -532,7 +553,7 @@ export default function ChallengeDetailScreen({ route }) {
     setLinking(true);
     try {
       await api.post(`/clubs/${id}/link-habit`, { habit_id: selectedHabit });
-      const linked = habits.find(h => h.id === selectedHabit);
+      const linked = habits.find(h => String(h.id) === String(selectedHabit));
       setLinkedHabit(linked ? { id: linked.id, name: linked.name, color: linked.color } : null);
       setShowLinkModal(false);
     } catch (err) {
@@ -559,7 +580,7 @@ export default function ChallengeDetailScreen({ route }) {
     ? Math.ceil((parseServerDate(challenge.end_date) - Date.now()) / 86400000)
     : null;
 
-  const sorted = [...(challenge.members || [])].sort((a, b) => b.streak - a.streak);
+  const sorted = [...(challenge.members || [])].sort((a, b) => (b.streak || 0) - (a.streak || 0));
 
   const tabs = [
     { key: 'leaderboard', label: 'Leaderboard' },
@@ -734,15 +755,18 @@ export default function ChallengeDetailScreen({ route }) {
               habits.map(h => (
                 <TouchableOpacity
                   key={String(h.id)}
-                  style={[styles.habitOption, selectedHabit === h.id && styles.habitOptionSelected]}
+                  style={[styles.habitOption, String(selectedHabit) === String(h.id) && styles.habitOptionSelected]}
                   onPress={() => setSelectedHabit(h.id)}
                 >
                   <View style={[styles.habitDot, { backgroundColor: h.color }]} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.habitOptName}>{h.name}</Text>
-                    <Text style={styles.habitOptStreak}>🔥 {h.streak}d streak</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Ionicons name="flame" size={12} color={colors.textMuted} />
+                      <Text style={styles.habitOptStreak}>{h.streak}d streak</Text>
+                    </View>
                   </View>
-                  {selectedHabit === h.id && <Text style={{ color: colors.accent, fontSize: 16 }}>✓</Text>}
+                  {String(selectedHabit) === String(h.id) && <Ionicons name="checkmark" size={16} color={colors.accent} />}
                 </TouchableOpacity>
               ))
             )}
@@ -759,8 +783,8 @@ function makeStyles(colors) {
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.bg },
   infoCard: { margin: spacing.lg, marginBottom: 0, backgroundColor: colors.bgCard, borderRadius: radius.md, padding: spacing.lg, gap: 5 },
   privatePill: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: radius.xs, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bgHover },
-  privatePillText: { fontSize: 10, fontWeight: '600', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 },
-  challengeName: { fontSize: 20, fontWeight: '800', color: colors.text, flexShrink: 1 },
+  privatePillText: { fontSize: 10, fontWeight: '600', color: colors.textMuted, letterSpacing: 0.4 },
+  challengeName: { fontSize: 20, fontWeight: '700', color: colors.text, flexShrink: 1 },
   challengeMeta: { fontSize: 12, color: colors.textMuted },
   challengeDesc: { fontSize: 14, color: colors.text, lineHeight: 20, marginTop: 2 },
   actionRow: { flexDirection: 'row', gap: 8, marginTop: 10, flexWrap: 'wrap' },
@@ -783,7 +807,7 @@ function makeStyles(colors) {
   // Leaderboard
   memberRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: spacing.lg, paddingVertical: 12 },
   memberRowMe: { backgroundColor: colors.accentDim },
-  rankNum: { fontSize: 18, fontWeight: '800', width: 32, textAlign: 'center', color: colors.textMuted },
+  rankNum: { fontSize: 18, fontWeight: '700', width: 32, textAlign: 'center', alignItems: 'center', color: colors.textMuted },
   memberName: { fontSize: 14, fontWeight: '600', color: colors.text },
   memberHandle: { fontSize: 12, color: colors.textMuted },
   emptyMembers: { padding: 40, alignItems: 'center' },
@@ -796,7 +820,7 @@ function makeStyles(colors) {
   rejectBtnText: { color: colors.textMuted, fontWeight: '700', fontSize: 13 },
   // Chat
   chatHeaderBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle },
-  chatHeaderLabel: { fontSize: 13, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
+  chatHeaderLabel: { fontSize: 13, fontWeight: '700', color: colors.textMuted, letterSpacing: 0.5 },
   chatEmpty: { flex: 1, alignItems: 'center', paddingTop: 60 },
   chatEmptyText: { color: colors.textMuted, fontSize: 14 },
   msgRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginVertical: 2 },
@@ -845,13 +869,14 @@ function makeStyles(colors) {
     backgroundColor: colors.bgCard, borderRadius: radius.md,
     padding: 14, gap: 6,
   },
-  forwardedEventTitle: { fontSize: 16, fontWeight: '800', color: colors.text, letterSpacing: -0.2 },
+  forwardedEventTitle: { fontSize: 16, fontWeight: '700', color: colors.text, letterSpacing: -0.2 },
   forwardedEventDesc: { fontSize: 14, color: colors.textMuted, lineHeight: 19 },
   forwardedMeta: { gap: 3 },
+  forwardedMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   forwardedMetaText: { fontSize: 13, color: colors.textMuted, fontWeight: '500' },
   forwardedFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 },
   forwardedGoingText: { fontSize: 12, color: colors.textMuted, fontWeight: '600' },
-  forwardedRsvpBtn: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: radius.full, borderWidth: 1.5, borderColor: colors.accent },
+  forwardedRsvpBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 6, borderRadius: radius.sm, borderWidth: 1.5, borderColor: colors.accent },
   forwardedRsvpBtnGoing: { backgroundColor: colors.accent },
   forwardedRsvpText: { fontSize: 13, fontWeight: '700', color: colors.accent },
   friendsGoing: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 8 },
