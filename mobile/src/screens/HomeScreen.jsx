@@ -103,8 +103,6 @@ export default function HomeScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [buddyData, setBuddyData] = useState(null);
   const [nudgingIds, setNudgingIds] = useState({});
-  const [habits, setHabits] = useState([]);
-  const [loggingId, setLoggingId] = useState(null);
   const [suggestions, setSuggestions] = useState([]);
   const [requestingId, setRequestingId] = useState(null);
   const fetchSeq = useRef(0);
@@ -130,28 +128,11 @@ export default function HomeScreen() {
       setLoading(true);
       fetchPosts(1, tab, true).finally(() => setLoading(false));
       api.get('/buddies').then(r => setBuddyData(r.data)).catch(() => {});
-      api.get('/habits').then(r => setHabits(Array.isArray(r.data) ? r.data : [])).catch(() => {});
       api.get('/buddies/suggestions')
         .then(r => setSuggestions(r.data?.can_add ? (r.data.suggestions || []) : []))
         .catch(() => {});
     }, [tab])
   );
-
-  // One-tap log from Home (value #1: make logging frictionless). Optimistically
-  // marks the habit logged so the chip disappears immediately.
-  const handleQuickLog = async (habit) => {
-    if (loggingId) return;
-    setLoggingId(habit.id);
-    setHabits(prev => prev.map(h => h.id === habit.id ? { ...h, logged_today: true } : h));
-    try {
-      await api.post(`/habits/${habit.id}/log`, { note: '' });
-    } catch (err) {
-      setHabits(prev => prev.map(h => h.id === habit.id ? { ...h, logged_today: false } : h));
-      Alert.alert('Could not log', err.response?.data?.error || 'Try again.');
-    } finally {
-      setLoggingId(null);
-    }
-  };
 
   // Send a buddy request to a suggested co-participant (value #2). Optimistically
   // drops them from the list so the card doesn't re-offer someone just asked.
@@ -187,7 +168,6 @@ export default function HomeScreen() {
     await Promise.all([
       fetchPosts(1, tab, true),
       api.get('/buddies').then(r => setBuddyData(r.data)).catch(() => {}),
-      api.get('/habits').then(r => setHabits(Array.isArray(r.data) ? r.data : [])).catch(() => {}),
       api.get('/buddies/suggestions')
         .then(r => setSuggestions(r.data?.can_add ? (r.data.suggestions || []) : []))
         .catch(() => {}),
@@ -328,43 +308,6 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {/* One-tap log strip — only the active habits not yet logged today */}
-      {(() => {
-        const todo = habits.filter(h => h.is_active && !h.logged_today);
-        if (todo.length === 0) return null;
-        return (
-          <View style={styles.quickLogWrap}>
-            <Text style={styles.quickLogTitle}>Log today</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.quickLogRow}
-            >
-              {todo.map(h => (
-                <TouchableOpacity
-                  key={h.id}
-                  style={[styles.quickLogChip, { borderColor: h.color || colors.accent }]}
-                  onPress={() => handleQuickLog(h)}
-                  disabled={loggingId === h.id}
-                  activeOpacity={0.8}
-                >
-                  {loggingId === h.id
-                    ? <ActivityIndicator size="small" color={h.color || colors.accent} style={{ width: 16, height: 16 }} />
-                    : <Ionicons name="add-circle" size={16} color={h.color || colors.accent} />}
-                  <Text style={styles.quickLogChipText} numberOfLines={1}>{h.name}</Text>
-                  {h.streak > 0 && (
-                    <View style={styles.quickLogStreak}>
-                      <Ionicons name="flame" size={10} color={colors.accent} />
-                      <Text style={styles.quickLogStreakText}>{h.streak}</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        );
-      })()}
-
       {/* Normal feed */}
       {(
         <>
@@ -481,43 +424,6 @@ function makeStyles(colors) {
     backgroundColor: colors.accentDim,
   },
   nudgeBtnText: { fontSize: 12, fontWeight: '600', color: colors.accent },
-  quickLogWrap: {
-    paddingTop: 10,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderSubtle,
-    backgroundColor: colors.bgCard,
-  },
-  quickLogTitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: colors.textMuted,
-    paddingHorizontal: spacing.lg,
-    marginBottom: 8,
-  },
-  quickLogRow: { paddingHorizontal: spacing.lg, gap: 8 },
-  quickLogChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    backgroundColor: colors.bg,
-    maxWidth: 200,
-  },
-  quickLogChipText: { fontSize: 13, fontWeight: '600', color: colors.text, flexShrink: 1 },
-  quickLogStreak: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    backgroundColor: colors.accentDim,
-    borderRadius: 8,
-  },
-  quickLogStreakText: { fontSize: 10, fontWeight: '700', color: colors.accent },
   buddyPrompt: {
     paddingTop: 12,
     paddingBottom: 12,
